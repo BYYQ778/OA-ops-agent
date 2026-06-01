@@ -1,0 +1,33 @@
+2025-01-15 08:30:00 [INFO] OA系统启动，版本 v3.2.1
+2025-01-15 09:15:23 [INFO] 用户 admin 登录成功，IP: 192.168.1.100
+2025-01-15 10:00:05 [WARN] HTTP请求响应时间超过阈值: /oa/approval/list 耗时 3500ms
+2025-01-15 10:10:12 [ERROR] 502 Bad Gateway - upstream server 192.168.1.50:8080
+2025-01-15 10:10:13 [ERROR] upstream timed out (110: Connection timed out) while connecting to upstream, client: 192.168.1.101
+2025-01-15 10:15:00 [INFO] OA流程引擎线程池: active=48, max=50, queue=120
+2025-01-15 10:20:45 [ERROR] java.lang.OutOfMemoryError: Java heap space
+2025-01-15 10:20:46 [ERROR]   at com.oa.workflow.engine.ApprovalFlow.execute(ApprovalFlow.java:256)
+2025-01-15 10:20:47 [FATAL] OA应用进程异常退出，退出码: 137
+2025-01-15 10:21:00 [WARN] 尝试重启OA应用服务...
+2025-01-15 10:21:15 [ERROR] Address already in use: bind 0.0.0.0:8080
+2025-01-15 10:21:16 [ERROR] 端口 8080 被进程 PID=4521 (java) 占用
+2025-01-15 10:22:00 [INFO] 正在清理僵尸进程 PID=4521...
+2025-01-15 10:23:00 [INFO] OA应用重启成功，端口: 8080
+2025-01-15 11:00:10 [ERROR] Permission denied: /opt/oa/config/database.yml
+2025-01-15 11:00:11 [ERROR] 用户 oa-service 无权读取配置文件
+2025-01-15 11:30:00 [ERROR] No space left on device - /data/logs/oa-app.log
+2025-01-15 11:30:05 [WARN] 磁盘 /dev/sdb1 使用率达到 97%，日志写入失败
+2025-01-15 12:00:00 [ERROR] Connection refused: database 192.168.1.200:3306
+2025-01-15 12:00:01 [ERROR] CommunicationsException: Communications link failure
+2025-01-15 12:00:02 [ERROR] Access denied for user 'oa_user'@'192.168.1.50' (using password: YES)
+2025-01-15 13:00:30 [ERROR] Task[APPROVAL_FLOW_001] execution timeout after 300s, process stuck at node[manager_approve]
+2025-01-15 13:01:00 [WARN] 流程 APPROVAL_FLOW_001 疑似卡死，最后活动: 数据库写入
+2025-01-15 13:15:00 [ERROR] Too many open files: /opt/oa/logs/access.log
+2025-01-15 13:15:01 [ERROR] java.io.IOException: Too many open files (EMFILE)
+2025-01-15 14:00:00 [ERROR] YAML parse error in /opt/oa/config/application.yml at line 45
+2025-01-15 14:00:01 [ERROR] config parse error: mapping values are not allowed here
+2025-01-15 14:30:00 [ERROR] 503 Service Temporarily Unavailable - /oa/expense/submit
+2025-01-15 14:30:01 [WARN] Tomcat线程池已满: maxThreads=200, current=200, queue=100
+2025-01-15 15:00:00 [ERROR] database connection pool exhausted, waiting: 15
+2025-01-15 15:01:00 [ERROR] Cannot get JDBC connection, pool exhausted after 60000ms
+2025-01-15 15:30:00 [FATAL] OA应用无响应超过5分钟，触发看门狗重启
+2025-01-15 15:30:30 [INFO] 看门狗: 应用已恢复响应

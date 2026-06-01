@@ -1,0 +1,41 @@
+# ============================================================
+# OA运维多智能Agent巡检问答系统 - Docker Compose
+# ============================================================
+# 启动: docker-compose up -d
+# 停止: docker-compose down
+# 查看日志: docker-compose logs -f
+# ============================================================
+
+version: "3.8"
+
+services:
+  oa-ops-agent:
+    build: .
+    image: oa-ops-agent:latest
+    container_name: oa-ops-agent
+    ports:
+      - "7860:7860"
+    volumes:
+      # 持久化数据（数据库、巡检日志、向量库）
+      - ./data:/app/data
+      # 配置文件（修改后重启容器生效）
+      - ./config.yaml:/app/config.yaml:ro
+      # 环境变量（敏感信息）
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GRADIO_SERVER_NAME=0.0.0.0
+    restart: unless-stopped
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2"
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

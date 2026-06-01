@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.spec
+
+# 虚拟环境
+env_new/
+env/
+venv/
+.venv/
+
+# 敏感配置
+.env
+*.pem
+*.key
+
+# 数据目录
+data/chroma_db/
+data/inspection_logs/*.log
+data/oa_ops.db
+data/oa_ops.db-shm
+data/oa_ops.db-wal
+
+# Office temp
+~$*
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store
+*.lnk
+
+# Gradio
+.gradio/
+*.loc
+
+# PyInstaller
+*.spec
+
+# Runtime logs
+server_err.log
+server_out.log
+
+# Internal docs (not for public release)
+交接文档.txt
+维护日志.txt
+OA运维Agent项目全流程文档*.docx

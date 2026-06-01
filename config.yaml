@@ -1,0 +1,114 @@
+﻿# ============================================================
+# OA运维多智能Agent巡检问答系统 - 主配置文件
+# ============================================================
+# 支持环境变量替换: ${VAR_NAME} 或 ${VAR_NAME:默认值}
+# 敏感信息（密钥/密码）建议通过 .env 文件或环境变量注入
+# ============================================================
+
+# ---- LLM 大模型配置 ----
+llm:
+  provider: ollama           # deepseek / qwen / openai / ollama
+  api_key: ${OA_LLM_API_KEY:}  # ollama 模式可留空
+  base_url: https://api.deepseek.com/v1
+  model: qwen3:8b
+  temperature: 0.3
+  max_tokens: 2048
+
+  # 本地离线模型（provider=ollama 时生效）
+  ollama:
+    base_url: http://localhost:11434/v1
+    model: qwen3:8b          # 推荐: qwen2.5:7b / deepseek-r1:8b / llama3:8b
+    api_key: ollama             # Ollama 不需要真key，填任意值即可
+
+# ---- 嵌入模型配置 ----
+embedding:
+  model_name: paraphrase-multilingual-MiniLM-L12-v2
+  device: cpu                  # cpu / cuda
+  hf_endpoint: https://hf-mirror.com  # HuggingFace 镜像
+
+# ---- Web 服务配置 ----
+server:
+  host: 127.0.0.1
+  port: 7860
+  share: false                 # 是否生成公网分享链接
+
+# ---- 登录认证 ----
+auth:
+  enabled: true
+  username: admin
+  password: ${OA_AUTH_PASSWORD:admin123}  # 生产环境务必修改！
+
+# ---- 巡检目标服务器 ----
+inspection:
+  interval: 60                 # 定时巡检间隔（秒）
+  mode: local              # simulated / local / ssh / auto
+  disk_threshold: 85           # 磁盘告警阈值(%)
+  memory_threshold: 90         # 内存告警阈值(%)
+  
+  # 待检测的端口列表
+  monitored_ports:
+    80: HTTP服务
+    443: HTTPS服务
+    8080: OA应用端口
+    3306: MySQL数据库
+    6379: Redis缓存
+
+  # SSH 连接配置（mode=ssh 时生效）
+  ssh_hosts:
+    - name: OA服务器1
+      host: 192.168.1.100
+      port: 22
+      user: root
+      # password 或 private_key_path 二选一，优先使用密钥
+      password: ${OA_SSH_PASSWORD:}
+      private_key_path: ""
+    # - name: OA服务器2
+    #   host: 192.168.1.101
+    #   port: 22
+    #   user: root
+    #   password: ${OA_SSH_PASSWORD_2:}
+
+# ---- 告警通知 ----
+alert:
+  enabled: true
+  # 邮件告警
+  email:
+    enabled: true
+    smtp_host: smtp.qq.com
+    smtp_port: 587
+    smtp_user: ${OA_EMAIL_USER:your-email@qq.com}
+    smtp_password: ${OA_EMAIL_PASSWORD:}
+    to: [${OA_EMAIL_TO:admin@example.com}]
+  # 钉钉机器人
+  dingtalk:
+    enabled: false
+    webhook_url: ""
+  # 企业微信机器人
+  wecom:
+    enabled: false
+    webhook_url: ""
+
+# ---- 数据库配置 ----
+database:
+  type: sqlite                  # sqlite / mysql
+  sqlite_path: data/oa_ops.db   # SQLite 文件路径
+  # mysql 配置（type=mysql 时生效）
+  mysql:
+    host: 127.0.0.1
+    port: 3306
+    user: root
+    password: ${OA_MYSQL_PASSWORD:}
+    database: oa_ops
+
+# ---- 知识库配置 ----
+knowledge_base:
+  chunk_size: 500
+  chunk_overlap: 50
+  chroma_dir: data/chroma_db
+  top_k: 5                     # 检索返回的最相关文档数
+
+# ---- 日志配置 ----
+logging:
+  level: INFO                   # DEBUG / INFO / WARNING / ERROR
+  dir: data/inspection_logs
+  backup_days: 7

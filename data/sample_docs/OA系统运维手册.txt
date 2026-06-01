@@ -1,0 +1,267 @@
+OA系统运维手册 v3.2
+====================
+编制部门: 信息技术部
+更新日期: 2025年1月
+
+第一章 系统概述
+--------------
+
+OA系统是公司内部办公自动化系统，基于Java技术栈开发，前端使用Vue.js，
+后端使用Spring Boot框架，数据库采用MySQL，反向代理使用Nginx。
+
+系统核心模块包括：
+1. 流程审批模块 - 处理请假、报销、采购等日常审批流程
+2. 文档管理模块 - 公司制度、公告、知识库管理
+3. 即时通讯模块 - 内部员工实时沟通
+4. 日程管理模块 - 会议安排、任务跟踪
+5. 报表统计模块 - 各部门数据汇总分析
+
+部署架构：
+- 应用服务器: 2台 (主备模式)，运行Tomcat，端口8080
+- 数据库服务器: 1台 MySQL 8.0，端口3306
+- Redis缓存: 1台，端口6379，用于Session共享和缓存
+- Nginx反向代理: 1台，端口80/443，负载均衡和SSL终止
+
+第二章 常见故障排查
+------------------
+
+2.1 OA页面无法访问（502 Bad Gateway）
+
+故障现象：
+用户访问OA系统时，浏览器显示502 Bad Gateway错误页面。
+
+排查步骤：
+第一步：检查Nginx是否正常运行
+  命令: systemctl status nginx
+  预期: Active: active (running)
+  如果停止: systemctl start nginx
+
+第二步：检查OA应用服务是否正常运行
+  命令: ps aux | grep tomcat
+  预期: 可以看到java进程
+  如果不存在: 启动Tomcat服务
+
+第三步：检查应用端口是否正常监听
+  命令: netstat -tlnp | grep 8080
+  预期: 可以看到LISTEN状态
+  如果无输出: 说明应用未启动或端口被占用
+
+第四步：查看Nginx错误日志
+  命令: tail -100 /var/log/nginx/error.log
+  关注: connect() failed, upstream timed out等关键字
+
+第五步：测试绕过Nginx直接访问应用
+  命令: curl -I http://应用服务器IP:8080/oa/
+  如果直接访问正常: Nginx配置有问题
+  如果直接访问也失败: 应用服务有问题
+
+常见原因及解决方案：
+- 应用进程OOM被杀: 增大JVM堆内存 -Xmx，排查内存泄漏
+- 端口被占用: lsof -i :8080 找到占用进程，kill后重启
+- 数据库连接池耗尽: 检查慢SQL，优化连接池配置
+- Nginx upstream配置错误: 检查 upstream 块中的服务器地址
+
+2.2 审批流程卡死
+
+故障现象：
+用户提交的审批流程长时间停在某个节点不流转。
+
+排查步骤：
+第一步：确认卡死流程的编号和当前节点
+  查询OA数据库: SELECT * FROM wf_task WHERE status='ACTIVE' AND create_time < DATE_SUB(NOW(), INTERVAL 1 HOUR)
+
+第二步：检查数据库锁等待
+  命令: SHOW ENGINE INNODB STATUS\G
+  关注: LATEST DETECTED DEADLOCK 部分
+
+第三步：检查流程引擎日志
+  命令: grep "流程编号" /opt/oa/logs/workflow.log | tail -50
+  关注: timeout、exception、deadlock等关键字
+
+第四步：检查外部接口是否正常
+  如果流程节点涉及调用外部API（短信、邮件、第三方系统），检查外部服务是否可达
+
+解决方案：
+- 数据库死锁: kill掉阻塞的事务，优化SQL加锁顺序
+- 外部接口超时: 增加超时时间配置，添加重试机制
+- 流程引擎线程池满: 增大线程池配置，优化流程处理逻辑
+- 临时恢复: 手动触发流程流转或退回重新发起
+
+2.3 OA系统响应缓慢
+
+故障现象：
+用户操作OA系统时，页面加载时间超过5秒，或者出现超时报错。
+
+排查步骤：
+第一步：检查服务器资源使用情况
+  命令: top
+  关注: CPU使用率、内存使用率、Load Average
+  如果CPU持续>90%: 找出高CPU进程并分析原因
+
+第二步：检查数据库连接池
+  命令: 查看应用监控页面 /oa/monitor/druid
+  关注: 活跃连接数是否接近最大值、等待队列长度
+
+第三步：检查慢SQL
+  命令: 查看MySQL慢查询日志
+  SELECT * FROM mysql.slow_log ORDER BY start_time DESC LIMIT 20
+
+第四步：检查JVM GC情况
+  命令: jstat -gcutil <pid> 1000
+  关注: FGC(Full GC次数)和FGCT(Full GC总时间)
+  如果Full GC频繁: 需要调整JVM参数或排查内存泄漏
+
+第五步：检查磁盘IO
+  命令: iostat -x 1 5
+  关注: %util 如果持续接近100%，说明磁盘IO瓶颈
+
+解决方案：
+- JVM内存不足: 增大 -Xmx 和 -Xms 参数
+- 慢SQL优化: 添加索引、优化查询语句、使用缓存
+- 数据库连接池不足: 增大最大连接数，检查连接泄漏
+- 磁盘IO瓶颈: 升级SSD、增加内存缓存、优化日志写入策略
+- 代码性能问题: 使用Arthas或JProfiler进行性能分析
+
+2.4 定时任务执行失败
+
+故障现象：
+OA系统中的定时任务（如数据同步、报表生成）未按预期执行。
+
+排查步骤：
+第一步：检查定时任务调度状态
+  命令: 查看应用日志中定时任务相关日志
+  grep "scheduled" /opt/oa/logs/application.log | tail -50
+
+第二步：检查任务执行时间
+  确认服务器时间是否正确: date
+  确认时区设置: timedatectl
+
+第三步：检查任务锁
+  如果使用数据库锁控制多实例下的任务执行：
+  SELECT * FROM qrtz_locks WHERE LOCK_NAME='TRIGGER_ACCESS'
+
+第四步：检查任务依赖的外部资源
+  数据库连接、文件系统空间、网络连接等
+
+解决方案：
+- 任务锁残留: 清理数据库中的过期锁记录
+- Cron表达式错误: 验证Cron表达式是否正确
+- 任务数据异常: 检查任务处理的源数据是否有异常值
+- 手动触发补偿: 通过OA管理后台手动执行失败的任务
+
+2.5 用户登录失败
+
+故障现象：
+部分或全部用户无法登录OA系统。
+
+排查步骤：
+第一步：确认是单个用户还是全部用户
+  单个用户: 检查该用户账号状态和密码
+  全部用户: 检查认证服务（LDAP/SSO/数据库）
+
+第二步：检查认证服务连接
+  如果使用LDAP: telnet ldap_server 389
+  如果使用SSO: 检查SSO服务返回的Token是否有效
+  如果使用数据库: 检查数据库连接和用户表
+
+第三步：检查Redis缓存
+  命令: redis-cli -h redis_server -p 6379 ping
+  预期返回: PONG
+  如果连接失败: 检查Redis服务和网络
+
+第四步：查看登录相关日志
+  grep "login" /opt/oa/logs/application.log | tail -100
+
+解决方案：
+- 密码过期: 引导用户重置密码
+- 账号锁定: 管理员解锁账号
+- LDAP/SSO服务故障: 联系基础设施团队恢复
+- Redis故障导致Session丢失: 恢复Redis服务，用户需重新登录
+- 数据库用户表损坏: 使用备份恢复或修复表
+
+第三章 日常巡检清单
+------------------
+
+每日必检项：
+1. 应用服务状态检查: ps aux | grep tomcat
+2. Nginx服务状态检查: systemctl status nginx
+3. 数据库服务状态检查: systemctl status mysql
+4. 磁盘使用率检查: df -h（告警阈值: 85%）
+5. 内存使用率检查: free -m（告警阈值: 90%）
+6. 应用日志异常关键字扫描: grep -E "ERROR|FATAL|Exception" /opt/oa/logs/application.log | tail -50
+
+每周检查项：
+1. 数据库备份完整性验证
+2. SSL证书过期时间检查
+3. 系统安全补丁更新情况
+4. 监控告警规则有效性验证
+
+每月检查项：
+1. 数据库性能分析和索引优化
+2. 日志归档和清理
+3. 用户权限审计
+4. 灾备切换演练
+
+第四章 应急预案
+--------------
+
+4.1 应用服务宕机
+
+应急步骤：
+1. 确认宕机（telnet 应用IP 8080 不通）
+2. 通知相关方（部门群通知、发送告警邮件）
+3. 保存现场（备份日志、dump堆信息）
+4. 重启应用服务
+5. 验证服务恢复（能正常登录OA）
+6. 事后分析根因，编写故障报告
+
+4.2 数据库故障
+
+应急步骤：
+1. 确认故障范围（主库/从库、全部/部分表）
+2. 如果是从库故障：临时将读流量切到主库
+3. 如果是主库故障：执行主从切换
+4. 验证数据完整性
+5. 恢复故障节点
+
+4.3 磁盘空间满
+
+应急步骤：
+1. 确认磁盘使用情况: df -h
+2. 快速释放空间:
+   - 清理过期日志: find /opt/oa/logs -name "*.log.*" -mtime +7 -delete
+   - 清理临时文件: rm -rf /tmp/oa-*
+   - 清理Tomcat缓存: rm -rf /opt/tomcat/work/Catalina/*
+3. 如仍不足，紧急扩容磁盘或迁移数据
+
+第五章 运维工具和命令速查
+------------------------
+
+应用管理:
+  systemctl start|stop|restart tomcat    # Tomcat管理
+  systemctl start|stop|restart nginx     # Nginx管理
+  ps aux | grep java                     # 查看Java进程
+  kill -9 <pid>                          # 强制结束进程
+
+日志查看:
+  tail -f /opt/oa/logs/catalina.out     # 实时查看应用日志
+  tail -f /var/log/nginx/access.log     # 实时查看Nginx访问日志
+  grep "ERROR" /opt/oa/logs/*.log       # 搜索错误日志
+
+数据库:
+  mysql -h主机 -u用户 -p密码 数据库名     # 连接数据库
+  SHOW FULL PROCESSLIST;                # 查看所有数据库连接
+  SHOW ENGINE INNODB STATUS\G           # 查看InnoDB状态
+  KILL <connection_id>;                 # 终止数据库连接
+
+网络诊断:
+  ping 目标IP                            # 网络连通性测试
+  telnet 目标IP 端口                      # 端口连通性测试
+  netstat -tlnp                          # 查看监听端口
+  curl -I http://目标URL                  # HTTP连通性和响应头检查
+
+系统资源:
+  top                                    # 实时系统资源监控
+  free -m                                # 内存使用情况
+  df -h                                  # 磁盘使用情况
+  iostat -x 1 5                          # 磁盘IO统计

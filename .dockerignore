@@ -1,0 +1,48 @@
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.spec
+
+# 虚拟环境
+env_new/
+env/
+venv/
+.venv/
+
+# 敏感配置
+.env
+*.pem
+*.key
+
+# 数据目录
+data/chroma_db/
+data/inspection_logs/*.log
+data/oa_ops.db
+data/oa_ops.db-shm
+data/oa_ops.db-wal
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store
+*.lnk
+
+# Gradio
+.gradio/
+*.loc
+
+# Git
+.git/
