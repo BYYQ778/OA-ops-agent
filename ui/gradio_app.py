@@ -24,6 +24,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from agents.inspection_agent import InspectionAgent, run_unified_inspection
 from agents.log_analysis_agent import LogAnalysisAgent, analyze_log_content
 from agents.knowledge_agent import KnowledgeBaseAgent
+from agents.ssl_monitor import check_cert_expiry, batch_check_certs
+from agents.network_diag import ping_host, check_tcp_port, dns_resolve, traceroute_host, http_health_check
+from agents.db_inspector import (
+    check_mysql_status, check_redis_status, show_mysql_slow_queries,
+    check_mssql_status, check_oracle_status
+)
+from agents.security_audit import (
+    audit_ssh_config, check_failed_logins, audit_firewall_rules,
+    check_listening_ports, audit_cron_jobs
+)
 from utils.scheduler import InspectionScheduler
 from utils.logger import get_logger
 from utils.config import config as app_config
@@ -256,6 +266,14 @@ label, .gr-radio label, .gr-checkbox label {
   background: var(--gray-50) !important;
   border: 1px solid var(--gray-200) !important;
   border-radius: var(--radius-sm) !important;
+}
+
+/* ---- Prevent jump when switching tabs ---- */
+.tabs > .tabitem {
+  min-height: 580px;
+}
+.gr-textbox textarea {
+  resize: vertical !important;
 }
 
 /* ---- Misc ---- */
@@ -834,6 +852,220 @@ def create_ui():
                     fn=kb_clear_all,
                     outputs=[kb_doc_list_output],
                 )
+
+            # ===== Tab 5: Diagnostics Toolbox =====
+            with gr.TabItem("🛠 诊断工具箱"):
+                gr.Markdown("""
+                <div style="font-size:13px;color:var(--gray-400);margin-bottom:12px;">
+                一键诊断工具：SSL证书、网络、数据库、安全基线 — 无需配置，开箱即用
+                </div>
+                """)
+
+                with gr.Tabs():
+                    # ---- 5a: SSL ----
+                    with gr.TabItem("🔒 SSL证书"):
+                        with gr.Row():
+                            with gr.Column(scale=2):
+                                ssl_domain = gr.Textbox(
+                                    label="域名",
+                                    placeholder="oa.example.com 或 oa.example.com:8443",
+                                )
+                            with gr.Column(scale=1):
+                                ssl_check_btn = gr.Button("检测证书", variant="primary")
+
+                        ssl_single_result = gr.Textbox(label="检测结果", placeholder="输入域名后点击检测...", lines=14, max_lines=20)
+
+                        gr.Markdown("---")
+                        ssl_batch_input = gr.Textbox(
+                            label="批量检测（每行一个域名）",
+                            placeholder="oa.example.com\nwww.example.com\nerp.example.com:8443",
+                            lines=4,
+                        )
+                        ssl_batch_btn = gr.Button("批量检测", variant="secondary")
+                        ssl_batch_result = gr.Textbox(label="批量结果", lines=12, max_lines=18)
+
+                        ssl_check_btn.click(
+                            fn=lambda d: check_cert_expiry.invoke({"domain": d}) if d.strip() else "请输入域名",
+                            inputs=[ssl_domain],
+                            outputs=[ssl_single_result],
+                        )
+                        ssl_batch_btn.click(
+                            fn=lambda t: batch_check_certs.invoke({"domains_text": t}),
+                            inputs=[ssl_batch_input],
+                            outputs=[ssl_batch_result],
+                        )
+
+                    # ---- 5b: Network ----
+                    with gr.TabItem("🌐 网络诊断"):
+                        with gr.Row():
+                            with gr.Column(scale=2):
+                                net_target = gr.Textbox(
+                                    label="目标地址",
+                                    placeholder="IP、域名 或 host:port 格式",
+                                )
+                            with gr.Column(scale=2):
+                                with gr.Row():
+                                    ping_btn = gr.Button("Ping", variant="primary", size="sm")
+                                    port_btn = gr.Button("端口检测", variant="primary", size="sm")
+                                    dns_btn = gr.Button("DNS解析", variant="primary", size="sm")
+                                    trace_btn = gr.Button("路由追踪", variant="secondary", size="sm")
+                                    http_btn = gr.Button("HTTP检查", variant="secondary", size="sm")
+
+                        net_result = gr.Textbox(label="诊断结果", placeholder="选择诊断方式后结果将显示在此处...", lines=16, max_lines=24)
+
+                        ping_btn.click(
+                            fn=lambda t: ping_host.invoke({"host": t}) if t.strip() else "请输入目标地址",
+                            inputs=[net_target], outputs=[net_result],
+                        )
+                        port_btn.click(
+                            fn=lambda t: check_tcp_port.invoke({"host_port": t}) if t.strip() else "请输入 host:port",
+                            inputs=[net_target], outputs=[net_result],
+                        )
+                        dns_btn.click(
+                            fn=lambda t: dns_resolve.invoke({"domain": t}) if t.strip() else "请输入域名",
+                            inputs=[net_target], outputs=[net_result],
+                        )
+                        trace_btn.click(
+                            fn=lambda t: traceroute_host.invoke({"host": t}) if t.strip() else "请输入目标地址",
+                            inputs=[net_target], outputs=[net_result],
+                        )
+                        http_btn.click(
+                            fn=lambda t: http_health_check.invoke({"url": t}) if t.strip() else "请输入URL",
+                            inputs=[net_target], outputs=[net_result],
+                        )
+
+                    # ---- 5c: DB ----
+                    with gr.TabItem("🗄️ 数据库"):
+                        gr.Markdown("**MySQL 巡检**")
+                        with gr.Row():
+                            db_host = gr.Textbox(label="主机", value="127.0.0.1", scale=2)
+                            db_port = gr.Number(label="端口", value=3306, precision=0, scale=1)
+                            db_user = gr.Textbox(label="用户", value="root", scale=1)
+                            db_pass = gr.Textbox(label="密码", type="password", scale=1)
+                        with gr.Row():
+                            mysql_check_btn = gr.Button("MySQL 健康检查", variant="primary")
+                            mysql_slow_btn = gr.Button("查看慢查询", variant="secondary")
+
+                        db_mysql_result = gr.Textbox(label="MySQL 结果", lines=14)
+
+                        mysql_check_btn.click(
+                            fn=lambda h, p, u, pw: check_mysql_status.invoke({
+                                "config_text": f"host={h} port={int(p)} user={u} password={pw}"
+                            }),
+                            inputs=[db_host, db_port, db_user, db_pass],
+                            outputs=[db_mysql_result],
+                        )
+                        mysql_slow_btn.click(
+                            fn=lambda h, p, u, pw: show_mysql_slow_queries.invoke({
+                                "config_text": f"host={h} port={int(p)} user={u} password={pw} limit=20"
+                            }),
+                            inputs=[db_host, db_port, db_user, db_pass],
+                            outputs=[db_mysql_result],
+                        )
+
+                        gr.Markdown("---")
+                        gr.Markdown("**Redis 巡检**")
+                        with gr.Row():
+                            redis_host = gr.Textbox(label="主机", value="127.0.0.1", scale=2)
+                            redis_port = gr.Number(label="端口", value=6379, precision=0, scale=1)
+                            redis_pass = gr.Textbox(label="密码", type="password", scale=1)
+                            redis_check_btn = gr.Button("Redis 健康检查", variant="primary", scale=1)
+
+                        db_redis_result = gr.Textbox(label="Redis 结果", lines=14, max_lines=20)
+
+                        redis_check_btn.click(
+                            fn=lambda h, p, pw: check_redis_status.invoke({
+                                "config_text": f"host={h} port={int(p)} password={pw}"
+                            }),
+                            inputs=[redis_host, redis_port, redis_pass],
+                            outputs=[db_redis_result],
+                        )
+
+                        gr.Markdown("---")
+                        gr.Markdown("**SQL Server 巡检**")
+                        with gr.Row():
+                            ms_host = gr.Textbox(label="主机", value="127.0.0.1", scale=2)
+                            ms_port = gr.Number(label="端口", value=1433, precision=0, scale=1)
+                            ms_user = gr.Textbox(label="用户", value="sa", scale=1)
+                            ms_pass = gr.Textbox(label="密码", type="password", scale=1)
+                            ms_check_btn = gr.Button("SQL Server 健康检查", variant="primary", scale=1)
+
+                        db_mssql_result = gr.Textbox(label="SQL Server 结果", lines=12)
+
+                        ms_check_btn.click(
+                            fn=lambda h, p, u, pw: check_mssql_status.invoke({
+                                "config_text": f"host={h} port={int(p)} user={u} password={pw}"
+                            }),
+                            inputs=[ms_host, ms_port, ms_user, ms_pass],
+                            outputs=[db_mssql_result],
+                        )
+
+                        gr.Markdown("---")
+                        gr.Markdown("**Oracle 巡检**")
+                        with gr.Row():
+                            ora_host = gr.Textbox(label="主机", value="127.0.0.1", scale=2)
+                            ora_port = gr.Number(label="端口", value=1521, precision=0, scale=1)
+                            ora_user = gr.Textbox(label="用户", value="system", scale=1)
+                            ora_pass = gr.Textbox(label="密码", type="password", scale=1)
+                            ora_svc = gr.Textbox(label="服务名", value="orcl", scale=1)
+                            ora_check_btn = gr.Button("Oracle 健康检查", variant="primary", scale=1)
+
+                        db_oracle_result = gr.Textbox(label="Oracle 结果", lines=12)
+
+                        ora_check_btn.click(
+                            fn=lambda h, p, u, pw, svc: check_oracle_status.invoke({
+                                "config_text": f"host={h} port={int(p)} user={u} password={pw} service={svc}"
+                            }),
+                            inputs=[ora_host, ora_port, ora_user, ora_pass, ora_svc],
+                            outputs=[db_oracle_result],
+                        )
+
+                    # ---- 5d: Security ----
+                    with gr.TabItem("🔐 安全基线"):
+                        gr.Markdown("选择审计项目（本地/远程取决于运行环境）")
+                        with gr.Row():
+                            sec_ssh_btn = gr.Button("SSH配置审计", variant="primary")
+                            sec_login_btn = gr.Button("失败登录审计", variant="primary")
+                            sec_fw_btn = gr.Button("防火墙审计", variant="primary")
+                        with gr.Row():
+                            sec_ports_btn = gr.Button("监听端口审计", variant="secondary")
+                            sec_cron_btn = gr.Button("Crontab审计", variant="secondary")
+                            sec_all_btn = gr.Button("一键全量审计", variant="stop")
+
+                        sec_result = gr.Textbox(label="审计结果", lines=20)
+
+                        sec_ssh_btn.click(
+                            fn=lambda: audit_ssh_config.invoke({}),
+                            outputs=[sec_result],
+                        )
+                        sec_login_btn.click(
+                            fn=lambda: check_failed_logins.invoke({}),
+                            outputs=[sec_result],
+                        )
+                        sec_fw_btn.click(
+                            fn=lambda: audit_firewall_rules.invoke({}),
+                            outputs=[sec_result],
+                        )
+                        sec_ports_btn.click(
+                            fn=lambda: check_listening_ports.invoke({}),
+                            outputs=[sec_result],
+                        )
+                        sec_cron_btn.click(
+                            fn=lambda: audit_cron_jobs.invoke({}),
+                            outputs=[sec_result],
+                        )
+                        sec_all_btn.click(
+                            fn=lambda: (
+                                "=" * 55 + "\n  全量安全基线审计报告\n" +
+                                "=" * 55 + "\n\n" +
+                                audit_ssh_config.invoke({}) + "\n\n" +
+                                check_failed_logins.invoke({}) + "\n\n" +
+                                audit_firewall_rules.invoke({}) + "\n\n" +
+                                check_listening_ports.invoke({}) + "\n\n" +
+                                audit_cron_jobs.invoke({})
+                            ),
+                            outputs=[sec_result],
+                        )
 
         # ===== Footer =====
         gr.HTML("""

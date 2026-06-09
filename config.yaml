@@ -112,3 +112,43 @@ logging:
   level: INFO                   # DEBUG / INFO / WARNING / ERROR
   dir: data/inspection_logs
   backup_days: 7
+
+# ---- SSL/TLS 证书监控 ----
+ssl_monitor:
+  # 定时巡检时自动检测的域名列表
+  domains:
+    [
+    #    "oa.example.com",
+    #    "www.example.com:8443",
+    ]
+  # 证书剩余天数低于阈值时告警
+  warn_days: [30, 7, 1]
+
+# ---- 网络诊断 ----
+network_diag:
+  ping_timeout: 5               # Ping 超时（秒）
+  # 预设的待检测目标
+  default_targets:
+    [
+    #    "oa.example.com",
+    #    "192.168.1.1:3306",
+    ]
+
+# ---- 数据库健康巡检 ----
+db_inspection:
+  # MySQL 实例列表（可在 UI 中手动输入连接信息）
+  mysql_hosts:
+    [
+    #   {"host": "127.0.0.1", "port": 3306, "user": "root", "password": "${OA_MYSQL_PASSWORD:}"},
+    ]
+  # Redis 实例列表
+  redis_hosts:
+    [
+    #   {"host": "127.0.0.1", "port": 6379, "password": ""},
+    ]
+  slow_query_threshold: 2.0      # 慢查询阈值（秒）
+
+# ---- 安全基线 ----
+security:
+  audit_enabled: true
+  max_failed_logins: 20           # 失败登录审计的显示条数
