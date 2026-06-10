@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OA 运维助手 v{{ version }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ===== Sidebar ===== -->
+<nav id="sidebar">
+  <div class="sidebar-logo">
+    <h2>OA 运维助手</h2>
+    <span>Ops Platform v{{ version }}</span>
+  </div>
+  <div id="nav-items">
+    <a class="nav-item active" data-page="inspect" onclick="switchPage('inspect')">📊 巡检监控</a>
+    <a class="nav-item" data-page="log" onclick="switchPage('log')">📋 日志分析</a>
+    <a class="nav-item" data-page="qa" onclick="switchPage('qa')">💬 知识问答</a>
+    <a class="nav-item" data-page="kb" onclick="switchPage('kb')">📚 知识库</a>
+    <a class="nav-item" data-page="diag" onclick="switchPage('diag')">🛠 诊断工具箱</a>
+    <a class="nav-item" data-page="settings" onclick="switchPage('settings')">⚙️ 系统设置</a>
+  </div>
+  <div class="sidebar-status">
+    <span class="dot {{ 'dot-online' if is_running else 'dot-offline' }}"></span>
+    <span id="scheduler-status-text">{{ scheduler_status }}</span>
+  </div>
+</nav>
+
+<!-- ===== Main Content ===== -->
+<main id="main-content">
+
+  <!-- Page: 巡检监控 -->
+  <section class="page active" id="page-inspect">
+    <h1 class="page-title">📊 巡检监控</h1>
+    <p class="page-subtitle">自动化服务器巡检 · 端口/服务/磁盘/内存 · 定时调度</p>
+
+    <div class="ops-card">
+      <div class="card-row">
+        <div class="card-col narrow">
+          <label>巡检间隔（秒）</label>
+          <input type="range" id="inspect-interval" min="10" max="300" value="30" step="10" oninput="document.getElementById('interval-val').textContent=this.value">
+          <span style="font-size:12px;color:#8b8fa3;">当前: <span id="interval-val">30</span>秒</span>
+          <div class="btn-row" style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="inspectStart()">定时巡检</button>
+            <button class="btn btn-danger" onclick="inspectStop()">停止</button>
+          </div>
+          <div class="btn-row" style="margin-top:8px;">
+            <button class="btn btn-secondary" onclick="inspectAdjust()">调整间隔</button>
+            <button class="btn btn-secondary" onclick="inspectRun()">立即巡检</button>
+          </div>
+        </div>
+        <div class="card-col wide">
+          <div class="status-bar" id="inspect-status">{{ scheduler_status }}</div>
+          <pre class="output-box" id="inspect-output">执行巡检后结果将显示在此处...</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="ops-card">
+      <h4>📜 历史记录</h4>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="inspectHistory()">巡检历史</button>
+        <label style="font-size:12px;">天数: <input type="number" id="history-days" value="7" min="1" max="30" style="width:60px;display:inline;"></label>
+        <button class="btn btn-secondary" onclick="dbOverview()">数据库统计</button>
+      </div>
+      <pre class="output-box" id="history-output" style="height:200px;">点击按钮查询...</pre>
+    </div>
+  </section>
+
+  <!-- Page: 日志分析 -->
+  <section class="page" id="page-log">
+    <h1 class="page-title">📋 日志分析</h1>
+    <p class="page-subtitle">粘贴运维日志 · 自动匹配故障模式 · 生成排查建议</p>
+
+    <div class="ops-card">
+      <textarea id="log-input" placeholder="在此粘贴日志内容..." style="height:160px;width:100%;"></textarea>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="logAnalyze()">分析内容</button>
+        <button class="btn btn-danger" onclick="document.getElementById('log-input').value='';document.getElementById('log-output').textContent='';">清空</button>
+      </div>
+      <pre class="output-box" id="log-output" style="margin-top:12px;">分析结果将显示在此处...</pre>
+    </div>
+  </section>
+
+  <!-- Page: 知识问答 -->
+  <section class="page" id="page-qa">
+    <h1 class="page-title">💬 知识问答</h1>
+    <p class="page-subtitle">基于 RAG 的运维知识智能问答 · 回答严格依据知识库文档</p>
+
+    <div class="ops-card">
+      <div class="input-row">
+        <input type="text" id="qa-question" placeholder="例如：OA 审批流程卡死了怎么办？" style="flex:1;">
+        <button class="btn btn-primary" onclick="kbAsk()">提问</button>
+      </div>
+      <pre class="output-box" id="qa-output" style="margin-top:12px;">AI 将基于知识库为您解答...</pre>
+    </div>
+  </section>
+
+  <!-- Page: 知识库 -->
+  <section class="page" id="page-kb">
+    <h1 class="page-title">📚 知识库</h1>
+    <p class="page-subtitle">上传运维文档 · 自动分块向量化 · 智能检索问答</p>
+
+    <div class="ops-card">
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="kbList()">全部文档</button>
+        <button class="btn btn-secondary" onclick="kbStats()">统计</button>
+        <input type="text" id="kb-delete-name" placeholder="输入文件名删除" style="width:200px;">
+        <button class="btn btn-danger" onclick="kbDelete()">删除</button>
+        <button class="btn btn-danger" onclick="kbClear()">清空知识库</button>
+      </div>
+      <pre class="output-box" id="kb-output" style="margin-top:12px;">点击按钮查看...</pre>
+    </div>
+  </section>
+
+  <!-- Page: 诊断工具箱 -->
+  <section class="page" id="page-diag">
+    <h1 class="page-title">🛠 诊断工具箱</h1>
+    <p class="page-subtitle">SSL证书 · 网络诊断 · 数据库巡检 · 安全基线 — 开箱即用</p>
+
+    <!-- Sub-tabs -->
+    <div class="sub-tabs">
+      <button class="sub-tab active" onclick="switchSubTab('ssl', this)">🔒 SSL证书</button>
+      <button class="sub-tab" onclick="switchSubTab('net', this)">🌐 网络诊断</button>
+      <button class="sub-tab" onclick="switchSubTab('db', this)">🗄️ 数据库</button>
+      <button class="sub-tab" onclick="switchSubTab('sec', this)">🔐 安全基线</button>
+    </div>
+
+    <!-- SSL Sub-page -->
+    <div class="sub-page active" id="sub-ssl">
+      <div class="ops-card">
+        <div class="input-row">
+          <input type="text" id="ssl-domain" placeholder="oa.example.com 或 oa.example.com:8443" style="flex:1;">
+          <button class="btn btn-primary" onclick="sslCheck()">检测证书</button>
+        </div>
+        <pre class="output-box" id="ssl-single-output">输入域名后点击检测...</pre>
+        <hr>
+        <textarea id="ssl-batch" placeholder="批量检测（每行一个域名）&#10;oa.example.com&#10;www.example.com" style="height:70px;width:100%;"></textarea>
+        <button class="btn btn-secondary" style="margin-top:8px;" onclick="sslBatch()">批量检测</button>
+        <pre class="output-box" id="ssl-batch-output" style="margin-top:8px;"></pre>
+      </div>
+    </div>
+
+    <!-- Network Sub-page -->
+    <div class="sub-page" id="sub-net">
+      <div class="ops-card">
+        <div class="input-row">
+          <input type="text" id="net-target" placeholder="IP、域名 或 host:port" style="flex:1;">
+          <button class="btn btn-primary" onclick="netDiag('ping')">Ping</button>
+          <button class="btn btn-primary" onclick="netDiag('port')">端口</button>
+          <button class="btn btn-primary" onclick="netDiag('dns')">DNS</button>
+          <button class="btn btn-secondary" onclick="netDiag('trace')">路由</button>
+          <button class="btn btn-secondary" onclick="netDiag('http')">HTTP</button>
+        </div>
+        <pre class="output-box" id="net-output" style="margin-top:12px;">选择诊断方式后结果将显示在此处...</pre>
+      </div>
+    </div>
+
+    <!-- Database Sub-page -->
+    <div class="sub-page" id="sub-db">
+      <div class="ops-card">
+        <h4>MySQL</h4>
+        <div class="input-row">
+          <input type="text" id="mysql-host" value="127.0.0.1" placeholder="主机" style="width:140px;">
+          <input type="number" id="mysql-port" value="3306" placeholder="端口" style="width:80px;">
+          <input type="text" id="mysql-user" value="root" placeholder="用户" style="width:100px;">
+          <input type="password" id="mysql-pass" placeholder="密码" style="width:120px;">
+          <button class="btn btn-primary" onclick="dbCheck('mysql')">健康检查</button>
+          <button class="btn btn-secondary" onclick="dbCheck('mysql_slow')">慢查询</button>
+        </div>
+        <pre class="output-box" id="mysql-output"></pre>
+      </div>
+      <div class="ops-card">
+        <h4>Redis</h4>
+        <div class="input-row">
+          <input type="text" id="redis-host" value="127.0.0.1" style="width:140px;">
+          <input type="number" id="redis-port" value="6379" style="width:80px;">
+          <input type="password" id="redis-pass" placeholder="密码" style="width:120px;">
+          <button class="btn btn-primary" onclick="dbCheck('redis')">健康检查</button>
+        </div>
+        <pre class="output-box" id="redis-output"></pre>
+      </div>
+      <div class="ops-card">
+        <h4>SQL Server</h4>
+        <div class="input-row">
+          <input type="text" id="ms-host" value="127.0.0.1" style="width:140px;">
+          <input type="number" id="ms-port" value="1433" style="width:80px;">
+          <input type="text" id="ms-user" value="sa" style="width:100px;">
+          <input type="password" id="ms-pass" placeholder="密码" style="width:120px;">
+          <button class="btn btn-primary" onclick="dbCheck('mssql')">健康检查</button>
+        </div>
+        <pre class="output-box" id="ms-output"></pre>
+      </div>
+      <div class="ops-card">
+        <h4>Oracle</h4>
+        <div class="input-row">
+          <input type="text" id="ora-host" value="127.0.0.1" style="width:140px;">
+          <input type="number" id="ora-port" value="1521" style="width:80px;">
+          <input type="text" id="ora-user" value="system" style="width:100px;">
+          <input type="password" id="ora-pass" placeholder="密码" style="width:100px;">
+          <input type="text" id="ora-svc" value="orcl" placeholder="服务名" style="width:80px;">
+          <button class="btn btn-primary" onclick="dbCheck('oracle')">健康检查</button>
+        </div>
+        <pre class="output-box" id="ora-output"></pre>
+      </div>
+    </div>
+
+    <!-- Security Sub-page -->
+    <div class="sub-page" id="sub-sec">
+      <div class="ops-card">
+        <h4>单项审计</h4>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="secAudit('ssh')">SSH配置</button>
+          <button class="btn btn-primary" onclick="secAudit('login')">失败登录</button>
+          <button class="btn btn-primary" onclick="secAudit('firewall')">防火墙</button>
+          <button class="btn btn-secondary" onclick="secAudit('ports')">监听端口</button>
+          <button class="btn btn-secondary" onclick="secAudit('cron')">Crontab</button>
+          <button class="btn btn-danger" onclick="secAudit('all')">一键全量审计</button>
+        </div>
+        <pre class="output-box" id="sec-output" style="margin-top:12px;">选择审计项目后结果将显示在此处...</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Page: 系统设置 -->
+  <section class="page" id="page-settings">
+    <h1 class="page-title">⚙️ 系统设置</h1>
+    <p class="page-subtitle">LLM 后端配置 · 运行模式 · 模型选择</p>
+
+    <div class="ops-card">
+      <label>运行模式</label>
+      <div class="btn-row" style="margin-bottom:12px;">
+        <button class="btn btn-primary" id="mode-local-btn" onclick="switchMode('local')">本机离线 · Ollama qwen3:8b</button>
+        <button class="btn btn-secondary" id="mode-api-btn" onclick="switchMode('api')">云端在线 · DeepSeek</button>
+      </div>
+      <div class="input-row">
+        <input type="password" id="api-key" placeholder="离线模式无需填写" style="flex:1;" disabled>
+        <input type="text" id="api-base" value="http://localhost:11434/v1" style="width:240px;" disabled>
+        <input type="text" id="api-model" value="qwen3:8b" style="width:140px;" disabled>
+      </div>
+      <div class="input-row" style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="initSystem()">应用并初始化</button>
+        <span id="mode-status" style="font-size:13px;color:#8b8fa3;line-height:36px;margin-left:12px;">当前：本机离线 · Ollama qwen3:8b</span>
+      </div>
+      <pre class="output-box" id="init-log" style="margin-top:10px;height:80px;">就绪</pre>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// ============ Page Switching ============
+function switchPage(page) {
+  document.querySelectorAll('#nav-items .nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+}
+function switchSubTab(sub, btn) {
+  document.querySelectorAll('.sub-tab').forEach(el => el.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.sub-page').forEach(el => el.classList.remove('active'));
+  document.getElementById('sub-' + sub).classList.add('active');
+}
+
+// ============ API Helper ============
+async function post(url, body) {
+  const form = new FormData();
+  for (let k in body) form.append(k, body[k]);
+  const resp = await fetch(url, { method: 'POST', body: form });
+  return resp.json();
+}
+async function get(url) {
+  const resp = await fetch(url);
+  return resp.json();
+}
+function setOutput(id, text) { document.getElementById(id).textContent = text; }
+function setLoading(id) { document.getElementById(id).textContent = '处理中...'; }
+
+// ============ Inspection ============
+function inspectRun() { setLoading('inspect-output'); post('/api/inspect/run').then(r => setOutput('inspect-output', r.result)); }
+function inspectStart() { var iv = document.getElementById('inspect-interval').value; setLoading('inspect-output'); post('/api/inspect/start', {interval: iv}).then(r => { setOutput('inspect-output', r.msg); updateStatus(); }); }
+function inspectStop() { post('/api/inspect/stop').then(r => { setOutput('inspect-output', r.msg); updateStatus(); }); }
+function inspectAdjust() { var iv = document.getElementById('inspect-interval').value; post('/api/inspect/adjust', {interval: iv}).then(r => setOutput('inspect-output', r.msg)); }
+function inspectHistory() { var days = document.getElementById('history-days').value; setLoading('history-output'); get('/api/inspect/history?days='+days).then(r => { if(r.error) setOutput('history-output', r.error); else setOutput('history-output', JSON.stringify(r, null, 2)); }); }
+function dbOverview() { setLoading('history-output'); get('/api/db/overview').then(r => { if(r.error) setOutput('history-output', r.error); else setOutput('history-output', JSON.stringify(r, null, 2)); }); }
+function updateStatus() { get('/api/inspect/status').then(r => { document.getElementById('scheduler-status-text').textContent = r.status; document.getElementById('inspect-status').textContent = r.status; }); }
+
+// ============ Log Analysis ============
+function logAnalyze() { var txt = document.getElementById('log-input').value; if(!txt.trim()) return; setLoading('log-output'); post('/api/log/analyze', {log_text: txt}).then(r => setOutput('log-output', r.result)); }
+
+// ============ Knowledge Base ============
+function kbAsk() { var q = document.getElementById('qa-question').value; if(!q.trim()) return; setLoading('qa-output'); post('/api/kb/ask', {question: q}).then(r => setOutput('qa-output', r.result)); }
+function kbList() { setLoading('kb-output'); get('/api/kb/list').then(r => setOutput('kb-output', r.result)); }
+function kbStats() { setLoading('kb-output'); get('/api/kb/stats').then(r => setOutput('kb-output', r.result)); }
+function kbDelete() { var n = document.getElementById('kb-delete-name').value; if(!n.trim()) return; setLoading('kb-output'); post('/api/kb/delete', {doc_name: n}).then(r => setOutput('kb-output', r.result)); }
+function kbClear() { if(!confirm('确定要清空整个知识库吗？此操作不可撤销。')) return; setLoading('kb-output'); post('/api/kb/clear').then(r => setOutput('kb-output', r.result)); }
+
+// ============ SSL ============
+function sslCheck() { var d = document.getElementById('ssl-domain').value; if(!d.trim()) return; setLoading('ssl-single-output'); post('/api/ssl/check', {domain: d}).then(r => setOutput('ssl-single-output', r.result)); }
+function sslBatch() { var d = document.getElementById('ssl-batch').value; if(!d.trim()) return; setLoading('ssl-batch-output'); post('/api/ssl/batch', {domains: d}).then(r => setOutput('ssl-batch-output', r.result)); }
+
+// ============ Network ============
+function netDiag(type) { var t = document.getElementById('net-target').value; if(!t.trim()) return; setLoading('net-output'); post('/api/net/' + type, type==='port'?{host_port:t}:type==='dns'?{domain:t}:type==='http'?{url:t}:{host:t}).then(r => setOutput('net-output', r.result)); }
+
+// ============ Database ============
+function dbCheck(type) {
+  if(type === 'mysql') { var h=document.getElementById('mysql-host').value, p=document.getElementById('mysql-port').value, u=document.getElementById('mysql-user').value, pw=document.getElementById('mysql-pass').value; setLoading('mysql-output'); post('/api/db/mysql', {host:h, port:p, user:u, password:pw}).then(r => setOutput('mysql-output', r.result)); }
+  else if(type === 'mysql_slow') { var h=document.getElementById('mysql-host').value, p=document.getElementById('mysql-port').value, u=document.getElementById('mysql-user').value, pw=document.getElementById('mysql-pass').value; setLoading('mysql-output'); post('/api/db/mysql/slow', {host:h, port:p, user:u, password:pw}).then(r => setOutput('mysql-output', r.result)); }
+  else if(type === 'redis') { var h=document.getElementById('redis-host').value, p=document.getElementById('redis-port').value, pw=document.getElementById('redis-pass').value; setLoading('redis-output'); post('/api/db/redis', {host:h, port:p, password:pw}).then(r => setOutput('redis-output', r.result)); }
+  else if(type === 'mssql') { var h=document.getElementById('ms-host').value, p=document.getElementById('ms-port').value, u=document.getElementById('ms-user').value, pw=document.getElementById('ms-pass').value; setLoading('ms-output'); post('/api/db/mssql', {host:h, port:p, user:u, password:pw}).then(r => setOutput('ms-output', r.result)); }
+  else if(type === 'oracle') { var h=document.getElementById('ora-host').value, p=document.getElementById('ora-port').value, u=document.getElementById('ora-user').value, pw=document.getElementById('ora-pass').value, s=document.getElementById('ora-svc').value; setLoading('ora-output'); post('/api/db/oracle', {host:h, port:p, user:u, password:pw, service:s}).then(r => setOutput('ora-output', r.result)); }
+}
+
+// ============ Security ============
+function secAudit(type) { setLoading('sec-output'); post('/api/sec/' + type).then(r => setOutput('sec-output', r.result)); }
+
+// ============ Settings ============
+var currentMode = 'local';
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('mode-local-btn').className = mode==='local' ? 'btn btn-primary' : 'btn btn-secondary';
+  document.getElementById('mode-api-btn').className = mode==='api' ? 'btn btn-primary' : 'btn btn-secondary';
+  if(mode === 'local') {
+    document.getElementById('api-key').disabled = true; document.getElementById('api-base').disabled = true; document.getElementById('api-model').disabled = true;
+    document.getElementById('api-key').value = 'ollama'; document.getElementById('api-base').value = 'http://localhost:11434/v1'; document.getElementById('api-model').value = 'qwen3:8b';
+    document.getElementById('mode-status').textContent = '当前：本机离线 · Ollama qwen3:8b';
+  } else {
+    document.getElementById('api-key').disabled = false; document.getElementById('api-base').disabled = false; document.getElementById('api-model').disabled = false;
+    document.getElementById('api-key').value = ''; document.getElementById('api-base').value = 'https://api.deepseek.com/v1'; document.getElementById('api-model').value = 'deepseek-chat';
+    document.getElementById('mode-status').textContent = '当前：云端在线 · DeepSeek';
+  }
+}
+function initSystem() {
+  document.getElementById('init-log').textContent = '初始化需要加载嵌入模型，请查看服务器终端输出...';
+  // 知识库 Agent 会在首次 API 调用时惰性初始化
+  setTimeout(() => { document.getElementById('init-log').textContent = '设置已保存。知识库引擎将在首次问答时自动加载。'; }, 500);
+}
+
+// ============ Periodic Status Update ============
+setInterval(updateStatus, 5000);
+</script>
+
+</body>
+</html>

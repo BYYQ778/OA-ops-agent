@@ -1,5 +1,5 @@
 """
-OA运维多智能Agent巡检问答系统 - 主入口 v2.1
+OA运维多智能Agent巡检问答系统 - 主入口 v2.2
 ============================================
 启动方式:
     python main.py              # 启动Gradio Web界面（完整功能）
@@ -156,49 +156,12 @@ def run_cli_mode():
 
 
 def run_demo_mode():
-    """演示模式：不需要API密钥的简化版Web界面"""
+    """演示模式：FastAPI + 纯HTML/CSS/JS，无需API密钥"""
     print("启动演示模式（离线功能）...")
-    print("可用功能: 离线巡检 / 正则日志分析")
-    print("限制: 无LLM智能汇总 / 无知识库问答")
-    print()
-
-    from agents.inspection_agent import run_unified_inspection
-    from agents.log_analysis_agent import analyze_log_content
-    import gradio as gr
-
-    def demo_inspect():
-        return run_unified_inspection()
-
-    def demo_analyze_log(log_text):
-        if not log_text.strip():
-            return "请粘贴或上传日志内容"
-        return analyze_log_content.invoke({"log_text": log_text})
-
-    with gr.Blocks(title="OA运维系统 - 演示模式") as demo:
-        gr.HTML('<div style="text-align:center;font-size:24px;font-weight:bold;color:#1a73e8;">OA运维系统演示模式</div>')
-        mode_label = config.get("inspection.mode", "simulated")
-        mode_hint = {"local": "当前: 本机真实检测 (Windows原生命令)", "ssh": "当前: SSH远程检测", "auto": "当前: SSH优先+自动降级", "simulated": "当前: 模拟数据"}.get(mode_label, mode_label)
-        gr.Markdown(f"无需API密钥 | {mode_hint}。完整功能请运行 `python main.py`")
-
-        with gr.Tabs():
-            with gr.TabItem("📊 巡检监控"):
-                btn_label = {"local": "🔧 巡检本机（真实数据）", "ssh": "🔧 巡检服务器（SSH）", "auto": "🔧 立即巡检（自动模式）", "simulated": "🔧 执行巡检（模拟）"}.get(mode_label, "🔧 立即巡检")
-                inspect_btn = gr.Button(btn_label, variant="primary")
-                inspect_output = gr.Textbox(label="巡检结果", lines=22)
-                inspect_btn.click(fn=demo_inspect, outputs=[inspect_output])
-
-            with gr.TabItem("📋 日志分析"):
-                log_text = gr.Textbox(label="粘贴日志内容", lines=10,
-                                      placeholder="粘贴运维日志，例如：\n2025-01-15 10:23:45 [ERROR] 502 Bad Gateway...")
-                log_btn = gr.Button("🔍 分析", variant="primary")
-                log_output = gr.Textbox(label="分析报告", lines=16)
-                log_btn.click(fn=demo_analyze_log, inputs=[log_text], outputs=[log_output])
-
-    demo.launch(
-        server_name="127.0.0.1",
-        server_port=7860,
-        inbrowser=False,
-    )
+    print("可用功能: 离线巡检 / 正则日志分析 / 诊断工具箱")
+    print("限制: 无LLM智能汇总 / 无知识库问答\n")
+    from ui.server import run_server
+    run_server(host="127.0.0.1", port=7860)
 
 
 def main():
@@ -212,8 +175,8 @@ def main():
 
     print(f"""
 ╔══════════════════════════════════════════════════╗
-║     OA运维多智能Agent巡检问答系统 v2.0           ║
-║     基于 LangChain + RAG + Chroma                ║
+║     OA运维多智能Agent巡检问答系统 v2.2           ║
+║     基于 FastAPI + LangChain + RAG + Chroma        ║
 ╚══════════════════════════════════════════════════╝
 """)
 
@@ -222,20 +185,8 @@ def main():
     elif args.demo:
         run_demo_mode()
     else:
-        # Web模式（完整功能）
-        from ui.gradio_app import create_ui
-        import gradio as gr
-
-        app = create_ui()
-
-        # 登录认证配置
-        auth_enabled = config.get("auth.enabled", True) and not args.no_auth
-        auth_creds = None
-        if auth_enabled:
-            username = config.get("auth.username", "admin")
-            password = config.get("auth.password", "admin123")
-            auth_creds = [(username, password)]
-            print(f"🔐 登录认证已启用（用户: {username}）")
+        # Web模式 — FastAPI + 纯HTML/CSS/JS
+        from ui.server import run_server
 
         api_key = config.get("llm.api_key")
         if api_key:
@@ -247,15 +198,7 @@ def main():
         print(f"启动Web界面: http://{host}:{port}")
         print("按 Ctrl+C 停止服务\n")
 
-        app.launch(
-            server_name=host,
-            server_port=port,
-            share=share,
-            inbrowser=False,
-            show_error=True,
-            auth=auth_creds,
-            auth_message="🔐 请输入用户名和密码登录 OA运维系统",
-        )
+        run_server(host=host, port=port)
 
 
 if __name__ == "__main__":
