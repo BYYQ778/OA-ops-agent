@@ -1,7 +1,7 @@
 """
 OA运维助手 — FastAPI Web 服务端
 ================================
-替代 Gradio，纯 HTML/CSS/JS 前端 + FastAPI 后端。
+纯 HTML/CSS/JS 前端 + FastAPI 后端。
 所有 agent 模块代码完全不动，通过 API 端点调用。
 """
 

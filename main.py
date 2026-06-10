@@ -2,7 +2,7 @@
 OA运维多智能Agent巡检问答系统 - 主入口 v2.2
 ============================================
 启动方式:
-    python main.py              # 启动Gradio Web界面（完整功能）
+    python main.py              # 启动Web界面（完整功能）
     python main.py --demo       # 演示模式（不需要API密钥）
     python main.py --cli        # 命令行交互模式
 
@@ -42,7 +42,7 @@ atexit.register(_cleanup)
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
-        description="OA运维多智能Agent巡检问答系统 v2.0",
+        description="OA运维多智能Agent巡检问答系统 v2.2",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -50,7 +50,6 @@ def parse_args():
   python main.py --port 8080    # 指定端口启动
   python main.py --demo         # 演示模式（离线，不需要API密钥）
   python main.py --cli          # 命令行交互模式
-  python main.py --no-auth      # 跳过登录认证
         """
     )
     parser.add_argument(
@@ -68,14 +67,6 @@ def parse_args():
     parser.add_argument(
         "--cli", action="store_true",
         help="命令行交互模式（不启动Web界面）"
-    )
-    parser.add_argument(
-        "--share", action="store_true",
-        help="生成Gradio公网分享链接"
-    )
-    parser.add_argument(
-        "--no-auth", action="store_true",
-        help="跳过登录认证（仅用于开发调试）"
     )
     return parser.parse_args()
 
@@ -171,7 +162,6 @@ def main():
     # 确定端口和主机
     port = args.port or config.get("server.port", 7860)
     host = args.host or config.get("server.host", "127.0.0.1")
-    share = args.share or config.get("server.share", False)
 
     print(f"""
 ╔══════════════════════════════════════════════════╗

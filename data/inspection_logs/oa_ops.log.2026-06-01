@@ -1,0 +1,51 @@
+2026-06-01 13:53:18 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-01 13:53:18 | INFO     | utils.database | 数据库表初始化完成
+2026-06-01 13:54:03 | INFO     | utils.database | 数据库资源已释放
+2026-06-01 14:50:15 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-01 14:50:15 | INFO     | utils.database | 数据库表初始化完成
+2026-06-01 14:50:16 | INFO     | utils.database | 批量保存 5 条巡检记录
+2026-06-01 14:50:16 | INFO     | agents.ai_reporter | AI 报告引擎: ollama/qwen3:8b
+2026-06-01 14:50:31 | ERROR    | agents.ai_reporter | AI 报告生成失败: Connection error.
+2026-06-01 14:50:31 | INFO     | utils.database | 数据库资源已释放
+2026-06-01 14:53:06 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-01 14:53:06 | INFO     | utils.database | 数据库表初始化完成
+2026-06-01 14:53:06 | INFO     | utils.database | 数据库资源已释放
+2026-06-01 16:02:51 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-01 16:02:51 | INFO     | utils.database | 数据库表初始化完成
+2026-06-01 16:02:52 | INFO     | utils.database | 数据库资源已释放
+2026-06-01 16:04:36 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-01 16:04:36 | INFO     | utils.database | 数据库表初始化完成
+2026-06-01 16:04:36 | INFO     | utils.database | 数据库资源已释放
+2026-06-01 16:08:06 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-01 16:08:06 | INFO     | utils.database | 数据库表初始化完成
+2026-06-01 16:11:29 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-01 16:11:29 | INFO     | utils.database | 数据库表初始化完成
+2026-06-01 16:24:50 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-01 16:24:50 | INFO     | utils.database | 数据库表初始化完成
+2026-06-01 16:24:51 | INFO     | utils.database | 批量保存 5 条巡检记录
+2026-06-01 16:24:51 | INFO     | agents.ai_reporter | AI 报告引擎: ollama/qwen3:8b
+2026-06-01 16:25:05 | ERROR    | agents.ai_reporter | AI 报告生成失败: Connection error.
+2026-06-01 16:25:05 | INFO     | utils.database | 数据库资源已释放
+2026-06-01 16:25:46 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-01 16:25:46 | INFO     | utils.database | 数据库表初始化完成
+2026-06-01 16:26:21 | INFO     | agents.inspection_agent | 巡检Agent初始化完成
+2026-06-01 16:26:21 | INFO     | agents.log_analysis_agent | 日志分析Agent初始化完成
+2026-06-01 16:26:21 | INFO     | agents.knowledge_agent | 正在加载嵌入模型: paraphrase-multilingual-MiniLM-L12-v2...
+2026-06-01 16:26:21 | INFO     | agents.knowledge_agent |   尝试加载 (local_files_only=True)...
+2026-06-01 16:26:41 | INFO     | agents.knowledge_agent | 嵌入模型加载成功
+2026-06-01 16:26:42 | INFO     | agents.knowledge_agent | Chroma向量库已连接，存储路径: E:\YunweiAgent\oa-ops-agent\data\chroma_db
+2026-06-01 16:26:42 | INFO     | agents.knowledge_agent | 知识库Agent初始化完成
+2026-06-01 16:29:02 | INFO     | agents.inspection_agent | 巡检Agent初始化完成
+2026-06-01 16:29:02 | INFO     | agents.log_analysis_agent | 日志分析Agent初始化完成
+2026-06-01 16:29:02 | INFO     | agents.knowledge_agent | 正在加载嵌入模型: paraphrase-multilingual-MiniLM-L12-v2...
+2026-06-01 16:29:02 | INFO     | agents.knowledge_agent |   尝试加载 (local_files_only=True)...
+2026-06-01 16:29:05 | INFO     | agents.knowledge_agent | 嵌入模型加载成功
+2026-06-01 16:29:05 | INFO     | agents.knowledge_agent | Chroma向量库已连接，存储路径: E:\YunweiAgent\oa-ops-agent\data\chroma_db
+2026-06-01 16:29:05 | INFO     | agents.knowledge_agent | 知识库Agent初始化完成
+2026-06-01 16:29:10 | INFO     | agents.inspection_agent | 巡检Agent初始化完成
+2026-06-01 16:29:10 | INFO     | agents.log_analysis_agent | 日志分析Agent初始化完成
+2026-06-01 16:29:10 | INFO     | agents.knowledge_agent | 正在加载嵌入模型: paraphrase-multilingual-MiniLM-L12-v2...
+2026-06-01 16:29:10 | INFO     | agents.knowledge_agent |   尝试加载 (local_files_only=True)...
+2026-06-01 16:29:14 | INFO     | agents.knowledge_agent | 嵌入模型加载成功
+2026-06-01 16:29:14 | INFO     | agents.knowledge_agent | Chroma向量库已连接，存储路径: E:\YunweiAgent\oa-ops-agent\data\chroma_db
+2026-06-01 16:29:14 | INFO     | agents.knowledge_agent | 知识库Agent初始化完成
