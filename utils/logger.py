@@ -11,6 +11,19 @@ import logging
 import os
 from logging.handlers import TimedRotatingFileHandler
 
+
+class RobustTimedRotatingFileHandler(TimedRotatingFileHandler):
+    """容忍轮转失败的 TimedRotatingFileHandler，旧进程锁文件时不崩溃。"""
+
+    def handleError(self, record):
+        """吞掉轮转 PermissionError，避免旧进程锁文件导致整个启动失败。"""
+        import sys
+        exc_type, exc_value, _ = sys.exc_info()
+        if exc_type is PermissionError:
+            return  # 静默跳过，日志本轮写入控制台即可
+        super().handleError(record)
+
+
 # ========== 全局配置 ==========
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "inspection_logs")
 os.makedirs(LOG_DIR, exist_ok=True)  # 确保日志目录存在
@@ -51,7 +64,7 @@ def get_logger(name: str = "OAOpsAgent") -> logging.Logger:
 
     # ---- 文件handler（按天轮转，保留7天）----
     log_file = os.path.join(LOG_DIR, "oa_ops.log")
-    file_handler = TimedRotatingFileHandler(
+    file_handler = RobustTimedRotatingFileHandler(
         filename=log_file,
         when="midnight",
         interval=1,

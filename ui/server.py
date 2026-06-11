@@ -29,7 +29,7 @@ from utils.scheduler import InspectionScheduler
 logger = get_logger(__name__)
 
 # ---- FastAPI App ----
-app = FastAPI(title="OA 运维助手", version="2.1")
+app = FastAPI(title="OA 运维助手", version="2.2")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
@@ -47,7 +47,7 @@ async def index(request: Request):
     sched_status = f"调度器: {'运行中' if scheduler.is_running else '已停止'} | 模式: {mode_label}"
     template = templates.get_template("index.html")
     html = template.render(
-        version="2.1",
+        version="2.2",
         scheduler_status=sched_status,
         is_running=scheduler.is_running,
     )

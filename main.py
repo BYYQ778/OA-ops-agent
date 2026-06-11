@@ -180,7 +180,7 @@ def main():
 
         api_key = config.get("llm.api_key")
         if api_key:
-            print(f"🔑 LLM 已配置（{config.get('llm.provider')}/{config.get('llm.model')}）")
+            print(f"[OK] LLM 已配置（{config.get('llm.provider')}/{config.get('llm.model')}）")
         else:
             print("⚠️ 未配置 LLM API Key，知识库问答功能不可用")
             print("   请编辑 .env 文件填入 OA_LLM_API_KEY")
