@@ -24,7 +24,6 @@ services:
       - ./.env:/app/.env:ro
     environment:
       - PYTHONUNBUFFERED=1
-      - GRADIO_SERVER_NAME=0.0.0.0
     restart: unless-stopped
     # 资源限制
     deploy:

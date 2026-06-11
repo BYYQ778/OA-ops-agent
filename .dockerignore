@@ -40,9 +40,6 @@ Thumbs.db
 .DS_Store
 *.lnk
 
-# Gradio
-.gradio/
-*.loc
 
 # Git
 .git/

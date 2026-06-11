@@ -105,7 +105,20 @@
     <p class="page-subtitle">上传运维文档 · 自动分块向量化 · 智能检索问答</p>
 
     <div class="ops-card">
-      <div class="btn-row">
+      <!-- 拖拽上传区域 -->
+      <div id="kb-drop-zone" class="drop-zone"
+           ondragover="event.preventDefault(); this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="kbDrop(event)">
+        <div class="drop-icon">📄</div>
+        <p>拖拽文档到此处，或点击选择文件</p>
+        <p class="drop-hint">支持 PDF / Word / TXT</p>
+        <input type="file" id="kb-file-input" accept=".pdf,.docx,.txt" onchange="kbUpload()" style="display:none;">
+        <button class="btn btn-secondary" onclick="document.getElementById('kb-file-input').click()">选择文件</button>
+        <span id="kb-upload-status" style="margin-left:8px;font-size:13px;"></span>
+      </div>
+
+      <div class="btn-row" style="margin-top:12px;">
         <button class="btn btn-secondary" onclick="kbList()">全部文档</button>
         <button class="btn btn-secondary" onclick="kbStats()">统计</button>
         <input type="text" id="kb-delete-name" placeholder="输入文件名删除" style="width:200px;">
@@ -298,6 +311,8 @@ function kbList() { setLoading('kb-output'); get('/api/kb/list').then(r => setOu
 function kbStats() { setLoading('kb-output'); get('/api/kb/stats').then(r => setOutput('kb-output', r.result)); }
 function kbDelete() { var n = document.getElementById('kb-delete-name').value; if(!n.trim()) return; setLoading('kb-output'); post('/api/kb/delete', {doc_name: n}).then(r => setOutput('kb-output', r.result)); }
 function kbClear() { if(!confirm('确定要清空整个知识库吗？此操作不可撤销。')) return; setLoading('kb-output'); post('/api/kb/clear').then(r => setOutput('kb-output', r.result)); }
+function kbDrop(e) { e.preventDefault(); e.currentTarget.classList.remove('drag-over'); var f = e.dataTransfer.files[0]; if(f) { document.getElementById('kb-file-input').files = e.dataTransfer.files; kbUpload(); } }
+function kbUpload() { var f = document.getElementById('kb-file-input').files[0]; if(!f) return; var fd = new FormData(); fd.append('file', f); document.getElementById('kb-upload-status').textContent = '上传中...'; setLoading('kb-output'); fetch('/api/kb/import', {method:'POST', body:fd}).then(r => r.json()).then(r => { setOutput('kb-output', r.result); document.getElementById('kb-upload-status').textContent = '✓ 上传完成'; document.getElementById('kb-file-input').value = ''; }); }
 
 // ============ SSL ============
 function sslCheck() { var d = document.getElementById('ssl-domain').value; if(!d.trim()) return; setLoading('ssl-single-output'); post('/api/ssl/check', {domain: d}).then(r => setOutput('ssl-single-output', r.result)); }

@@ -8,7 +8,7 @@ OA运维助手 — FastAPI Web 服务端
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -240,8 +240,24 @@ async def api_kb_ask(question: str = Form(...)):
     return {"result": kb.query(question)}
 
 @app.post("/api/kb/import")
-async def api_kb_import():
-    return {"result": "文档导入功能需通过启动完整模式使用"}
+async def api_kb_import(file: UploadFile = File(...)):
+    kb = get_kb_agent()
+    if kb is None:
+        return {"result": "知识库引擎未就绪，请确认嵌入模型已下载且 LLM 配置正确"}
+    # 保存上传文件到临时目录
+    os.makedirs("data/uploads", exist_ok=True)
+    file_path = os.path.join("data/uploads", file.filename)
+    with open(file_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+    # 导入知识库
+    result = kb.import_document(file_path)
+    # 清理临时文件
+    try:
+        os.remove(file_path)
+    except Exception:
+        pass
+    return {"result": result}
 
 @app.get("/api/kb/list")
 async def api_kb_list():

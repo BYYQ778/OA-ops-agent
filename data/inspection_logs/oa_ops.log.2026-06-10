@@ -1,0 +1,18 @@
+2026-06-10 14:59:42 | INFO     | utils.database | 数据库资源已释放
+2026-06-10 15:06:28 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-10 15:06:28 | INFO     | utils.database | 数据库表初始化完成
+2026-06-10 15:06:32 | INFO     | utils.database | 数据库资源已释放
+2026-06-10 15:41:18 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-10 15:41:18 | INFO     | utils.database | 数据库表初始化完成
+2026-06-10 15:58:36 | INFO     | utils.database | 批量保存 5 条巡检记录
+2026-06-10 15:58:36 | INFO     | agents.ai_reporter | AI 报告引擎: ollama/qwen3:8b
+2026-06-10 15:58:50 | ERROR    | agents.ai_reporter | AI 报告生成失败: Connection error.
+2026-06-10 16:02:06 | INFO     | utils.database | 数据库初始化: E:\YunweiAgent\oa-ops-agent\data/oa_ops.db
+2026-06-10 16:02:06 | INFO     | utils.database | 数据库表初始化完成
+2026-06-10 16:03:13 | WARNING  | utils.scheduler | 巡检调度器未运行，无法调整间隔
+2026-06-10 16:03:14 | WARNING  | utils.scheduler | 巡检调度器未运行，无法调整间隔
+2026-06-10 16:03:27 | INFO     | agents.knowledge_agent | 正在加载嵌入模型: paraphrase-multilingual-MiniLM-L12-v2...
+2026-06-10 16:03:27 | INFO     | agents.knowledge_agent |   尝试加载 (local_files_only=True)...
+2026-06-10 16:03:41 | INFO     | agents.knowledge_agent | 嵌入模型加载成功
+2026-06-10 16:03:42 | INFO     | agents.knowledge_agent | Chroma向量库已连接，存储路径: E:\YunweiAgent\oa-ops-agent\data\chroma_db
+2026-06-10 16:03:43 | INFO     | agents.knowledge_agent | 知识库Agent初始化完成

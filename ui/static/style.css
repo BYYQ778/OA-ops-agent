@@ -200,3 +200,20 @@ hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
 .sub-page { display: none; }
 .sub-page.active { display: block; }
+
+/* ---- 知识库拖拽上传 ---- */
+.drop-zone {
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+  cursor: pointer;
+}
+.drop-zone.drag-over {
+  border-color: var(--primary);
+  background: #eef2ff;
+}
+.drop-zone .drop-icon { font-size: 28px; margin-bottom: 4px; }
+.drop-zone p { margin: 4px 0; font-size: 14px; color: #6b7280; }
+.drop-zone .drop-hint { font-size: 12px; color: #9ca3af; }

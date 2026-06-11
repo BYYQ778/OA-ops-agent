@@ -9,7 +9,7 @@ FROM python:3.11-slim
 
 LABEL maintainer="DB" \
       description="OA运维多智能Agent巡检问答系统" \
-      version="2.0"
+      version="2.2"
 
 # 设置工作目录
 WORKDIR /app
@@ -41,12 +41,11 @@ RUN mkdir -p data/inspection_logs data/chroma_db
 EXPOSE 7860
 
 # 环境变量
-ENV PYTHONUNBUFFERED=1 \
-    GRADIO_SERVER_NAME=0.0.0.0
+ENV PYTHONUNBUFFERED=1
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860')" || exit 1
 
-# 默认启动演示模式
-CMD ["python", "main.py", "--demo", "--host", "0.0.0.0"]
+# 默认启动完整模式
+CMD ["python", "main.py", "--host", "0.0.0.0"]
