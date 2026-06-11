@@ -50,6 +50,4 @@ server_err.log
 server_out.log
 
 # Internal docs (not for public release)
-交接文档.txt
-维护日志.txt
 OA运维Agent项目全流程文档*.docx

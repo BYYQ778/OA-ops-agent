@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OA 运维助手 v{{ version }}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v={{ cache_buster }}">
 </head>
 <body>
 
@@ -110,12 +110,12 @@
            ondragover="event.preventDefault(); this.classList.add('drag-over')"
            ondragleave="this.classList.remove('drag-over')"
            ondrop="kbDrop(event)">
-        <div class="drop-icon">📄</div>
-        <p>拖拽文档到此处，或点击选择文件</p>
-        <p class="drop-hint">支持 PDF / Word / TXT</p>
+        <div class="drop-icon">📂</div>
+        <span class="drop-title">拖拽文档到此处上传</span>
+        <p class="drop-hint">支持 PDF · Word · TXT 格式</p>
         <input type="file" id="kb-file-input" accept=".pdf,.docx,.txt" onchange="kbUpload()" style="display:none;">
-        <button class="btn btn-secondary" onclick="document.getElementById('kb-file-input').click()">选择文件</button>
-        <span id="kb-upload-status" style="margin-left:8px;font-size:13px;"></span>
+        <button class="btn btn-secondary drop-btn" onclick="document.getElementById('kb-file-input').click()">或点击选择文件</button>
+        <span id="kb-upload-status" style="font-size:13px;color:#6b7280;"></span>
       </div>
 
       <div class="btn-row" style="margin-top:12px;">

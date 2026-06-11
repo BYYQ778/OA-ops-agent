@@ -45,9 +45,11 @@ async def index(request: Request):
     mode = app_config.get("inspection.mode", "simulated")
     mode_label = {"ssh": "SSH远程", "local": "本机", "auto": "SSH优先", "simulated": "模拟"}.get(mode, mode)
     sched_status = f"调度器: {'运行中' if scheduler.is_running else '已停止'} | 模式: {mode_label}"
+    import time
     template = templates.get_template("index.html")
     html = template.render(
         version="2.2",
+        cache_buster=str(int(time.time())),
         scheduler_status=sched_status,
         is_running=scheduler.is_running,
     )

@@ -1,0 +1,389 @@
+OA运维多智能Agent巡检问答系统 - 维护日志
+===========================================
+创建时间: 2026-05-07
+最后更新: 2026-06-11 14:30
+
+═══════════════════════════════════════════
+【2026-05-25 11:30-11:35 — 启动.bat 完整模式修复】
+═══════════════════════════════════════════
+
+问题: 双击启动.bat 进入演示模式而非完整模式
+根因:
+  1. 启动.bat 含 --demo 参数 → run_demo_mode()
+  2. 旧 --demo 进程(PID 31632)占 7860 端口
+  3. 双击新实例端口冲突失败 → 浏览器仍连旧 demo
+修复 (启动.bat):
+  + 去掉 --demo 参数
+  + 新增端口清理: netstat 检测 → taskkill 杀旧进程
+  + 新增轮询自检: 最多30秒检测端口就绪 → 成功/失败提示
+  + 添加 setlocal enabledelayedexpansion
+自检通过:
+  - 页面 36774B 完整模式 ✅ | 命令无 --demo ✅ | env_new 虚拟环境 ✅ | 12秒就绪 ✅
+
+═══════════════════════════════════════════
+【2026-05-25 — 启动.bat 修复：演示模式 → 完整模式 + 端口自检】
+═══════════════════════════════════════════
+
+问题描述：
+  用户双击 启动.bat 后浏览器打开的是演示模式（仅巡检+日志分析），
+  而非完整Web模式（含知识库问答、巡检、日志分析等全部功能）。
+
+根因分析：
+  1. 启动.bat 最后一行为 %PYTHON_EXE% main.py --demo --host 127.0.0.1
+     --demo 参数导致 main.py 调用 run_demo_mode() 而非完整 Web 模式
+  2. 旧 --demo 进程（PID 31632）未被杀死，长期占用 7860 端口
+  3. 用户双击 启动.bat → 新实例端口冲突失败 → 浏览器仍连旧 demo 进程
+  4. 没有启动后自检，用户无法判断服务是否成功启动
+
+修复内容：
+  ✅ 1. 去掉 --demo 参数
+     改前: %PYTHON_EXE% main.py --demo --host 127.0.0.1
+     改后: %PYTHON_EXE% main.py --host 127.0.0.1
+
+  ✅ 2. 新增端口清理逻辑（:start_app 前）
+     - netstat -ano 检测 7860 端口 LISTENING 状态
+     - 自动 taskkill /F 杀掉旧进程
+     - 等待 2 秒确认端口释放
+     - 若无法终止则提示用户手动操作
+
+  ✅ 3. 新增启动后自检（轮询等待 + 失败提示）
+     - 后台启动服务（/MIN 最小化窗口）
+     - 轮询 15 次 × 2 秒 = 最多等 30 秒
+     - 检测到端口 LISTENING → 显示成功信息 + 打开浏览器
+     - 超时未检测到 → 显示失败提示 + 排查指南
+
+  ✅ 4. 添加 setlocal enabledelayedexpansion
+     - 支持 for /l 循环内变量动态更新
+
+自检结果（2026-05-25 11:35）：
+  - 杀掉旧 --demo 进程（PID 31632）✅
+  - 用虚拟环境启动完整模式 ✅
+  - 页面 36774 字节（完整模式, demo为13281字节）✅
+  - 命令行无 --demo 参数 ✅
+  - 使用 env_new 虚拟环境 Python ✅
+  - 端口就绪耗时: 12 秒 ✅
+
+涉及文件：
+  E:\YunweiAgent\oa-ops-agent\启动.bat — 重写 :start_app 段
+
+未变更项：
+  config.yaml — 保持 ollama + qwen3:8b 配置不变
+  main.py — 未修改
+  .env — 未修改
+
+═══════════════════════════════════════════
+【Git 版本链】 
+═══════════════════════════════════════════
+  6f307a2 文档更新 (2026-05-22)
+  ...启动.bat 修改待提交
+
+═══════════════════════════════════════════
+【2026-06-01 — 静态代码分析 + 质量修复(P0/P1) + UI改造 + GitHub开源发布】
+═══════════════════════════════════════════
+
+一、静态代码分析与质量评估
+  审查范围: 全部 12 个 .py 源文件
+  发现问题:
+    - main.py 与 gradio_app.py 巡检逻辑重复 ~150行
+    - gradio_app.py 上帝模块 (797行)
+    - run_ssh_inspection() SSH 分支未完成
+    - 数据库连接永不释放（无 atexit 清理）
+    - 日志 handler 文件名含日期 + TimedRotatingFileHandler 双重轮转冲突
+    - gradio_app.py 模块级全局变量无锁保护
+    - 裸 except Exception: pass 15+处
+    - UI 层类型注解覆盖率 ~30%
+    - main.py demo 模式内嵌完整 Gradio UI 与 gradio_app.py 重复
+
+二、P0 修复（阻塞性问题）
+  2.1 消除巡检逻辑重复
+      文件: agents/inspection_agent.py (+110行), ui/gradio_app.py (-130行), main.py (-110行)
+      改动: 新增 run_unified_inspection() 统一巡检入口
+            main.py demo_inspect() 从 ~110行 简化为 2行
+            gradio_app.py 删除 run_direct_inspection() 和 _generate_ai_section()
+  2.2 补全 SSH 分支
+      文件: agents/inspection_real.py
+      改动: 实现 ssh 模式（读取配置→逐台连接→5项检测→结果汇总）
+            auto 模式 SSH优先→local降级
+            提取 _try_local_inspection() 消除 local 分支重复
+
+三、P1 修复（资源管理+线程安全）
+  3.1 资源清理 + atexit
+      文件: utils/database.py, agents/knowledge_agent.py, main.py
+      改动: Database.close_all() 含 WAL checkpoint + atexit 注册
+            KnowledgeBaseAgent.close() 释放 Chroma 缓存
+            main.py _cleanup() 进程退出时自动关闭数据库
+  3.2 日志 handler 修复
+      文件: utils/logger.py
+      改动: oa_ops_20260601.log → oa_ops.log（固定名）
+            TimedRotatingFileHandler 自行管理轮转，不再产生双重日期后缀
+  3.3 全局状态线程安全
+      文件: ui/gradio_app.py
+      改动: 新增 _state_lock = threading.Lock()
+            switch_mode()/init_agents() 读写全局变量加锁保护
+
+四、UI 现代化改造
+  文件: ui/gradio_app.py
+  改动: 全面重写 CSS（~180行）— 现代 SaaS 风格设计系统
+        - CSS 变量: --gray-50~900, --blue-500, --radius-*, --shadow-*
+        - 按钮: 黑色主按钮 / 白底边框次按钮 / 红字危险按钮
+        - 标签页: 下划线风格，选中态蓝色指示线
+        - 输入框: 聚焦蓝色光环 box-shadow ring
+        - 精简文案去emoji: 「📊 巡检监控」→「巡检」
+
+五、GitHub 开源发布
+  - 新增: LICENSE (MIT), 重写 README.md (GitHub风格+FAQ)
+  - config.yaml: 硬编码 QQ 邮箱 → ${OA_EMAIL_USER} 环境变量
+  - .env.example: 补充 OA_EMAIL_USER/OA_EMAIL_TO 配置项
+  - .gitignore: 排除内部文档（交接文档/维护日志/全流程文档.docx）
+  - 清理: server_err.log, server_out.log 从 git 移除追踪
+  - 压缩: 所有历史 squash 为单个干净 commit
+  - 推送: 仓库 https://github.com/BYYQ778/OA-ops-agent
+  - 确认: .env 从未提交，API Key/邮箱授权码未泄露
+
+六、自检结果
+  - 语法编译: main.py ✅ gradio_app.py ✅ 全部文件 ✅
+  - 导入测试: config ✅ database ✅ 全部agent ✅
+  - 巡检测试: run_unified_inspection() 本地模式5项检测 ✅
+  - 日志分析: analyze_log_content 10种故障规则匹配 ✅
+  - run_ssh_inspection() 本地/模拟/SSH三模式 ✅
+  - git push 成功 ✅
+
+涉及文件（本次修改）:
+  agents/inspection_agent.py — 新增统一巡检入口 +110行
+  agents/inspection_real.py — 补全SSH模式 + 提取公共函数
+  agents/knowledge_agent.py — 添加 close()
+  ui/gradio_app.py — 删除重复逻辑 + CSS设计系统 + 线程锁
+  utils/database.py — close_all() + atexit
+  utils/logger.py — 固定文件名
+  main.py — 简化demo模式 + atexit清理
+  config.yaml — 邮箱环境变量化
+  .env.example — 补充邮件配置
+  .gitignore — 排除内部文档
+  README.md — 重写为GitHub风格
+  LICENSE — 新增MIT
+
+Git 版本: 81ee4d4 + ba638a9（squash后2个commit）
+
+
+═══════════════════════════════════════════
+【2026-06-09 — v2.1 诊断工具箱 + 企业级UI重构】
+═══════════════════════════════════════════
+
+一、新增 4 个诊断模块
+  1. agents/ssl_monitor.py — SSL/TLS 证书监控
+     - check_cert_expiry: 单域名证书检测（剩余天数/CN/颁发者/SAN）
+     - batch_check_certs: 批量检测 + 自动分级汇总
+     - 支持 cryptography 库增强解析，不可用时降级为标准库 ssl
+     - 配置: ssl_monitor.domains / ssl_monitor.warn_days
+
+  2. agents/network_diag.py — 网络诊断工具箱
+     - ping_host: ICMP 连通性 + 延迟 + 丢包率
+     - check_tcp_port: TCP 端口开放检测 + Banner 抓取
+     - dns_resolve: DNS 解析（A/AAAA/CNAME/MX）
+     - traceroute_host: 路由追踪（tracert/traceroute）
+     - http_health_check: HTTP 状态码 + 响应时间 + Header 摘要
+     - Windows/Linux 双平台命令适配
+
+  3. agents/db_inspector.py — 数据库健康巡检
+     - check_mysql_status: 连接/慢查询/InnoDB缓冲池/主从延迟
+     - show_mysql_slow_queries: 慢查询详情
+     - check_mssql_status: 版本/连接/阻塞/备份状态（新增）
+     - check_oracle_status: 表空间/会话/归档日志（新增）
+     - check_redis_status: 内存/命中率/持久化/键统计
+     - 通过 mysql/sqlcmd/sqlplus/redis-cli 命令行客户端执行
+
+  4. agents/security_audit.py — 安全基线检查
+     - audit_ssh_config: SSH 服务安全配置审查
+     - check_failed_logins: 失败登录审计 + 暴力破解检测
+     - audit_firewall_rules: iptables/ufw/firewalld/Windows防火墙
+     - check_listening_ports: 监听端口审计 + 高危端口告警
+     - audit_cron_jobs: Crontab 定时任务审计
+     - 一键全量审计
+
+二、UI 企业级重构（ui/gradio_app.py）
+  布局变更:
+    之前: 横排标签页 gr.Tabs（5个Tab + 顶部设置Accordion）
+    现在: 左侧固定导航栏(220px) + 右侧内容区
+          - 侧边栏: Logo + HTML 导航按钮 + 调度器状态指示灯
+          - 内容区: 6个独立页面（巡检/日志/问答/知识库/诊断工具箱/设置）
+          - 设置从顶部面板迁移为独立导航页
+  页面切换:
+    之前: gr.Radio + Python switch_page() 回调 → 服务端往返 ~500ms
+    现在: HTML onclick + JavaScript switchTab() → 浏览器端 <5ms，无白屏
+  CSS:
+    重写 ~200行，企业级设计系统（Indigo 紫色主调，Linear/Vercel 风格）
+    配色: #4f46e5 主色 + #f5f6f8 底色 + 白色卡片 + 浅灰边框
+  修复:
+    标签页切换跳动 → CSS min-height 约束
+    切换白屏/延迟 → JS 客户端显隐替代 Python 回调
+
+三、配置文件扩展（config.yaml）
+  新增 4 个配置块:
+    ssl_monitor:    domains / warn_days
+    network_diag:   ping_timeout / default_targets
+    db_inspection:  mysql_hosts / redis_hosts / slow_query_threshold
+    security:       audit_enabled / max_failed_logins
+
+四、代码审查修复
+  3 个 bug:
+    ssl_monitor:  cryptography 不可用时降级为标准库 ssl 解析
+    network_diag: Linux ping 解析变量作用域修复
+    security_audit: f-string 内反斜杠 SyntaxError 修复
+
+五、Git 版本
+  b9d04d1 v2.1: 新增诊断工具箱(SSL/网络/数据库/安全) 共4个模块，修复UI切换跳动问题
+  变更: 7 files, +2950 lines
+
+
+═══════════════════════════════════════════
+【2026-06-10 — v2.2 FastAPI替换Gradio + 前端彻底重构】
+═══════════════════════════════════════════
+
+一、Gradio → FastAPI 架构升级
+  问题: Gradio DOM结构版本间不兼容、script标签被拦截、CSS选择器不稳定、页面切换白屏
+  方案: 完全移除Gradio，改用 FastAPI + 纯HTML/CSS/JS
+  改动:
+    - 删除 ui/gradio_app.py (930行)
+    - 新增 ui/server.py — FastAPI服务端，36个API端点
+    - 新增 ui/templates/index.html — 纯HTML，6页面侧边栏布局
+    - 新增 ui/static/style.css — 220行CSS，完全可控
+    - main.py 启动方式从 Gradio.launch() → uvicorn.run()
+    - requirements.txt 移除 gradio，新增 fastapi/uvicorn/jinja2/python-multipart
+  效果:
+    页面切换: Python回调 ~500ms → JS纯客户端 switchPage() <5ms
+    CSS控制: Gradio黑盒 → 标准CSS，完全自主
+    排错: F12直接调试，标准HTTP请求
+    所有 agent 代码一行未改
+
+二、UI最终状态
+  布局: 左侧固定侧边栏(220px) + 右侧内容区
+  导航: 6个页面，JavaScript client-side切换，无延迟无白屏
+  页面: 巡检监控 / 日志分析 / 知识问答 / 知识库 / 诊断工具箱 / 系统设置
+  诊断工具箱子页: SSL证书 / 网络诊断 / 数据库(MySQL/MSSQL/Oracle/Redis) / 安全基线
+  配色: Indigo #4f46e5 主色，白色卡片，浅灰底色
+
+三、Git版本
+  b6decea v2.2: 移除Gradio依赖，FastAPI + 纯前端
+  b9d04d1 v2.1: 诊断工具箱4模块 + UI重构
+
+
+═══════════════════════════════════════════
+【2026-06-11 — 目录整理 + 文档同步 + 启动修复】
+═══════════════════════════════════════════
+
+一、目录结构整理
+  - 脚本文件（启动.bat / run_full.bat / setup_ollama.bat / 打包离线部署包.bat）从根目录移入 scripts/
+  - 文档文件（离线部署说明.txt / Ollama离线部署指南.md）从根目录移入 docs/
+  - 交接文档、维护日志已在 docs/ 目录中
+
+二、启动.bat 修复（多次迭代）
+  问题1: 移入 scripts/ 后相对路径失效
+    - 根因: 脚本从 scripts/ 执行，env_new\、config.yaml、main.py 等路径找不到了
+    - 修复: 添加 cd /d "%~dp0.." 跳回项目根目录
+
+  问题2: 中文乱码
+    - 根因: 文件被 Edit 工具改写成 UTF-8 编码，CMD 默认 GBK 不兼容
+    - 修复: 最终采用 UTF-8 + chcp 65001 方案，VSCode 和 CMD 均可正常显示
+
+  问题3: 闪退
+    - 根因: Write 工具写入的文件行尾为 LF（Unix），CMD 要求 CRLF
+    - 修复: Python 脚本批量转换 \n → \r\n
+
+  同步修复: run_full.bat 已含 cd /d "%~dp0.."，不受影响
+
+三、代码 Bug 修复
+  1. main.py emoji 崩溃
+     - 问题: print(f"🔑 ...") emoji 无法编码为 GBK，启动直接报 UnicodeEncodeError
+     - 修复: "🔑" → "[OK]"
+
+  2. ui/server.py 版本号
+     - 问题: FastAPI title 和模板变量仍为 "2.1"
+     - 修复: 全局替换 2.1 → 2.2
+
+  3. utils/logger.py 日志轮转 PermissionError
+     - 问题: 旧进程残留导致 oa_ops.log 被锁，TimedRotatingFileHandler 轮转失败抛异常
+     - 修复: 新增 RobustTimedRotatingFileHandler 子类，handleError() 中吞掉 PermissionError
+
+  4. requirements.txt 遗漏依赖
+     - 问题: knowledge_agent.py 导入 langchain_huggingface，但 requirements.txt 未声明
+     - 修复: 添加 langchain-huggingface>=1.0.0
+
+四、文档同步至 v2.2
+  README.md:
+    - 功能介绍新增"诊断工具箱"条目
+    - 目录结构: Gradio → FastAPI + 纯HTML/CSS/JS，补齐9个Agent模块
+    - 技术栈: Gradio → FastAPI + Jinja2
+    - LLM provider 选项补全为 ollama | deepseek | qwen | openai
+    - 登录提示删除（v2.2 未启用认证）
+    - scripts/ 路径修正
+
+  docs/交接文档.txt:
+    - 版本号 v2.1 → v2.2，日期更新至 2026-06-10
+    - 项目文件结构更新至 v2.2（FastAPI/scripts/docs）
+    - 认证状态更新为"v2.2 FastAPI 未接入登录认证"
+    - main.py 参数 --no-auth → --port/--host
+    - 待补完: FastAPI REST API 层标记已完成
+
+五、自检结果
+  - python main.py 启动 ✅ 7860 端口正常响应
+  - API 状态接口 ✅ {"running":false,"mode":"本机"}
+  - 日志分析接口 ✅ 正确识别 502 Bad Gateway
+  - SSL 检测接口 ✅ github.com 52天到期正常检测
+  - 启动.bat 双击启动 ✅ 中文正常，不再闪退
+  - 日志轮转 PermissionError ✅ 已静默处理
+
+六、涉及文件
+  scripts/启动.bat — 路径修复 + 编码修复 + 行尾修复
+  main.py — emoji → ASCII
+  ui/server.py — 版本号 2.1 → 2.2
+  utils/logger.py — RobustTimedRotatingFileHandler
+  requirements.txt — 补 langchain-huggingface
+  README.md — 全面同步 v2.2
+  docs/交接文档.txt — 全面同步 v2.2
+  docs/维护日志.txt — 本次更新
+
+七、Git 版本
+  d386f07 v2.2: 文档更新 + 目录整理
+  b63dd41 fix: 启动修复 — emoji崩溃/日志锁文件/依赖遗漏/启动.bat路径+编码+CRLF
+
+
+═══════════════════════════════════════════
+【2026-06-11 下午 — Docker同步 + 知识库拖拽上传 + 缓存破壁】
+═══════════════════════════════════════════
+
+一、Docker 文件同步至 v2.2
+  - Dockerfile: version 2.0→2.2, 移除 GRADIO_SERVER_NAME, --demo→完整模式
+  - docker-compose.yml: 移除 GRADIO_SERVER_NAME
+  - .dockerignore: 移除废弃的 .gradio/ 规则
+
+二、知识库拖拽上传功能恢复
+  问题: v2.2 FastAPI 迁移时丢失了 Gradio 版的文件拖拽上传
+  修复:
+    - ui/server.py: /api/kb/import 从占位符改为真正文件上传
+      接收 UploadFile → 保存临时文件 → 调用 kb.import_document() → 清理
+    - ui/templates/index.html: KB 页面新增拖拽区域
+      拖拽 event + 文件选择按钮 + 上传状态提示
+    - ui/static/style.css: 企业级 drop-zone 样式
+      160px 矩形框、虚线边框、hover 高亮、drag-over 实线+外发光
+  自检: test_upload.txt 上传/导入/删除 全部正常 ✅
+
+三、浏览器缓存自动清理
+  问题: 每次改 CSS/JS 浏览器缓存旧版本，需手动 Ctrl+Shift+R
+  修复: server.py 生成 cache_buster 时间戳 → index.html CSS 引用加 ?v= 参数
+  效果: 每次刷新页面自动加载最新 CSS/JS
+
+四、新增同步清单
+  docs/同步清单.md — 代码改动后需同步更新的文件列表，防止遗漏
+
+五、涉及文件
+  Dockerfile / docker-compose.yml / .dockerignore — v2.2 同步
+  ui/server.py — 文件上传接口 + cache_buster
+  ui/templates/index.html — 拖拽上传区域 + ?v= 参数
+  ui/static/style.css — drop-zone 样式
+  docs/维护日志.txt — 本次更新
+  docs/同步清单.md — 新增
+
+六、Git 版本
+  281a019 feat: 恢复知识库拖拽上传 + Docker文件同步v2.2 + 同步清单
+  b63dd41 fix: 启动修复
+  d386f07 v2.2: 文档更新 + 目录整理

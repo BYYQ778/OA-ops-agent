@@ -1,0 +1,415 @@
+OA运维多智能Agent巡检问答系统 - 交接文档 v2.2
+=================================================
+创建: 2026-05-07（v1.0）→ 最后更新: 2026-06-10（v2.2 FastAPI替换Gradio）
+版本: v2.2
+状态: GitHub开源已发布、可演示、可部署、本机离线运行
+仓库: https://github.com/BYYQ778/OA-ops-agent
+最后更新: 2026-06-11 — 目录整理/启动修复/知识库拖拽上传/Docker同步
+
+═══════════════════════════════════════════════════════════
+一、项目概述
+═══════════════════════════════════════════════════════════
+
+OA运维多智能Agent巡检问答系统，面向运维实习生的智能运维辅助平台。
+基于 Python + LangChain + RAG + Chroma 构建。
+
+核心模块:
+  巡检Agent → 端口/Nginx/OA服务/磁盘/内存 五项检测
+  日志分析Agent → 10+正则规则自动识别故障
+  知识库Agent → RAG 智能问答（Chroma + sentence-transformers）
+  诊断工具箱 → SSL证书 / 网络诊断 / 数据库巡检(MySQL+MSSQL+Oracle+Redis) / 安全基线
+  本机巡检 → Windows 原生命令真实数据采集
+  AI 报告 → 巡检后自动生成预警分析 + 改进策略
+
+═══════════════════════════════════════════════════════════
+二、当前环境
+═══════════════════════════════════════════════════════════
+
+虚拟环境: E:\YunweiAgent\oa-ops-agent\env_new
+Python:    3.11.9
+端口:      7860
+数据库:    SQLite → data/oa_ops.db
+配置:      config.yaml（主配置）+ .env（敏感信息）
+认证:      v2.2 FastAPI 未接入登录认证（旧 Gradio 版 admin/admin123 已随框架移除）
+巡检模式:  local（本机 Windows 真实检测）
+Git:       已初始化，7次提交（master）
+
+═══════════════════════════════════════════════════════════
+三、v2.0 MVP 全部改造清单（12项）
+═══════════════════════════════════════════════════════════
+
+✅ 1. 统一配置管理
+   文件: config.yaml + .env + .env.example + utils/config.py
+   功能: YAML + 环境变量注入，点号路径访问，.env 不提交Git
+
+✅ 2. 安全改造
+   - 移除 gradio_app.py 硬编码的 DeepSeek API Key
+   - API Key 迁移到 .env 文件
+
+✅ 3. 登录认证
+   - main.py 集成 Gradio auth=(user, password)
+   - 默认 admin/admin123（config.yaml 可改）
+   - 支持 --no-auth 跳过认证
+
+✅ 4. Git 版本控制
+   - git init + .gitignore
+   - 排除: env_new/、.env、__pycache__/、data/oa_ops.db、.gradio/
+
+✅ 5. SQLite 持久化（utils/database.py）
+   - 3张表: inspection_records / alert_history / log_analysis_records
+   - 巡检结果自动入库 + 状态解析(normal/warning/error)
+   - UI 历史查询面板（按天数/类型统计）
+
+✅ 6. 真实巡检模块（agents/inspection_real.py）
+   - RealInspector: SSH 远程巡检（paramiko）
+   - LocalInspector: Windows 本机巡检（netstat/wmic/tasklist/sc）
+   - 四种模式: simulated | local | ssh | auto
+
+✅ 7. 本机 Windows 巡检
+   - 端口: netstat -ano
+   - 服务: sc query / tasklist
+   - 磁盘: wmic logicaldisk
+   - 内存: wmic OS
+   - 实测: DESKTOP-9850O5Q, C盘96.4%告警, 内存49.4%正常
+
+✅ 8. AI 巡检报告（agents/ai_reporter.py）
+   - 巡检完成后自动调用 DeepSeek
+   - 生成: 预警分析(风险分级) + 改进策略(优先级+操作步骤)
+   - 降级: LLM不可用时自动切换离线模式（仍输出结构化建议）
+
+✅ 9. 一键启动脚本（启动.bat）
+   - 5步自动化: Python检查→Ollama安装→模型拉取→依赖→启动
+   - 双击即用，自动打开浏览器
+
+✅ 10. 离线部署方案
+   - 打包离线部署包.bat: 在有网机器一次性准备离线资源
+   - 离线部署包: E:\OA运维系统-离线部署包\ (含完整venv)
+   - wheels/ 目录: 19个核心Python包
+
+✅ 11. Docker 容器化
+   - Dockerfile (python:3.11-slim, 清华镜像加速)
+   - docker-compose.yml (数据卷持久化, 资源限制)
+   - docker-compose up -d 一键启动
+
+✅ 12. 本地离线大模型支持
+   - config.yaml 新增 llm.ollama 配置
+   - ai_reporter.py 自动识别 ollama/cloud provider
+   - Ollama离线部署指南.md
+
+═══════════════════════════════════════════════════════════
+四、项目文件结构（v2.2）
+═══════════════════════════════════════════════════════════
+
+oa-ops-agent/
+├── main.py                      # 主入口（--demo/--cli/--port/--host）
+├── config.yaml                  # 主配置文件
+├── .env                         # 敏感信息（不提交Git）
+├── .env.example                 # 环境变量模板
+├── requirements.txt             # Python 依赖
+├── Dockerfile                   # Docker 镜像
+├── docker-compose.yml           # Docker 编排
+├── .gitignore / .dockerignore
+├── scripts/                     # 启动 & 部署脚本
+│   ├── 启动.bat                 # 一键启动脚本
+│   ├── run_full.bat             # 完整启动
+│   ├── setup_ollama.bat         # Ollama 安装
+│   └── 打包离线部署包.bat       # 离线打包脚本
+│
+├── agents/                      # Agent 业务模块（9个）
+│   ├── inspection_agent.py      # 巡检Agent（模拟+LLM汇总）
+│   ├── inspection_real.py       # 真实巡检（SSH+本机Local）
+│   ├── log_analysis_agent.py    # 日志分析（10+正则规则）
+│   ├── knowledge_agent.py       # 知识库RAG（Chroma）
+│   ├── ai_reporter.py           # AI报告生成（预警+策略）
+│   ├── ssl_monitor.py           # [v2.1] SSL证书监控
+│   ├── network_diag.py          # [v2.1] 网络诊断工具
+│   ├── db_inspector.py          # [v2.1] 数据库巡检(MySQL/MSSQL/Oracle/Redis)
+│   └── security_audit.py        # [v2.1] 安全基线检查
+│
+├── ui/                          # [v2.2] FastAPI + 纯HTML/CSS/JS
+│   ├── server.py                # FastAPI服务端（36个API端点）
+│   ├── templates/index.html     # 纯HTML前端（6页面侧边栏）
+│   └── static/style.css         # 企业级CSS设计系统
+│
+├── utils/
+│   ├── config.py                # 配置加载器
+│   ├── database.py              # SQLite 数据库（3表）
+│   ├── alert.py                 # 告警通知（邮件/钉钉/企微）
+│   ├── scheduler.py             # 定时调度
+│   ├── doc_parser.py            # 文档解析
+│   └── logger.py                # 日志工具
+│
+├── data/                        # 运行时数据
+│   ├── oa_ops.db                # SQLite 数据库
+│   ├── sample_logs/             # 示例日志
+│   ├── sample_docs/             # 示例文档
+│   ├── inspection_logs/         # 巡检日志
+│   └── chroma_db/               # 向量库
+│
+├── env_new/                     # Python 虚拟环境
+│
+└── docs/                         # 项目文档
+    ├── OA运维Agent项目全流程文档_v2.0.docx
+    ├── 交接文档.txt
+    ├── 维护日志.txt
+    ├── 离线部署说明.txt
+    └── Ollama离线部署指南.md
+
+═══════════════════════════════════════════════════════════
+五、启动方式
+═══════════════════════════════════════════════════════════
+
+方式1: 双击 启动.bat（推荐）
+  5步自动化: Python检查 → Ollama/模型 → 依赖 → 端口清理 → 启动+自检
+  自动杀掉占用7860的旧进程，轮询30秒等待就绪，成功后自动打开浏览器
+  登录: admin / admin123
+
+方式2: 命令行
+  python main.py              # 完整模式（需登录）
+
+方式3: Docker
+  docker-compose up -d
+
+方式4: 离线部署包
+  把 E:\OA运维系统-离线部署包\ 拷到目标服务器
+  双击 oa-ops-agent\启动.bat
+
+═══════════════════════════════════════════════════════════
+六、待补完（产品化交付）
+═══════════════════════════════════════════════════════════
+
+☐ 进程/服务管理模块（Top N进程、僵尸进程、系统负载）
+☐ 快速命令工具箱（分类命令速查 + 一键执行）
+✅ FastAPI REST API 层（v2.2 已完成，36个端点）
+☐ HTTPS 支持
+☐ Linux 本机巡检支持
+☐ 前端迁移 React/Vue（当前为 FastAPI + 纯HTML/CSS/JS）
+
+═══════════════════════════════════════════════════════════
+七、实时操作记录
+═══════════════════════════════════════════════════════════
+
+【2026-05-18 11:27】项目启动
+  读取项目结构，检查依赖，启动 demo 演示模式（PID 34468）
+
+【2026-05-18 11:34】产品化分析
+  完成项目代码审查，输出四层改造路线图（安全→功能→工程→包装）
+
+【2026-05-18 11:55 - 12:52】第一层：安全改造
+  - 创建 config.yaml + utils/config.py 配置系统
+  - 创建 .env / .env.example 环境变量
+  - 移除 gradio_app.py 硬编码 API Key
+  - main.py 集成登录认证（admin/admin123）
+  - Git 初始化 + .gitignore
+  提交: 57077ca
+
+【2026-05-18 12:52 - 13:49】第二层：SQLite 持久化
+  - 新增 utils/database.py（3表，线程安全）
+  - 巡检结果自动入库 + 状态解析
+  - UI 巡检历史查询面板
+  - 实测: 5条记录入库 normal 3/warning 1/error 1
+  提交: 6c4b697, 4dde6d0
+
+【2026-05-18 13:29 - 13:33】生成项目全流程文档
+  创建 OA运维Agent项目全流程文档_v2.0.docx（47KB, 9章+2附录）
+
+【2026-05-18 14:00 - 14:10】第三层：SSH 真实巡检
+  - 安装 paramiko
+  - 新增 agents/inspection_real.py（RealInspector类）
+  - 三种模式: simulated/ssh/auto
+  提交: 583e5ba
+
+【2026-05-18 14:10 - 14:18】新增 Local 本机巡检
+  - LocalInspector 类: Windows 原生命令
+  - 修复 WMIC CSV 列顺序解析 bug
+  - 实测: C盘96.4%告警, 内存49.4%正常
+  提交: 14ab1e1
+
+【2026-05-18 14:45 - 15:17】修复本地模式 bug
+  - 切换 config mode=local, 启动 demo
+  - 修复 demo 按钮文字（显示「巡检本机（真实数据）」）
+  - 修复 demo_inspect() 缺 local 分支导致降级为模拟假数据
+  提交: 591b507, 9234f58, 0e9b703
+
+【2026-05-18 15:34】Docker 容器化
+  - 新增 Dockerfile + docker-compose.yml + .dockerignore
+  - requirements.txt 补充 PyYAML/paramiko/requests
+  提交: 933ebca
+
+【2026-05-18 16:31 - 16:50】AI 巡检报告自动生成
+  - 新增 agents/ai_reporter.py（调用DeepSeek分析巡检数据）
+  - 输出: 预警分析 + 改进策略（风险分级+优先级排序）
+  - 修复 .env API Key 截断问题（…→完整密钥）
+  - 修复 local 模式未附加 AI 报告的 bug
+  提交: 12b152e, 6eab4fe
+
+【2026-05-18 16:58 - 17:06】本地离线大模型 + 一键启动
+  - config.yaml 新增 llm.ollama 配置
+  - ai_reporter.py 自动识别 ollama/cloud provider
+  - 新增 启动.bat（一键5步自动化）
+  - 新增 Ollama离线部署指南.md
+  提交: 0fdd802, 50066b7
+
+【2026-05-18 17:10 - 17:31】离线部署包
+  - 新增 打包离线部署包.bat
+  - 启动.bat 改造为纯离线模式
+  - 构建离线部署包 E:\OA运维系统-离线部署包\（~1GB, 含完整venv + 19个wheels）
+  提交: c6a6878, e60c67e
+
+═══════════════════════════════════════════════════════════
+八、Git 提交历史
+═══════════════════════════════════════════════════════════
+
+12 次提交:
+  e60c67e docs: 添加离线部署说明
+  c6a6878 v2.0: 离线部署方案 - 打包脚本 + 启动脚本完全离线
+  50066b7 v2.0: 一键启动脚本 启动.bat + Ollama自动安装部署
+  0fdd802 v2.0: 支持 Ollama 本地离线大模型 (内网环境)
+  6eab4fe fix: local/SSH模式巡检后未附加AI报告
+  12b152e v2.0: AI巡检报告 - DeepSeek自动生成预警分析+改进策略
+  933ebca v2.0: Docker容器化部署 + 告警模块
+  9234f58 fix: demo模式local巡检不生效
+  591b507 fix: demo模式按钮文字根据巡检模式自动适配
+  0e9b703 docs: 切换demo为local本机巡检模式
+  14ab1e1 v2.0: 新增本机Local巡检模式
+  583e5ba v2.0: SSH真实巡检模块 + 三种巡检模式
+  4dde6d0 fix: 排除 SQLite WAL 文件和 Office 临时文件
+  6c4b697 v2.0: SQLite持久化数据库 + 巡检历史查询
+  57077ca v2.0 MVP: 配置系统 + 登录认证 + 安全改造
+
+═══════════════════════════════════════════
+【2026-05-22 更新 — v2.0 本地离线部署】
+═══════════════════════════════════════════
+
+一、本地大模型部署
+  - Ollama 0.24.0 安装至 E:\Ollama\
+  - 模型存储目录：E:\ollama_models\（OLLAMA_MODELS 环境变量）
+  - 部署模型：qwen3:8b（5.2GB，RTX 4060 8GB GPU 推理）
+  - 启动命令：ollama serve（后台）
+
+二、运行模式切换
+  - 页面顶部折叠面板增加 Radio 切换：本机离线 / 云端在线
+  - 本地模式：ollama + qwen3:8b，API Key 自动填 ollama
+  - 云端模式：deepseek + deepseek-chat，需填写 DeepSeek Key
+  - 切换后点击「初始化系统」自动更新运行时配置
+
+三、初始化超时修复（2026-05-22 17:30）
+  - 问题描述：离线/API 模式初始化均需 250-360s
+  - 根因：
+    1) HuggingFaceEmbeddings 初始化时远程校验 hf-mirror.com，网络超时
+    2) init_agents 串行创建三个 Agent，全程无进度反馈
+  - 修复：
+    1) knowledge_agent.py：嵌入模型优先 local_files_only=True 本地加载
+    2) gradio_app.py：init_agents 改为生成器，逐步 yield 进度状态
+  - 效果：模型已缓存情况下初始化约 3-5 秒
+
+四、Git 版本
+  9ce3861: 模式切换 + Ollama 部署完整快照（可随时回退）
+  4de3539: 初始化超时修复
+
+═══════════════════════════════════════════
+【2026-05-25 更新 — 启动.bat 修复】
+═══════════════════════════════════════════
+
+问题: 双击启动.bat 进入演示模式，无法使用完整功能
+根因:
+  1. 启动.bat 含 --demo 参数 → 调用 run_demo_mode()
+  2. 旧 --demo 进程残留占用 7860 端口
+  3. 新实例端口冲突失败，浏览器仍连旧进程
+修复 (启动.bat):
+  + 去掉 --demo 参数
+  + 新增端口清理: netstat 检测 7860 端口 → taskkill /F 杀旧进程
+  + 新增轮询自检: 最多30秒检测端口就绪 → 成功/失败明确提示
+  + 添加 setlocal enabledelayedexpansion 支持循环变量
+自检:
+  - 页面 36774B (完整模式) → 原 demo 为 13281B
+  - 命令无 --demo 参数 ✅
+  - 使用 env_new 虚拟环境 ✅
+  - 启动就绪耗时: ~12秒 ✅
+
+═══════════════════════════════════════════
+【2026-06-01 更新 — 代码质量修复 + 开源发布】
+═══════════════════════════════════════════
+
+一、静态代码分析
+  - 全面审查 12 个 .py 文件，识别架构/命名/资源管理问题
+  - 发现: main.py 与 gradio_app.py 巡检逻辑重复(~150行)、SSH分支未完成、
+    数据库连接未释放、日志handler轮转冲突、全局状态线程不安全
+
+二、代码质量修复（P0/P1）
+  P0-1: 提取 run_unified_inspection() 统一巡检入口，消除 main.py/gradio_app.py 重复
+  P0-2: 补全 run_ssh_inspection() SSH 模式，支持多主机+auto逐级降级
+  P1-1: Database 添加 close_all()+WAL checkpoint，atexit 自动注册清理
+  P1-2: KnowledgeBaseAgent 添加 close() 方法
+  P1-3: 修复 logger handler 文件名/轮转冲突（oa_ops_日期.log → oa_ops.log）
+  P1-4: gradio_app.py 全局状态添加 threading.Lock 线程保护
+  涉及文件: agents/inspection_agent.py, agents/inspection_real.py,
+            agents/knowledge_agent.py, utils/database.py, utils/logger.py,
+            ui/gradio_app.py, main.py, config.yaml
+
+三、UI 现代化改造
+  - 全面重写 CSS（~180行）：Linear/Stripe SaaS 风格设计系统
+  - 色彩: 中性灰基调 + 蓝色点缀，CSS变量体系
+  - 字体: Inter → SF → Segoe UI 系统字体栈
+  - 组件: 细边框卡片、下划线标签页、聚焦光环输入框、圆角按钮
+  - 布局: 精简文案、去emoji、减少视觉噪音
+  涉及文件: ui/gradio_app.py
+
+四、GitHub 开源发布准备
+  - 新增 MIT LICENSE
+  - 重写 README.md（GitHub 风格: 徽章/目录/FAQ/两种模式说明）
+  - config.yaml 移除硬编码QQ邮箱 → 环境变量占位符
+  - .env.example 补充 OA_EMAIL_USER / OA_EMAIL_TO
+  - 移除内部文档追踪: 交接文档.txt、维护日志.txt、全流程文档.docx
+  - .gitignore 补充排除内部文档
+  - 清理运行时日志 server_err.log / server_out.log
+  - 所有历史压缩为单个干净 commit，确保无敏感信息残留
+
+五、发布信息
+  - 仓库地址: https://github.com/BYYQ778/OA-ops-agent
+  - 默认本地离线模式(Ollama)，无需API Key
+  - 已推送: 3个commit（v2.0 初始 + README更新 + v2.1诊断工具箱）
+  - .env 从未提交，API Key 安全
+
+六、当前项目文件结构
+  oa-ops-agent/
+  ├── main.py, config.yaml, .env.example, requirements.txt
+  ├── LICENSE, README.md
+  ├── scripts/ (启动.bat, run_full.bat, setup_ollama.bat, 打包离线部署包.bat)
+  ├── Dockerfile, docker-compose.yml
+  ├── agents/ (9个模块: inspection_agent, inspection_real,
+  │            log_analysis_agent, knowledge_agent, ai_reporter,
+  │            ssl_monitor, network_diag, db_inspector, security_audit)
+  ├── ui/ (FastAPI server.py + templates/index.html + static/style.css)
+  ├── utils/ (6个模块: config, database, logger, scheduler,
+  │            doc_parser, alert)
+  └── data/ (sample_docs, sample_logs, 运行时生成 oa_ops.db 等)
+
+
+═══════════════════════════════════════════
+【2026-06-09 更新 — v2.1 诊断工具箱 + 企业级UI重构】
+═══════════════════════════════════════════
+
+一、新增 4 个诊断模块
+  agents/ssl_monitor.py — SSL/TLS 证书过期检测，单域名 + 批量
+  agents/network_diag.py — Ping/端口/DNS/路由/HTTP 健康检查，双平台适配
+  agents/db_inspector.py — MySQL/MSSQL/Oracle/Redis 四库健康巡检
+  agents/security_audit.py — SSH/登录/防火墙/端口/Crontab 五项安全审计
+
+二、UI 重构
+  布局: 横排标签页 → 左侧固定导航栏(220px) + 右侧内容区
+  切换: Python gr.update ~500ms → 浏览器端 JS switchTab() <5ms
+  CSS: 企业级设计系统（Indigo 主色 #4f46e5，Linear/Vercel 风格）
+  修复: 页面切换跳动、白屏延迟
+
+三、配置扩展
+  config.yaml 新增 ssl_monitor / network_diag / db_inspection / security 四个配置块
+
+四、Git 版本
+  281a019 feat: 恢复知识库拖拽上传 + Docker文件同步v2.2 + 同步清单
+  b63dd41 fix: 启动修复 — emoji崩溃/日志锁文件/依赖遗漏/启动.bat路径+编码+CRLF
+  d386f07 v2.2: 文档更新 + 目录整理
+  b6decea v2.2: 移除Gradio依赖，FastAPI + 纯前端
+  ffd5532 v2.2: Gradio替换为FastAPI + 纯HTML/CSS/JS前端
+  b9d04d1 v2.1: 新增诊断工具箱(SSL/网络/数据库/安全)共4个模块
+  6533be8 v2.1: OA运维多智能Agent巡检问答系统
