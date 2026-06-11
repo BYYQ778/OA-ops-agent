@@ -11,6 +11,7 @@
 - **日志分析** — 上传或粘贴运维日志，正则匹配 10 种常见故障（502/503/OOM/磁盘满等），输出排查建议
 - **知识库问答** — 上传 PDF/Word/TXT 文档，基于 RAG 检索增强生成，严格限制仅基于知识库作答
 - **AI 报告** — 巡检完成后自动生成预警分析与改进策略，支持 Ollama 本地离线 / DeepSeek 云端两种后端
+- **诊断工具箱** — SSL 证书过期检测、网络诊断（Ping/端口/DNS/路由/HTTP）、数据库巡检（MySQL/MSSQL/Oracle/Redis）、安全基线审计
 
 ## 快速开始
 
@@ -18,7 +19,7 @@
 
 ### 方式一：Windows 一键启动（推荐）
 
-双击项目根目录的 `启动.bat`，脚本会自动：
+双击项目根目录 `scripts/启动.bat`，脚本会自动：
 1. 检查 Python 环境
 2. 检测/安装 Ollama
 3. 拉取本地大模型（qwen3:8b）
@@ -43,7 +44,7 @@ ollama pull qwen3:8b
 python main.py
 ```
 
-启动后访问 **http://127.0.0.1:7860**，默认登录 `admin` / `admin123`。
+启动后访问 **http://127.0.0.1:7860**。
 
 ### 方式三：Docker
 
@@ -93,7 +94,7 @@ inspection:
 
 ```yaml
 llm:
-  provider: ollama           # ollama | deepseek
+  provider: ollama           # ollama | deepseek | qwen | openai
   ollama:
     model: qwen3:8b          # 本地模型
 ```
@@ -103,7 +104,7 @@ llm:
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `OA_LLM_API_KEY` | DeepSeek API Key | — |
-| `OA_AUTH_PASSWORD` | Web 登录密码 | `admin123` |
+| `OA_AUTH_PASSWORD` | Web 登录密码（v2.2 暂未启用） | `admin123` |
 | `OA_SSH_PASSWORD` | SSH 巡检密码 | — |
 | `OA_EMAIL_USER` | 告警邮箱 | — |
 | `OA_EMAIL_PASSWORD` | SMTP 授权码 | — |
@@ -116,14 +117,20 @@ oa-ops-agent/
 ├── config.yaml                # 配置
 ├── .env.example               # 环境变量模板
 ├── requirements.txt           # 依赖
-├── 启动.bat                   # Windows 一键启动
 ├── Dockerfile                 # Docker 部署
-├── agents/                    # Agent 模块
+├── scripts/                   # 启动 & 部署脚本
+│   ├── 启动.bat               # Windows 一键启动
+│   └── 打包离线部署包.bat     # 离线打包
+├── agents/                    # Agent 模块（9个）
 │   ├── inspection_agent.py    # 巡检（模拟 + 统一入口）
 │   ├── inspection_real.py     # 真实巡检（SSH + Local）
 │   ├── log_analysis_agent.py  # 日志分析（正则规则库）
 │   ├── knowledge_agent.py     # 知识库 RAG
-│   └── ai_reporter.py         # AI 报告生成
+│   ├── ai_reporter.py         # AI 报告生成
+│   ├── ssl_monitor.py         # SSL 证书监控
+│   ├── network_diag.py        # 网络诊断
+│   ├── db_inspector.py        # 数据库巡检
+│   └── security_audit.py      # 安全基线检查
 ├── utils/                     # 基础设施
 │   ├── config.py              # 配置管理
 │   ├── database.py            # SQLite 持久化
@@ -132,14 +139,17 @@ oa-ops-agent/
 │   ├── doc_parser.py          # 文档解析
 │   └── alert.py               # 告警通知
 └── ui/
-    └── gradio_app.py          # Web 界面
+    ├── server.py              # FastAPI 服务端（36个API端点）
+    ├── templates/index.html   # 纯HTML前端（6页面侧边栏）
+    └── static/style.css       # 样式
 ```
 
 ## 技术栈
 
 | 组件 | 用途 |
 |------|------|
-| Gradio | Web UI |
+| FastAPI | Web 服务端 |
+| Jinja2 | 模板渲染 |
 | LangChain | Agent 编排、RAG |
 | Chroma | 向量存储 |
 | sentence-transformers | 文档嵌入 |
@@ -162,7 +172,7 @@ A: 在 `config.yaml` 中将 `inspection.mode` 改为 `local` 即可使用本机�
 A: 可以。安装 Python 3.11+ 和 Ollama，将 `inspection.mode` 改为 `ssh` 并配置目标主机即可。
 
 **Q: 如何修改默认密码？**
-A: 在 `.env` 中设置 `OA_AUTH_PASSWORD=你的新密码`。
+A: v2.2 暂未启用 Web 登录认证。如需启用，可在 `.env` 中设置 `OA_AUTH_PASSWORD=你的新密码`，并在 `ui/server.py` 中添加认证中间件。
 
 ## License
 

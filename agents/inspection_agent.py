@@ -397,13 +397,13 @@ def save_inspection_to_db(results: list):
         logger.warning(f"巡检记录入库失败: {e}")
 
 
-# ========== 统一巡检入口（消除 main.py 与 gradio_app.py 重复代码）==========
+# ========== 统一巡检入口（消除 main.py 与 ui/server.py 重复代码）==========
 
 def run_unified_inspection() -> str:
     """
-    执行完整巡检流程：SSH/lcoal → 模拟降级 → 入库 → AI 报告。
+    执行完整巡检流程：SSH/local → 模拟降级 → 入库 → AI 报告。
 
-    所有调用方（main.py demo模式、gradio_app.py Web模式）统一使用此函数，
+    所有调用方（main.py CLI模式、ui/server.py Web模式）统一使用此函数，
     避免巡检逻辑在多处重复维护。
 
     Returns:

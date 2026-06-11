@@ -35,7 +35,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
-# ---- 全局状态（从 gradio_app.py 迁移） ----
+# ---- 全局状态 ----
 scheduler = InspectionScheduler()
 
 # ============ 页面路由 ============
