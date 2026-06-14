@@ -12,6 +12,7 @@
 - **知识库问答** — 上传 PDF/Word/TXT 文档，基于 RAG 检索增强生成，严格限制仅基于知识库作答
 - **AI 报告** — 巡检完成后自动生成预警分析与改进策略，支持 Ollama 本地离线 / DeepSeek 云端两种后端
 - **诊断工具箱** — SSL 证书过期检测、网络诊断（Ping/端口/DNS/路由/HTTP）、数据库巡检（MySQL/MSSQL/Oracle/Redis）、安全基线审计
+- **OCR 识别** — 知识库支持导入截图/扫描件自动 OCR；日志分析支持上传报错截图识别后分析
 
 ## 快速开始
 
@@ -136,7 +137,8 @@ oa-ops-agent/
 │   ├── database.py            # SQLite 持久化
 │   ├── logger.py              # 日志
 │   ├── scheduler.py           # 定时调度
-│   ├── doc_parser.py          # 文档解析
+│   ├── doc_parser.py          # 文档解析（含OCR）
+│   ├── ocr.py                 # 图片文字识别
 │   └── alert.py               # 告警通知
 └── ui/
     ├── server.py              # FastAPI 服务端（36个API端点）
@@ -154,6 +156,7 @@ oa-ops-agent/
 | Chroma | 向量存储 |
 | sentence-transformers | 文档嵌入 |
 | SQLite | 数据持久化 |
+| CnOCR | 图片文字识别 |
 | Ollama | 本地 LLM 推理 |
 | APScheduler | 定时任务 |
 

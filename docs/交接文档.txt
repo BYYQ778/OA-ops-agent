@@ -4,7 +4,7 @@ OA运维多智能Agent巡检问答系统 - 交接文档 v2.2
 版本: v2.2
 状态: GitHub开源已发布、可演示、可部署、本机离线运行
 仓库: https://github.com/BYYQ778/OA-ops-agent
-最后更新: 2026-06-11 — 目录整理/启动修复/知识库拖拽上传/Docker同步
+最后更新: 2026-06-14 — OCR支持（CnOCR/知识库图片导入/日志截图识别）
 
 ═══════════════════════════════════════════════════════════
 一、项目概述
@@ -18,6 +18,7 @@ OA运维多智能Agent巡检问答系统，面向运维实习生的智能运维�
   日志分析Agent → 10+正则规则自动识别故障
   知识库Agent → RAG 智能问答（Chroma + sentence-transformers）
   诊断工具箱 → SSL证书 / 网络诊断 / 数据库巡检(MySQL+MSSQL+Oracle+Redis) / 安全基线
+  OCR识别 → 知识库图片导入 / 日志截图识别（CnOCR + hf-mirror国内直连）
   本机巡检 → Windows 原生命令真实数据采集
   AI 报告 → 巡检后自动生成预警分析 + 改进策略
 
@@ -32,7 +33,7 @@ Python:    3.11.9
 配置:      config.yaml（主配置）+ .env（敏感信息）
 认证:      v2.2 FastAPI 未接入登录认证（旧 Gradio 版 admin/admin123 已随框架移除）
 巡检模式:  local（本机 Windows 真实检测）
-Git:       已初始化，7次提交（master）
+Git:       已初始化，8次提交（master）
 
 ═══════════════════════════════════════════════════════════
 三、v2.0 MVP 全部改造清单（12项）
@@ -136,7 +137,8 @@ oa-ops-agent/
 │   ├── database.py              # SQLite 数据库（3表）
 │   ├── alert.py                 # 告警通知（邮件/钉钉/企微）
 │   ├── scheduler.py             # 定时调度
-│   ├── doc_parser.py            # 文档解析
+│   ├── doc_parser.py            # 文档解析（含OCR）
+│   ├── ocr.py                   # 图片文字识别（CnOCR）
 │   └── logger.py                # 日志工具
 │
 ├── data/                        # 运行时数据
@@ -406,8 +408,10 @@ oa-ops-agent/
   config.yaml 新增 ssl_monitor / network_diag / db_inspection / security 四个配置块
 
 四、Git 版本
+  fd0db04 feat: OCR支持 — 知识库图片导入/日志截图识别，CnOCR国内直连
+  3829d60 docs: 维护日志+交接文档更新至0611
   281a019 feat: 恢复知识库拖拽上传 + Docker文件同步v2.2 + 同步清单
-  b63dd41 fix: 启动修复 — emoji崩溃/日志锁文件/依赖遗漏/启动.bat路径+编码+CRLF
+  b63dd41 fix: 启动修复
   d386f07 v2.2: 文档更新 + 目录整理
   b6decea v2.2: 移除Gradio依赖，FastAPI + 纯前端
   ffd5532 v2.2: Gradio替换为FastAPI + 纯HTML/CSS/JS前端

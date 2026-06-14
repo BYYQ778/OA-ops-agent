@@ -1,7 +1,7 @@
 OA运维多智能Agent巡检问答系统 - 维护日志
 ===========================================
 创建时间: 2026-05-07
-最后更新: 2026-06-11 14:30
+最后更新: 2026-06-14 21:30
 
 ═══════════════════════════════════════════
 【2026-05-25 11:30-11:35 — 启动.bat 完整模式修复】
@@ -387,3 +387,62 @@ Git 版本: 81ee4d4 + ba638a9（squash后2个commit）
   281a019 feat: 恢复知识库拖拽上传 + Docker文件同步v2.2 + 同步清单
   b63dd41 fix: 启动修复
   d386f07 v2.2: 文档更新 + 目录整理
+
+
+═══════════════════════════════════════════
+【2026-06-14 — OCR 支持：知识库图片导入 + 日志截图识别】
+═══════════════════════════════════════════
+
+一、需求
+  知识库模块：支持拖入扫描件/截图自动 OCR 入库
+  日志分析模块：支持上传服务器报错截图，OCR 识别后自动分析
+
+二、技术选型
+  尝试历程:
+    - easyocr → 模型在 GitHub，国内下载失败
+    - paddleocr v3.7 → OneDNN 兼容性问题，Windows CPU 报 NotImplementedError
+    - paddleocr v2.7 → numpy/opencv 依赖冲突
+    - cnocr ✅ → 模型走 HuggingFace，hf-mirror.com 国内直连可用
+
+  最终方案: CnOCR 2.3 + RapidOCR engine (onnxruntime)
+
+三、实现
+  1. 新增 utils/ocr.py — CnOCR 封装
+     - _get_ocr() 全局懒加载单例，避免重复初始化
+     - extract_text(path) 文件路径输入
+     - extract_text_from_bytes(bytes) Web 上传场景
+     - SUPPORTED_IMAGE_EXTS = {.png, .jpg, .jpeg, .bmp, .tiff, .tif, .webp}
+
+  2. 扩展 utils/doc_parser.py
+     - 新增 parse_image() — 调用 OCR 提取图片文字
+     - parse_document() 新增图片格式分支
+     - 错误信息更新为"支持 .pdf / .docx / .txt / 图片格式"
+
+  3. 知识库上传 UI 扩展 (index.html)
+     - accept 属性加 .png,.jpg,.jpeg,.bmp,.tiff,.webp
+     - 提示文字更新为"支持 PDF · Word · TXT · 图片 (自动OCR)"
+
+  4. 日志分析截图识别 (index.html + server.py)
+     - 新增"📷 识别截图"按钮 + 隐藏 file input
+     - JavaScript logOCR(): FormData 上传 → OCR → textarea 回填
+     - 服务端 /api/log/ocr 端点: OCR → analyze_log_content 分析
+     - 返回 {text: 识别文字, result: 分析结果}
+
+  5. requirements.txt 更新
+     - 添加 cnocr>=2.3
+
+四、自检
+  - Import OK ✅
+  - 模型下载 ✅ 通过 hf-mirror.com，约 42 秒首次
+  - OCR 识别 ✅ "502 Bad Gateway / nginx error" 正确提取
+  - 知识库图片上传 ✅ 流程贯通
+  - 日志截图识别 ✅ OCR → 正则匹配 → 排查建议
+
+五、文档同步
+  README.md — 功能 + OCR / 目录 + ocr.py / 技术栈 + CnOCR
+  docs/交接文档.txt — 核心模块 + OCR / 文件结构 + ocr.py / Git 版本
+  docs/维护日志.txt — 本次更新
+
+六、Git 版本
+  fd0db04 feat: OCR支持 — 知识库图片导入/日志截图识别，CnOCR国内直连
+  3829d60 docs: 维护日志+交接文档更新至0611
