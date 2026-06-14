@@ -121,6 +121,25 @@ async def api_log_analyze(log_text: str = Form("")):
     return {"result": result}
 
 
+@app.post("/api/log/ocr")
+async def api_log_ocr(file: UploadFile = File(...)):
+    """上传截图 → OCR 识别 → 自动分析"""
+    from utils.ocr import extract_text_from_bytes
+
+    content = await file.read()
+    try:
+        ocr_text = extract_text_from_bytes(content)
+    except Exception as e:
+        return {"text": "", "result": f"OCR 识别失败: {str(e)}"}
+
+    if not ocr_text.strip():
+        return {"text": "", "result": "OCR 未能识别到文字，请确认图片清晰度并重试"}
+
+    # 将识别结果送入日志分析
+    analysis = analyze_log_content.invoke({"log_text": ocr_text})
+    return {"text": ocr_text, "result": analysis}
+
+
 # ============ SSL 证书 API ============
 
 @app.post("/api/ssl/check")

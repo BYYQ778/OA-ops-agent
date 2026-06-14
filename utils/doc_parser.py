@@ -99,16 +99,40 @@ def parse_document(file_path: str) -> str:
     """
     ext = os.path.splitext(file_path)[1].lower()
 
+    from utils.ocr import SUPPORTED_IMAGE_EXTS
+
     if ext == ".pdf":
         raw_text = parse_pdf(file_path)
     elif ext == ".docx":
         raw_text = parse_docx(file_path)
     elif ext == ".txt":
         raw_text = parse_txt(file_path)
+    elif ext in SUPPORTED_IMAGE_EXTS:
+        raw_text = parse_image(file_path)
     else:
-        raise ValueError(f"不支持的文件格式: {ext}（仅支持 .pdf / .docx / .txt）")
+        raise ValueError(f"不支持的文件格式: {ext}（支持 .pdf / .docx / .txt / 图片格式）")
 
     return clean_text(raw_text)
+
+
+def parse_image(file_path: str) -> str:
+    """
+    使用 OCR 从图片中提取文字。
+    支持 jpg/png/bmp/tiff/webp 等常见格式。
+
+    Args:
+        file_path: 图片文件路径
+
+    Returns:
+        OCR 识别出的文字内容
+    """
+    from utils.ocr import extract_text, SUPPORTED_IMAGE_EXTS
+
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext not in SUPPORTED_IMAGE_EXTS:
+        raise ValueError(f"不支持的图片格式: {ext}（支持 {', '.join(sorted(SUPPORTED_IMAGE_EXTS))}）")
+
+    return extract_text(file_path)
 
 
 def clean_text(text: str) -> str:

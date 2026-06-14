@@ -73,14 +73,17 @@
   <!-- Page: 日志分析 -->
   <section class="page" id="page-log">
     <h1 class="page-title">📋 日志分析</h1>
-    <p class="page-subtitle">粘贴运维日志 · 自动匹配故障模式 · 生成排查建议</p>
+    <p class="page-subtitle">粘贴运维日志 · 截图自动OCR · 匹配故障模式 · 生成排查建议</p>
 
     <div class="ops-card">
-      <textarea id="log-input" placeholder="在此粘贴日志内容..." style="height:160px;width:100%;"></textarea>
+      <textarea id="log-input" placeholder="在此粘贴日志内容，或下方上传截图自动识别..." style="height:160px;width:100%;"></textarea>
       <div class="btn-row" style="margin-top:10px;">
         <button class="btn btn-primary" onclick="logAnalyze()">分析内容</button>
+        <button class="btn btn-primary" onclick="document.getElementById('log-image-input').click()">📷 识别截图</button>
+        <input type="file" id="log-image-input" accept=".png,.jpg,.jpeg,.bmp,.tiff,.webp" onchange="logOCR()" style="display:none;">
         <button class="btn btn-danger" onclick="document.getElementById('log-input').value='';document.getElementById('log-output').textContent='';">清空</button>
       </div>
+      <span id="log-ocr-status" style="font-size:12px;color:#9ca3af;"></span>
       <pre class="output-box" id="log-output" style="margin-top:12px;">分析结果将显示在此处...</pre>
     </div>
   </section>
@@ -112,8 +115,8 @@
            ondrop="kbDrop(event)">
         <div class="drop-icon">📂</div>
         <span class="drop-title">拖拽文档到此处上传</span>
-        <p class="drop-hint">支持 PDF · Word · TXT 格式</p>
-        <input type="file" id="kb-file-input" accept=".pdf,.docx,.txt" onchange="kbUpload()" style="display:none;">
+        <p class="drop-hint">支持 PDF · Word · TXT · 图片 (自动OCR)</p>
+        <input type="file" id="kb-file-input" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.bmp,.tiff,.webp" onchange="kbUpload()" style="display:none;">
         <button class="btn btn-secondary drop-btn" onclick="document.getElementById('kb-file-input').click()">或点击选择文件</button>
         <span id="kb-upload-status" style="font-size:13px;color:#6b7280;"></span>
       </div>
@@ -304,6 +307,7 @@ function updateStatus() { get('/api/inspect/status').then(r => { document.getEle
 
 // ============ Log Analysis ============
 function logAnalyze() { var txt = document.getElementById('log-input').value; if(!txt.trim()) return; setLoading('log-output'); post('/api/log/analyze', {log_text: txt}).then(r => setOutput('log-output', r.result)); }
+function logOCR() { var f = document.getElementById('log-image-input').files[0]; if(!f) return; var fd = new FormData(); fd.append('file', f); document.getElementById('log-ocr-status').textContent = 'OCR 识别中...'; setLoading('log-output'); fetch('/api/log/ocr', {method:'POST', body:fd}).then(r => r.json()).then(r => { document.getElementById('log-input').value = r.text; document.getElementById('log-ocr-status').textContent = '✓ 识别完成，' + r.text.length + ' 字'; document.getElementById('log-image-input').value = ''; setOutput('log-output', r.result); }); }
 
 // ============ Knowledge Base ============
 function kbAsk() { var q = document.getElementById('qa-question').value; if(!q.trim()) return; setLoading('qa-output'); post('/api/kb/ask', {question: q}).then(r => setOutput('qa-output', r.result)); }
