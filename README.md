@@ -7,12 +7,14 @@
 
 ## 功能
 
+- **实时监控仪表盘** — SSE 实时推送 + 5 状态卡片 + Chart.js 趋势图 + 告警时间线 + 终端日志控制台
 - **巡检监控** — 自动检测端口、服务、磁盘、内存，支持 Local/SSH/Simulated 三种模式，定时调度 + 历史查询
 - **日志分析** — 上传或粘贴运维日志，正则匹配 10 种常见故障（502/503/OOM/磁盘满等），输出排查建议
 - **知识库问答** — 上传 PDF/Word/TXT 文档，基于 RAG 检索增强生成，严格限制仅基于知识库作答
 - **AI 报告** — 巡检完成后自动生成预警分析与改进策略，支持 Ollama 本地离线 / DeepSeek 云端两种后端
 - **诊断工具箱** — SSL 证书过期检测、网络诊断（Ping/端口/DNS/路由/HTTP）、数据库巡检（MySQL/MSSQL/Oracle/Redis）、安全基线审计
 - **OCR 识别** — 知识库支持导入截图/扫描件自动 OCR；日志分析支持上传报错截图识别后分析
+- **运维命令大全** — 收录 92 条常用运维命令（6 大分类），支持按命令名/功能关键词双向检索，点击卡片展开详情
 
 ## 快速开始
 
@@ -105,7 +107,7 @@ llm:
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `OA_LLM_API_KEY` | DeepSeek API Key | — |
-| `OA_AUTH_PASSWORD` | Web 登录密码（v2.2 暂未启用） | `admin123` |
+| `OA_AUTH_PASSWORD` | Web 登录密码（v2.3 暂未启用） | `admin123` |
 | `OA_SSH_PASSWORD` | SSH 巡检密码 | — |
 | `OA_EMAIL_USER` | 告警邮箱 | — |
 | `OA_EMAIL_PASSWORD` | SMTP 授权码 | — |
@@ -135,15 +137,18 @@ oa-ops-agent/
 ├── utils/                     # 基础设施
 │   ├── config.py              # 配置管理
 │   ├── database.py            # SQLite 持久化
+│   ├── dashboard.py           # 实时仪表盘数据管理
 │   ├── logger.py              # 日志
 │   ├── scheduler.py           # 定时调度
 │   ├── doc_parser.py          # 文档解析（含OCR）
 │   ├── ocr.py                 # 图片文字识别
 │   └── alert.py               # 告警通知
 └── ui/
-    ├── server.py              # FastAPI 服务端（36个API端点）
-    ├── templates/index.html   # 纯HTML前端（6页面侧边栏）
-    └── static/style.css       # 样式
+    ├── server.py              # FastAPI 服务端（39个API端点）
+    ├── templates/index.html   # 纯HTML前端（8页面侧边栏）
+    └── static/
+        ├── style.css          # 样式
+        └── commands.js        # 运维命令数据库（92条）
 ```
 
 ## 技术栈
@@ -175,7 +180,7 @@ A: 在 `config.yaml` 中将 `inspection.mode` 改为 `local` 即可使用本机�
 A: 可以。安装 Python 3.11+ 和 Ollama，将 `inspection.mode` 改为 `ssh` 并配置目标主机即可。
 
 **Q: 如何修改默认密码？**
-A: v2.2 暂未启用 Web 登录认证。如需启用，可在 `.env` 中设置 `OA_AUTH_PASSWORD=你的新密码`，并在 `ui/server.py` 中添加认证中间件。
+A: v2.3 暂未启用 Web 登录认证。如需启用，可在 `.env` 中设置 `OA_AUTH_PASSWORD=你的新密码`，并在 `ui/server.py` 中添加认证中间件。
 
 ## License
 

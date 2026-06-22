@@ -9,7 +9,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
@@ -25,11 +25,12 @@ from utils.logger import get_logger
 from utils.config import config as app_config
 from utils.database import db
 from utils.scheduler import InspectionScheduler
+from utils.dashboard import dashboard_manager
 
 logger = get_logger(__name__)
 
 # ---- FastAPI App ----
-app = FastAPI(title="OA 运维助手", version="2.2")
+app = FastAPI(title="OA 运维助手", version="2.3")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
@@ -48,7 +49,7 @@ async def index(request: Request):
     import time
     template = templates.get_template("index.html")
     html = template.render(
-        version="2.2",
+        version="2.3",
         cache_buster=str(int(time.time())),
         scheduler_status=sched_status,
         is_running=scheduler.is_running,
@@ -58,14 +59,22 @@ async def index(request: Request):
 
 # ============ 巡检 API ============
 
+def _inspect_with_dashboard():
+    """执行巡检并将结果推送到仪表盘（调度器回调 + 手动巡检共用）"""
+    result = run_unified_inspection()
+    dashboard_manager.push(result)
+    return result
+
+
 @app.post("/api/inspect/run")
 async def api_inspect():
-    result = run_unified_inspection()
+    result = _inspect_with_dashboard()
     return {"result": result}
+
 
 @app.post("/api/inspect/start")
 async def api_inspect_start(interval: int = Form(...)):
-    ok = scheduler.start(task_func=run_unified_inspection, interval=interval)
+    ok = scheduler.start(task_func=_inspect_with_dashboard, interval=interval)
     return {"ok": ok, "msg": "已启动" if ok else "已在运行中"}
 
 @app.post("/api/inspect/stop")
@@ -231,6 +240,60 @@ async def api_sec_all():
     return {"result": result}
 
 
+# ============ 实时监控仪表盘 API ============
+
+@app.get("/api/dashboard/metrics")
+async def api_dashboard_metrics():
+    """返回最新一次巡检的结构化指标，仪表盘首次加载和手动刷新时调用"""
+    metrics = dashboard_manager.get_latest()
+    if metrics is None:
+        return {"timestamp": None, "summary": None, "checks": [], "alerts": [], "mode": None}
+    return metrics
+
+
+@app.get("/api/dashboard/stream")
+async def api_dashboard_stream():
+    """
+    SSE 实时推送端点。
+    浏览器通过 EventSource 连接，每次巡检完成后自动收到结构化指标。
+    每 30 秒发送一次心跳保持连接。
+    """
+    import asyncio
+    import json as _json
+
+    async def event_generator():
+        q = dashboard_manager.subscribe()
+        try:
+            while True:
+                try:
+                    data = await asyncio.wait_for(q.get(), timeout=30)
+                    yield f"data: {_json.dumps(data, ensure_ascii=False)}\n\n"
+                except asyncio.TimeoutError:
+                    # 心跳保活
+                    yield ": heartbeat\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            dashboard_manager.unsubscribe(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
+        },
+    )
+
+
+@app.get("/api/dashboard/history")
+async def api_dashboard_history(minutes: int = 60):
+    """返回最近 N 分钟的时间序列数据，供趋势图表使用"""
+    timeline = dashboard_manager.get_history(minutes)
+    return {"timeline": timeline}
+
+
 # ============ 知识库 API（需 LLM 初始化后可用）============
 
 # 知识库 Agent 需要嵌入模型，延迟初始化
@@ -307,6 +370,38 @@ async def api_kb_clear():
     if kb is None:
         return {"result": "知识库引擎未就绪"}
     return {"result": kb.clear_knowledge_base()}
+
+
+# ============ 运维命令大全 API ============
+
+@app.get("/api/commands")
+async def api_commands():
+    """
+    返回运维常用命令大全数据。
+    前端优先使用静态 commands.js 加载，此端点作为备用/扩展接口。
+    数据来源: ui/static/commands.js 中的 OPS_COMMANDS 对象。
+    """
+    import json as _json
+    import re
+
+    commands_path = os.path.join(BASE_DIR, "static", "commands.js")
+    try:
+        with open(commands_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        # 提取 JS 对象: OPS_COMMANDS = { ... };
+        start = content.index("{")
+        end = content.rindex("}") + 1
+        js_obj = content[start:end]
+        # 移除 JS 注释 (只移除行首 // 注释,避免误删 URL 中的 //)
+        js_obj = re.sub(r'^\s*//.*$', '', js_obj, flags=re.MULTILINE)
+        js_obj = re.sub(r'/\*.*?\*/', '', js_obj, flags=re.DOTALL)
+        # 将 JS 对象键名加引号以符合 JSON 规范 (word: → "word":)
+        js_obj = re.sub(r'([\{,]\s*)(\w+)\s*:', r'\1"\2":', js_obj)
+        data = _json.loads(js_obj)
+        return data
+    except Exception as e:
+        logger.error(f"加载命令数据失败: {e}")
+        return {"categories": [], "commands": [], "error": str(e)}
 
 
 # ============ 启动入口 ============

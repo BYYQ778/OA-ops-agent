@@ -232,3 +232,509 @@ hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .drop-zone .drop-title { font-size: 15px; font-weight: 600; color: #374151; }
 .drop-zone .drop-hint { font-size: 13px; color: #9ca3af; margin: 0; }
 .drop-zone .drop-btn { margin-top: 10px; }
+
+/* ===== Dashboard ===== */
+.dashboard-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.dash-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+.btn-sm { font-size: 12px; padding: 5px 10px; }
+
+/* 状态卡片网格 */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.status-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-left: 4px solid #d1d5db;
+  border-radius: 10px;
+  padding: 16px;
+  transition: border-color 0.3s, background 0.3s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+.card-icon { font-size: 22px; margin-bottom: 6px; }
+.card-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.card-value { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.card-detail { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+
+/* 中部双栏 */
+.dashboard-row {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.chart-container {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  height: 310px;
+  position: relative;
+}
+.chart-container h4 { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
+.chart-container canvas { width: 100% !important; height: calc(100% - 30px) !important; }
+
+/* 告警面板 */
+.alert-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.alert-panel h4 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text); }
+.alert-timeline {
+  max-height: 250px;
+  overflow-y: auto;
+}
+.alert-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 30px 0;
+}
+.alert-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 12px;
+}
+.alert-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+.alert-warning .alert-dot { background: #f59e0b; }
+.alert-error .alert-dot { background: #ef4444; }
+.alert-info .alert-dot { background: #3b82f6; }
+.alert-time { color: #9ca3af; flex-shrink: 0; font-family: monospace; }
+.alert-msg { color: #374151; word-break: break-all; }
+
+/* 实时日志控制台（终端风格） */
+.live-log {
+  background: #1e1e2e;
+  color: #a8d8a8;
+  font-family: "Consolas","Monaco","Courier New",monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 12px 16px;
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.log-line { white-space: nowrap; }
+.log-time { color: #6b7280; margin-right: 8px; }
+.log-ok { color: #22c55e; font-weight: 600; }
+.log-warn { color: #f59e0b; font-weight: 600; }
+.log-err { color: #ef4444; font-weight: 600; }
+
+/* 响应式：小屏幕时卡片和双栏变单列 */
+@media (max-width: 1100px) {
+  .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
+  .dashboard-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ===== 运维命令大全 ===== */
+
+/* 搜索框区域 */
+.cmd-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  position: relative;
+}
+.cmd-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 1;
+}
+.cmd-search-bar input {
+  flex: 1;
+  padding: 11px 38px 11px 38px;
+  font-size: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cmd-search-bar input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+  outline: none;
+}
+.cmd-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: #e5e7eb;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s;
+}
+.cmd-search-clear:hover { background: #d1d5db; color: #374151; }
+.cmd-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* 主体布局：左分类 + 右卡片 */
+.cmd-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+/* 左侧分类导航 */
+.cmd-nav {
+  flex: 0 0 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  position: sticky;
+  top: 20px;
+}
+.cmd-cat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #5f6368;
+  cursor: pointer;
+  transition: all 0.12s;
+  user-select: none;
+}
+.cmd-cat:hover { background: #f5f6f8; color: var(--text); }
+.cmd-cat.active { background: var(--primary-bg); color: var(--primary); }
+.cmd-cat-icon { font-size: 14px; flex-shrink: 0; }
+.cmd-cat-count {
+  font-size: 11px;
+  background: #f0f1f3;
+  color: var(--text-secondary);
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  margin-left: auto;
+}
+.cmd-cat.active .cmd-cat-count { background: var(--primary); color: #fff; }
+
+/* 右侧命令卡片列表 */
+.cmd-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 命令卡片 */
+.cmd-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: pointer;
+}
+.cmd-card:hover { border-color: #c5c8d0; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.cmd-card.expanded { border-color: var(--primary); box-shadow: 0 2px 12px rgba(79,70,229,0.08); }
+
+.cmd-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 12px;
+}
+.cmd-card-left { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.cmd-card-name {
+  font-family: "Consolas","Monaco","Courier New",monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cmd-card-cat {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: #f5f6f8;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.cmd-card-right { display: flex; align-items: center; gap: 10px; flex: 1; justify-content: flex-end; }
+.cmd-card-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 400px;
+}
+.cmd-card-arrow {
+  font-size: 10px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+/* 卡片展开内容 */
+.cmd-card-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  border-top: 1px solid transparent;
+}
+.cmd-card.expanded .cmd-card-body {
+  max-height: 800px;
+  border-top: 1px solid var(--border);
+}
+.cmd-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f3f4f6;
+}
+.cmd-section:last-child { border-bottom: none; }
+.cmd-label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.cmd-syntax {
+  display: block;
+  font-family: "Consolas","Monaco","Courier New",monospace;
+  font-size: 13px;
+  color: #374151;
+  background: #fafbfc;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 关键词标签 */
+.cmd-keywords { display: flex; flex-wrap: wrap; gap: 6px; }
+.cmd-keyword-tag {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: #f0f1f3;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* 示例 */
+.cmd-examples { display: flex; flex-direction: column; gap: 8px; }
+.cmd-example-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+}
+.cmd-example-item:not(:last-child) { border-bottom: 1px dashed #f0f0f3; }
+.cmd-example-cmd {
+  font-family: "Consolas","Monaco","Courier New",monospace;
+  font-size: 12px;
+  color: #1a1a2e;
+  background: #1e1e2e;
+  color: #a8d8a8;
+  padding: 5px 10px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  max-width: 60%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.cmd-example-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  padding-top: 3px;
+}
+
+/* 关键词高亮 */
+.cmd-highlight {
+  background: #fef08a;
+  color: #1a1a2e;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+/* 无结果提示 */
+.cmd-no-results {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+}
+.cmd-no-results-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+.cmd-no-results p { font-size: 14px; margin-bottom: 4px; }
+.cmd-no-results-hint { font-size: 12px !important; color: var(--text-muted); }
+
+/* 响应式 */
+@media (max-width: 1100px) {
+  .cmd-layout { flex-direction: column; }
+  .cmd-nav {
+    flex: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+    gap: 4px;
+  }
+  .cmd-cat { flex: 0 0 auto; }
+  .cmd-card-desc { max-width: 200px; }
+}
+/* ===== 知识问答命令推荐 ===== */
+.qa-cmd-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+}
+.qa-cmd-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 10px;
+}
+.qa-cmd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.qa-cmd-item {
+  border: 1px solid #f0f0f3;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.qa-cmd-item:hover { border-color: #c5c8d0; }
+.qa-cmd-item.expanded { border-color: var(--primary); }
+.qa-cmd-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.qa-cmd-head code {
+  font-family: "Consolas","Monaco",monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: #f5f6f8;
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.qa-cmd-head span {
+  color: var(--text-muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qa-cmd-arrow {
+  font-size: 10px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.qa-cmd-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s;
+  border-top: 1px solid transparent;
+}
+.qa-cmd-item.expanded .qa-cmd-body {
+  max-height: 300px;
+  border-top-color: var(--border);
+}
+.qa-cmd-syntax {
+  font-family: "Consolas","Monaco",monospace;
+  font-size: 11px;
+  color: #a8d8a8;
+  background: #1e1e2e;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.qa-cmd-examples {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.qa-cmd-ex {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  align-items: flex-start;
+}
+.qa-cmd-ex code {
+  font-family: "Consolas","Monaco",monospace;
+  font-size: 11px;
+  background: #f5f6f8;
+  color: #374151;
+  padding: 2px 8px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.qa-cmd-ex span {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+@media (max-width: 700px) {
+  .cmd-search-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .cmd-search-bar input { width: 100%; }
+  .cmd-card-header { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .cmd-card-right { justify-content: flex-start; width: 100%; }
+  .cmd-card-desc { max-width: 100%; text-align: left; white-space: normal; }
+  .cmd-example-item { flex-direction: column; gap: 4px; }
+  .cmd-example-cmd { max-width: 100%; white-space: pre-wrap; word-break: break-all; }
+}

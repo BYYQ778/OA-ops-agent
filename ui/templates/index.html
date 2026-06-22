@@ -6,6 +6,8 @@
 <title>OA 运维助手 v{{ version }}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css?v={{ cache_buster }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/commands.js?v={{ cache_buster }}"></script>
 </head>
 <body>
 
@@ -16,11 +18,13 @@
     <span>Ops Platform v{{ version }}</span>
   </div>
   <div id="nav-items">
-    <a class="nav-item active" data-page="inspect" onclick="switchPage('inspect')">📊 巡检监控</a>
-    <a class="nav-item" data-page="log" onclick="switchPage('log')">📋 日志分析</a>
+    <a class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">📊 实时监控</a>
+    <a class="nav-item" data-page="inspect" onclick="switchPage('inspect')">📋 经典巡检</a>
+    <a class="nav-item" data-page="log" onclick="switchPage('log')">📝 日志分析</a>
     <a class="nav-item" data-page="qa" onclick="switchPage('qa')">💬 知识问答</a>
     <a class="nav-item" data-page="kb" onclick="switchPage('kb')">📚 知识库</a>
     <a class="nav-item" data-page="diag" onclick="switchPage('diag')">🛠 诊断工具箱</a>
+    <a class="nav-item" data-page="commands" onclick="switchPage('commands')">📋 命令大全</a>
     <a class="nav-item" data-page="settings" onclick="switchPage('settings')">⚙️ 系统设置</a>
   </div>
   <div class="sidebar-status">
@@ -32,8 +36,81 @@
 <!-- ===== Main Content ===== -->
 <main id="main-content">
 
-  <!-- Page: 巡检监控 -->
-  <section class="page active" id="page-inspect">
+  <!-- Page: 实时监控仪表盘 -->
+  <section class="page active" id="page-dashboard">
+    <div class="dashboard-topbar">
+      <div>
+        <h1 class="page-title">📊 实时监控仪表盘</h1>
+        <span class="page-subtitle" id="dash-subtitle">连接中...</span>
+      </div>
+      <div class="dash-controls">
+        <span id="dash-connection-dot" class="dot dot-offline"></span>
+        <span id="dash-connection-text" style="font-size:12px;color:var(--text-secondary);">未连接</span>
+        <button class="btn btn-primary btn-sm" onclick="dashboardInspect()">▶ 立即巡检</button>
+        <button class="btn btn-secondary btn-sm" id="dash-pause-btn" onclick="dashboardTogglePause()">⏸ 暂停</button>
+        <button class="btn btn-secondary btn-sm" onclick="dashboardRefresh()">🔄 刷新</button>
+      </div>
+    </div>
+
+    <!-- 状态卡片行 -->
+    <div class="dashboard-grid" id="dash-cards">
+      <div class="status-card" id="card-ports">
+        <div class="card-icon">🔌</div>
+        <div class="card-label">端口检测</div>
+        <div class="card-value">--</div>
+        <div class="card-detail">等待数据...</div>
+      </div>
+      <div class="status-card" id="card-nginx">
+        <div class="card-icon">🌐</div>
+        <div class="card-label">Nginx服务</div>
+        <div class="card-value">--</div>
+        <div class="card-detail">等待数据...</div>
+      </div>
+      <div class="status-card" id="card-oa">
+        <div class="card-icon">📱</div>
+        <div class="card-label">OA应用</div>
+        <div class="card-value">--</div>
+        <div class="card-detail">等待数据...</div>
+      </div>
+      <div class="status-card" id="card-disk">
+        <div class="card-icon">💾</div>
+        <div class="card-label">磁盘使用</div>
+        <div class="card-value">--</div>
+        <div class="card-detail">等待数据...</div>
+      </div>
+      <div class="status-card" id="card-memory">
+        <div class="card-icon">🧠</div>
+        <div class="card-label">内存使用</div>
+        <div class="card-value">--</div>
+        <div class="card-detail">等待数据...</div>
+      </div>
+    </div>
+
+    <!-- 中部：图表 + 告警流 -->
+    <div class="dashboard-row">
+      <div class="chart-container">
+        <h4>📈 指标趋势（最近 60 分钟）</h4>
+        <canvas id="trend-chart"></canvas>
+      </div>
+      <div class="alert-panel">
+        <h4>🔔 实时告警</h4>
+        <div class="alert-timeline" id="alert-feed">
+          <div class="alert-empty">暂无告警</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部：实时日志控制台 -->
+    <div class="ops-card">
+      <h4>📜 实时巡检日志</h4>
+      <div class="live-log" id="live-log">
+        <div class="log-line">系统就绪，等待巡检数据...</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Page: 经典巡检 -->
+  <section class="page" id="page-inspect">
     <h1 class="page-title">📊 巡检监控</h1>
     <p class="page-subtitle">自动化服务器巡检 · 端口/服务/磁盘/内存 · 定时调度</p>
 
@@ -98,7 +175,8 @@
         <input type="text" id="qa-question" placeholder="例如：OA 审批流程卡死了怎么办？" style="flex:1;">
         <button class="btn btn-primary" onclick="kbAsk()">提问</button>
       </div>
-      <pre class="output-box" id="qa-output" style="margin-top:12px;">AI 将基于知识库为您解答...</pre>
+      <div class="output-box" id="qa-output" style="margin-top:12px; min-height:60px; white-space:pre-wrap;">AI 将基于知识库为您解答...</div>
+      <div id="qa-commands" style="margin-top:12px;"></div>
     </div>
   </section>
 
@@ -241,6 +319,7 @@
     </div>
   </section>
 
+  <!-- Page: 运维命令大全 -->
   <!-- Page: 系统设置 -->
   <section class="page" id="page-settings">
     <h1 class="page-title">⚙️ 系统设置</h1>
@@ -262,6 +341,26 @@
         <span id="mode-status" style="font-size:13px;color:#8b8fa3;line-height:36px;margin-left:12px;">当前：本机离线 · Ollama qwen3:8b</span>
       </div>
       <pre class="output-box" id="init-log" style="margin-top:10px;height:80px;">就绪</pre>
+    </div>
+  </section>
+
+  <!-- Page: 运维命令大全 -->
+  <section class="page" id="page-commands">
+    <h1 class="page-title">📋 运维命令大全</h1>
+    <p class="page-subtitle">收录常用运维命令 · 按名称/功能关键词双向搜索 · 点击卡片展开详情</p>
+
+    <!-- 搜索栏 -->
+    <div class="cmd-search-bar">
+      <span class="cmd-search-icon">🔍</span>
+      <input type="text" id="cmd-search-input" placeholder="搜索命令名称或功能关键词，如「grep」「查看端口」「压缩文件」..." oninput="cmdFilter()" autocomplete="off">
+      <button class="cmd-search-clear" id="cmd-search-clear" onclick="cmdClearSearch()" style="display:none;">✕</button>
+      <span id="cmd-result-count" class="cmd-count"></span>
+    </div>
+
+    <!-- 主体：左分类导航 + 右命令卡片 -->
+    <div class="cmd-layout">
+      <nav class="cmd-nav" id="cmd-nav"></nav>
+      <div class="cmd-list" id="cmd-list"></div>
     </div>
   </section>
 
@@ -310,7 +409,51 @@ function logAnalyze() { var txt = document.getElementById('log-input').value; if
 function logOCR() { var f = document.getElementById('log-image-input').files[0]; if(!f) return; var fd = new FormData(); fd.append('file', f); document.getElementById('log-ocr-status').textContent = 'OCR 识别中...'; setLoading('log-output'); fetch('/api/log/ocr', {method:'POST', body:fd}).then(r => r.json()).then(r => { document.getElementById('log-input').value = r.text; document.getElementById('log-ocr-status').textContent = '✓ 识别完成，' + r.text.length + ' 字'; document.getElementById('log-image-input').value = ''; setOutput('log-output', r.result); }); }
 
 // ============ Knowledge Base ============
-function kbAsk() { var q = document.getElementById('qa-question').value; if(!q.trim()) return; setLoading('qa-output'); post('/api/kb/ask', {question: q}).then(r => setOutput('qa-output', r.result)); }
+function kbAsk() {
+  var q = document.getElementById('qa-question').value;
+  if(!q.trim()) return;
+  var out = document.getElementById('qa-output');
+  out.textContent = '思考中...\n正在检索知识库并匹配相关命令...';
+  document.getElementById('qa-commands').innerHTML = '';
+
+  post('/api/kb/ask', {question: q}).then(function(r) {
+    out.textContent = r.result;
+
+    // 自动从命令大全推荐相关命令
+    if (typeof searchCommands !== 'undefined') {
+      var cmds = searchCommands(q, null);
+      if (cmds.length > 0) {
+        renderQaCommands(cmds.slice(0, 8), q);
+      }
+    }
+  });
+}
+
+function renderQaCommands(cmds, keyword) {
+  var container = document.getElementById('qa-commands');
+  if (!container || cmds.length === 0) return;
+
+  var h = '<div class="qa-cmd-section">';
+  h += '<div class="qa-cmd-title">🛠 相关命令推荐（' + cmds.length + ' 条）</div>';
+  h += '<div class="qa-cmd-list">';
+  cmds.forEach(function(cmd) {
+    var hlName = typeof highlightText !== 'undefined' ? highlightText(cmd.name, keyword) : cmd.name;
+    h += '<div class="qa-cmd-item" onclick="this.classList.toggle(\'expanded\')">';
+    h += '<div class="qa-cmd-head"><code>' + hlName + '</code><span>' + escapeHtml(cmd.description) + '</span><span class="qa-cmd-arrow">▶</span></div>';
+    h += '<div class="qa-cmd-body">';
+    h += '<div class="qa-cmd-syntax">' + escapeHtml(cmd.syntax) + '</div>';
+    if (cmd.examples && cmd.examples.length > 0) {
+      h += '<div class="qa-cmd-examples">';
+      cmd.examples.slice(0, 2).forEach(function(ex) {
+        h += '<div class="qa-cmd-ex"><code>' + escapeHtml(ex.cmd) + '</code><span>' + escapeHtml(ex.desc) + '</span></div>';
+      });
+      h += '</div>';
+    }
+    h += '</div></div>';
+  });
+  h += '</div></div>';
+  container.innerHTML = h;
+}
 function kbList() { setLoading('kb-output'); get('/api/kb/list').then(r => setOutput('kb-output', r.result)); }
 function kbStats() { setLoading('kb-output'); get('/api/kb/stats').then(r => setOutput('kb-output', r.result)); }
 function kbDelete() { var n = document.getElementById('kb-delete-name').value; if(!n.trim()) return; setLoading('kb-output'); post('/api/kb/delete', {doc_name: n}).then(r => setOutput('kb-output', r.result)); }
@@ -361,6 +504,428 @@ function initSystem() {
 
 // ============ Periodic Status Update ============
 setInterval(updateStatus, 5000);
+
+// ==================== 运维命令大全 ====================
+
+var cmdCurrentCategory = 'all';
+
+function cmdInit() {
+  if (typeof OPS_COMMANDS === 'undefined') {
+    document.getElementById('cmd-list').innerHTML = '<div class="cmd-no-results"><div class="cmd-no-results-icon">⚠️</div><p>命令数据加载失败，请刷新重试</p></div>';
+    return;
+  }
+  cmdRenderNav();
+  cmdRenderList();
+}
+
+function cmdRenderNav() {
+  var nav = document.getElementById('cmd-nav');
+  var total = OPS_COMMANDS.commands.length;
+  var h = '<a class="cmd-cat active" data-cat="all" onclick="cmdSelectCat(\'all\',this)"><span class="cmd-cat-icon">📋</span>全部<span class="cmd-cat-count">' + total + '</span></a>';
+  OPS_COMMANDS.categories.forEach(function(cat) {
+    var n = OPS_COMMANDS.commands.filter(function(c) { return c.category === cat.id; }).length;
+    h += '<a class="cmd-cat" data-cat="' + cat.id + '" onclick="cmdSelectCat(\'' + cat.id + '\',this)"><span class="cmd-cat-icon">' + cat.icon + '</span>' + cat.name + '<span class="cmd-cat-count">' + n + '</span></a>';
+  });
+  nav.innerHTML = h;
+}
+
+function cmdSelectCat(cat, el) {
+  cmdCurrentCategory = cat;
+  document.querySelectorAll('.cmd-cat').forEach(function(e) { e.classList.remove('active'); });
+  el.classList.add('active');
+  cmdFilter();
+}
+
+function cmdFilter() {
+  var kw = document.getElementById('cmd-search-input').value;
+  var clearBtn = document.getElementById('cmd-search-clear');
+  clearBtn.style.display = kw ? 'inline-block' : 'none';
+  var list = searchCommands(kw, cmdCurrentCategory === 'all' ? null : cmdCurrentCategory);
+  cmdRenderCards(list, kw);
+  document.getElementById('cmd-result-count').textContent = (list.length === OPS_COMMANDS.commands.length) ? '共 ' + list.length + ' 条' : '找到 ' + list.length + ' / ' + OPS_COMMANDS.commands.length + ' 条';
+}
+
+function cmdClearSearch() {
+  document.getElementById('cmd-search-input').value = '';
+  cmdFilter();
+  document.getElementById('cmd-search-input').focus();
+}
+
+function cmdRenderCards(list, kw) {
+  var container = document.getElementById('cmd-list');
+  if (list.length === 0) {
+    container.innerHTML = '<div class="cmd-no-results"><div class="cmd-no-results-icon">🔎</div><p>未找到匹配的命令</p><p class="cmd-no-results-hint">试试换个关键词，或选择全部命令浏览</p></div>';
+    return;
+  }
+  var h = '';
+  list.forEach(function(cmd, i) {
+    var cat = OPS_COMMANDS.categories.find(function(c) { return c.id === cmd.category; }) || {};
+    var hlName = highlightText(cmd.name, kw);
+    var hlDesc = highlightText(cmd.description, kw);
+    h += '<div class="cmd-card" id="cmd-card-' + i + '">';
+    h += '<div class="cmd-card-header" onclick="cmdToggle(this.parentElement)">';
+    h += '<div class="cmd-card-left"><span class="cmd-card-name">' + hlName + '</span><span class="cmd-card-cat">' + (cat.icon||'') + ' ' + (cat.name||'') + '</span></div>';
+    h += '<div class="cmd-card-right"><span class="cmd-card-desc">' + hlDesc + '</span><span class="cmd-card-arrow">▶</span></div>';
+    h += '</div>';
+    h += '<div class="cmd-card-body">';
+    h += '<div class="cmd-section"><span class="cmd-label">语法</span><code class="cmd-syntax">' + escapeHtml(cmd.syntax) + '</code></div>';
+    h += '<div class="cmd-section"><span class="cmd-label">示例</span><div class="cmd-examples">';
+    cmd.examples.forEach(function(ex) {
+      h += '<div class="cmd-example-item"><code class="cmd-example-cmd">' + highlightText(ex.cmd, kw) + '</code><span class="cmd-example-desc">' + escapeHtml(ex.desc) + '</span></div>';
+    });
+    h += '</div></div>';
+    if (cmd.keywords && cmd.keywords.length) {
+      h += '<div class="cmd-section"><span class="cmd-label">标签</span><div class="cmd-keywords">';
+      cmd.keywords.forEach(function(k) { h += '<span class="cmd-keyword-tag">' + highlightText(k, kw) + '</span>'; });
+      h += '</div></div>';
+    }
+    h += '</div></div>';
+  });
+  container.innerHTML = h;
+}
+
+function cmdToggle(card) {
+  var was = card.classList.contains('expanded');
+  card.classList.toggle('expanded');
+  var arrow = card.querySelector('.cmd-card-arrow');
+  if (arrow) arrow.textContent = was ? '▶' : '▼';
+}
+
+function cmdRenderList() { cmdFilter(); }
+
+// ==================== 实时监控仪表盘 ====================
+
+// ---- SSE / Polling 连接管理 ----
+var dashEventSource = null;
+var dashPaused = false;
+var dashUsePolling = false;
+var dashPollTimer = null;
+
+function dashboardInit() {
+  // 页面首次切换到仪表盘时初始化
+  if (dashEventSource || dashPollTimer) return; // 已初始化
+  initTrendChart();
+  if (window.EventSource && !dashUsePolling) {
+    connectSSE();
+  } else {
+    startPolling();
+  }
+}
+
+function connectSSE() {
+  if (dashEventSource) { dashEventSource.close(); }
+  dashEventSource = new EventSource('/api/dashboard/stream');
+  dashEventSource.onopen = function() {
+    setDashConnection(true, 'SSE 已连接');
+    document.getElementById('dash-subtitle').textContent = '实时推送中 · EventSource';
+  };
+  dashEventSource.onmessage = function(e) {
+    try {
+      var data = JSON.parse(e.data);
+      dashboardUpdate(data);
+    } catch(err) {}
+  };
+  dashEventSource.onerror = function() {
+    setDashConnection(false, 'SSE 断开，重连中...');
+    document.getElementById('dash-subtitle').textContent = '连接中断 · 自动重连中';
+    // EventSource 自动重连，5秒后如果还没恢复就降级为轮询
+    clearTimeout(dashEventSource._fallbackTimer);
+    dashEventSource._fallbackTimer = setTimeout(function() {
+      if (dashEventSource && dashEventSource.readyState !== 1) {
+        dashEventSource.close();
+        dashEventSource = null;
+        dashUsePolling = true;
+        startPolling();
+      }
+    }, 8000);
+  };
+}
+
+function startPolling() {
+  setDashConnection(true, '轮询模式');
+  document.getElementById('dash-subtitle').textContent = '轮询中 · 每 5 秒';
+  dashboardRefresh();
+  dashPollTimer = setInterval(dashboardRefresh, 5000);
+}
+
+function stopPolling() {
+  if (dashPollTimer) { clearInterval(dashPollTimer); dashPollTimer = null; }
+}
+
+function dashboardTogglePause() {
+  dashPaused = !dashPaused;
+  var btn = document.getElementById('dash-pause-btn');
+  if (dashPaused) {
+    btn.textContent = '▶ 恢复';
+    btn.className = 'btn btn-primary btn-sm';
+    if (dashEventSource) { dashEventSource.close(); dashEventSource = null; }
+    stopPolling();
+    setDashConnection(false, '已暂停');
+    document.getElementById('dash-subtitle').textContent = '已暂停 · 点击恢复';
+  } else {
+    btn.textContent = '⏸ 暂停';
+    btn.className = 'btn btn-secondary btn-sm';
+    if (window.EventSource && !dashUsePolling) {
+      connectSSE();
+    } else {
+      startPolling();
+    }
+  }
+}
+
+function setDashConnection(connected, text) {
+  var dot = document.getElementById('dash-connection-dot');
+  dot.className = 'dot ' + (connected ? 'dot-online' : 'dot-offline');
+  document.getElementById('dash-connection-text').textContent = text;
+}
+
+function dashboardRefresh() {
+  get('/api/dashboard/metrics').then(function(r) {
+    if (r && r.checks && r.checks.length > 0) {
+      dashboardUpdate(r);
+    }
+  });
+}
+
+function dashboardInspect() {
+  var btn = document.querySelector('#page-dashboard .dash-controls .btn-primary');
+  if (btn) { btn.textContent = '⏳ 巡检中...'; btn.disabled = true; }
+  setDashConnection(true, '巡检执行中...');
+  post('/api/inspect/run', {}).then(function(r) {
+    if (r && r.result) {
+      // 巡检完成后立即拉取最新指标
+      dashboardRefresh();
+    }
+    if (btn) { btn.textContent = '▶ 立即巡检'; btn.disabled = false; }
+  }).catch(function() {
+    if (btn) { btn.textContent = '▶ 立即巡检'; btn.disabled = false; }
+  });
+}
+
+// ---- Chart.js 趋势图 ----
+var trendChart = null;
+
+function initTrendChart() {
+  var ctx = document.getElementById('trend-chart').getContext('2d');
+  trendChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: '内存 %', data: [], borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,0.05)', tension: 0.3, fill: true, pointRadius: 1 },
+        { label: '磁盘(max)', data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.05)', tension: 0.3, fill: true, pointRadius: 1 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      scales: {
+        y: { min: 0, max: 100, ticks: { callback: function(v) { return v + '%'; } } },
+        x: { ticks: { maxTicksLimit: 12, autoSkip: true } }
+      },
+      plugins: { legend: { position: 'bottom' } }
+    }
+  });
+
+  // 初始加载历史数据
+  get('/api/dashboard/history?minutes=60').then(function(r) {
+    if (r && r.timeline && r.timeline.length > 0) {
+      r.timeline.forEach(function(pt) {
+        addChartPoint(pt);
+      });
+    }
+  });
+}
+
+function addChartPoint(pt) {
+  if (!trendChart) return;
+  var label = pt.time ? pt.time.substring(0, 5) : '';
+  trendChart.data.labels.push(label);
+  // 找内存值
+  var mem = pt.memory_pct;
+  if (mem === undefined) {
+    for (var k in pt) { if (k.indexOf('memory') !== -1 && typeof pt[k] === 'number') { mem = pt[k]; break; } }
+  }
+  trendChart.data.datasets[0].data.push(mem !== undefined ? mem : null);
+  // 找磁盘最大值
+  var diskMax = null;
+  for (var k in pt) {
+    if ((k.indexOf('dev') !== -1 || k.indexOf('C:') !== -1 || k.indexOf('D:') !== -1 || k.indexOf('E:') !== -1) && typeof pt[k] === 'number') {
+      if (diskMax === null || pt[k] > diskMax) diskMax = pt[k];
+    }
+  }
+  trendChart.data.datasets[1].data.push(diskMax);
+  // 保留最近 120 个数据点
+  if (trendChart.data.labels.length > 120) {
+    trendChart.data.labels.shift();
+    trendChart.data.datasets.forEach(function(ds) { ds.data.shift(); });
+  }
+  trendChart.update('none');
+}
+
+// ---- 仪表盘更新 ----
+var _lastLogTimestamp = '';
+
+function dashboardUpdate(metrics) {
+  if (dashPaused) return;
+
+  // 卡片和图表始终更新
+  updateStatusCards(metrics.checks);
+
+  // 告警和日志做去重：同一次巡检数据不重复追加
+  var ts = metrics.timestamp || '';
+  var isDuplicate = ts && ts === _lastLogTimestamp;
+  if (ts && !isDuplicate) _lastLogTimestamp = ts;
+
+  if (!isDuplicate) {
+    updateAlertFeed(metrics.alerts);
+    updateLiveLog(metrics);
+  }
+
+  // 添加图表数据点（从 checks 中提取）
+  var tsPoint = extractTimeseriesPoint(metrics.checks, metrics.timestamp);
+  addChartPoint(tsPoint);
+
+  // 更新副标题
+  var s = metrics.summary;
+  var modeText = metrics.mode ? (' [' + metrics.mode + ']') : '';
+  document.getElementById('dash-subtitle').textContent =
+    '正常:' + (s.normal || 0) + ' · 告警:' + (s.warning || 0) + ' · 异常:' + (s.error || 0) + modeText;
+}
+
+function extractTimeseriesPoint(checks, timestamp) {
+  var pt = { time: timestamp ? timestamp.substring(11, 19) : '' };
+  for (var i = 0; i < checks.length; i++) {
+    var c = checks[i];
+    var items = c.items || [];
+    for (var j = 0; j < items.length; j++) {
+      var detail = items[j].detail || '';
+      var num = parseFloat(detail);
+      if (!isNaN(num) && num <= 100) {
+        pt[items[j].label] = num;
+      }
+    }
+    // 内存：从 summary 提取百分比
+    if (c.type === 'memory') {
+      var pctMatch = (c.summary || '').match(/(\d+\.?\d*)%/);
+      if (pctMatch) pt.memory_pct = parseFloat(pctMatch[1]);
+    }
+  }
+  return pt;
+}
+
+// ---- 状态卡片 ----
+var CARD_MAP = {
+  'ports': 'card-ports',
+  'nginx': 'card-nginx',
+  'oa':    'card-oa',
+  'disk':  'card-disk',
+  'memory':'card-memory'
+};
+
+var STATUS_COLORS = {
+  'normal':  { border: '#22c55e', bg: '#f0fdf4', text: '#166534' },
+  'warning': { border: '#f59e0b', bg: '#fffbeb', text: '#92400e' },
+  'error':   { border: '#ef4444', bg: '#fef2f2', text: '#991b1b' }
+};
+
+function updateStatusCards(checks) {
+  for (var i = 0; i < checks.length; i++) {
+    var c = checks[i];
+    var cardId = CARD_MAP[c.type];
+    if (!cardId) continue;
+    var card = document.getElementById(cardId);
+    if (!card) continue;
+    var colors = STATUS_COLORS[c.status] || STATUS_COLORS['normal'];
+    card.style.borderLeftColor = colors.border;
+    card.style.background = colors.bg;
+    var valueEl = card.querySelector('.card-value');
+    var detailEl = card.querySelector('.card-detail');
+    // 提取关键数字作为大号显示
+    var bigNum = '';
+    var sm = c.summary || '';
+    var numMatch = sm.match(/(\d+\.?\d*)/);
+    if (c.type === 'ports') {
+      var okCount = 0;
+      (c.items || []).forEach(function(it) { if (it.status === 'ok') okCount++; });
+      bigNum = okCount + '/' + (c.items || []).length;
+    } else if (c.type === 'disk' || c.type === 'memory') {
+      var pct = sm.match(/(\d+\.?\d*)%/);
+      bigNum = pct ? pct[1] + '%' : (numMatch ? numMatch[1] : '--');
+    } else {
+      bigNum = numMatch ? numMatch[1] : '--';
+      if (c.type === 'nginx' && sm.indexOf('ms') !== -1) bigNum = numMatch[1] + 'ms';
+      if (c.type === 'oa' && sm.indexOf('ms') !== -1) bigNum = numMatch[1] + 'ms';
+    }
+    valueEl.textContent = bigNum;
+    valueEl.style.color = colors.text;
+    detailEl.textContent = sm;
+  }
+}
+
+// ---- 告警时间线 ----
+var alertCount = 0;
+function updateAlertFeed(alerts) {
+  var feed = document.getElementById('alert-feed');
+  if (!alerts || alerts.length === 0) {
+    if (alertCount === 0) feed.innerHTML = '<div class="alert-empty">暂无告警</div>';
+    return;
+  }
+  // 清空空状态
+  if (alertCount === 0) feed.innerHTML = '';
+  for (var i = alerts.length - 1; i >= 0; i--) {
+    alertCount++;
+    var a = alerts[i];
+    var div = document.createElement('div');
+    div.className = 'alert-item alert-' + a.severity;
+    div.innerHTML = '<span class="alert-dot"></span><span class="alert-time">' + escapeHtml(a.time) + '</span><span class="alert-msg">' + escapeHtml(a.title) + '</span>';
+    feed.insertBefore(div, feed.firstChild);
+  }
+  // 保留最近 50 条
+  while (feed.children.length > 50) feed.removeChild(feed.lastChild);
+}
+
+// ---- 实时日志控制台 ----
+var logLineCount = 0;
+function updateLiveLog(metrics) {
+  var log = document.getElementById('live-log');
+  if (logLineCount === 0) log.innerHTML = '';
+  logLineCount++;
+  var s = metrics.summary || {};
+  var line = document.createElement('div');
+  line.className = 'log-line';
+  var time = (metrics.timestamp || '').substring(11, 19) || new Date().toTimeString().substring(0, 8);
+  line.innerHTML = '<span class="log-time">[' + time + ']</span> 巡检完成 | 正常:<span class="log-ok">' + (s.normal || 0) + '</span> 告警:<span class="log-warn">' + (s.warning || 0) + '</span> 异常:<span class="log-err">' + (s.error || 0) + '</span>';
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+  // 保留最近 100 条
+  while (log.children.length > 100) log.removeChild(log.firstChild);
+}
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+// ---- 页面切换时自动初始化仪表盘 ----
+var origSwitchPage = switchPage;
+switchPage = function(page) {
+  origSwitchPage(page);
+  if (page === 'dashboard') dashboardInit();
+  if (page === 'commands') cmdInit();
+};
+// 初始加载时如果仪表盘是默认页，自动初始化
+if (document.getElementById('page-dashboard').classList.contains('active')) {
+  dashboardInit();
+  // 首次加载没有数据时，自动触发一次巡检
+  get('/api/dashboard/metrics').then(function(r) {
+    if (!r || !r.checks || r.checks.length === 0) {
+      setTimeout(dashboardInspect, 500);
+    }
+  });
+}
 </script>
 
 </body>
