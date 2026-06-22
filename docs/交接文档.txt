@@ -1,10 +1,10 @@
-OA运维多智能Agent巡检问答系统 - 交接文档 v2.2
+OA运维多智能Agent巡检问答系统 - 交接文档 v2.3
 =================================================
-创建: 2026-05-07（v1.0）→ 最后更新: 2026-06-10（v2.2 FastAPI替换Gradio）
-版本: v2.2
+创建: 2026-05-07（v1.0）→ 最后更新: 2026-06-22（v2.3 实时仪表盘 + 命令大全）
+版本: v2.3
 状态: GitHub开源已发布、可演示、可部署、本机离线运行
 仓库: https://github.com/BYYQ778/OA-ops-agent
-最后更新: 2026-06-14 — OCR支持（CnOCR/知识库图片导入/日志截图识别）
+最后更新: 2026-06-22 — v2.3 实时监控仪表盘/运维命令大全(136条)/知识问答命令推荐
 
 ═══════════════════════════════════════════════════════════
 一、项目概述
@@ -14,13 +14,15 @@ OA运维多智能Agent巡检问答系统，面向运维实习生的智能运维�
 基于 Python + LangChain + RAG + Chroma 构建。
 
 核心模块:
+  实时监控仪表盘 → SSE推送 + 5状态卡片 + Chart.js趋势图 + 告警时间线 + 日志控制台
   巡检Agent → 端口/Nginx/OA服务/磁盘/内存 五项检测
   日志分析Agent → 10+正则规则自动识别故障
-  知识库Agent → RAG 智能问答（Chroma + sentence-transformers）
+  知识库Agent → RAG 智能问答 + 场景自动推荐匹配命令
   诊断工具箱 → SSL证书 / 网络诊断 / 数据库巡检(MySQL+MSSQL+Oracle+Redis) / 安全基线
   OCR识别 → 知识库图片导入 / 日志截图识别（CnOCR + hf-mirror国内直连）
   本机巡检 → Windows 原生命令真实数据采集
   AI 报告 → 巡检后自动生成预警分析 + 改进策略
+  运维命令大全 → 136条命令/6大分类/双向搜索/卡片展开/关键词高亮
 
 ═══════════════════════════════════════════════════════════
 二、当前环境
@@ -31,9 +33,9 @@ Python:    3.11.9
 端口:      7860
 数据库:    SQLite → data/oa_ops.db
 配置:      config.yaml（主配置）+ .env（敏感信息）
-认证:      v2.2 FastAPI 未接入登录认证（旧 Gradio 版 admin/admin123 已随框架移除）
+认证:      v2.3 FastAPI 未接入登录认证（旧 Gradio 版 admin/admin123 已随框架移除）
 巡检模式:  local（本机 Windows 真实检测）
-Git:       已初始化，8次提交（master）
+Git:       已初始化，9次提交（master）
 
 ═══════════════════════════════════════════════════════════
 三、v2.0 MVP 全部改造清单（12项）
@@ -98,7 +100,7 @@ Git:       已初始化，8次提交（master）
    - Ollama离线部署指南.md
 
 ═══════════════════════════════════════════════════════════
-四、项目文件结构（v2.2）
+四、项目文件结构（v2.3）
 ═══════════════════════════════════════════════════════════
 
 oa-ops-agent/
@@ -127,14 +129,17 @@ oa-ops-agent/
 │   ├── db_inspector.py          # [v2.1] 数据库巡检(MySQL/MSSQL/Oracle/Redis)
 │   └── security_audit.py        # [v2.1] 安全基线检查
 │
-├── ui/                          # [v2.2] FastAPI + 纯HTML/CSS/JS
-│   ├── server.py                # FastAPI服务端（36个API端点）
-│   ├── templates/index.html     # 纯HTML前端（6页面侧边栏）
-│   └── static/style.css         # 企业级CSS设计系统
+├── ui/                          # [v2.3] FastAPI + 纯HTML/CSS/JS
+│   ├── server.py                # FastAPI服务端（39个API端点）
+│   ├── templates/index.html     # 纯HTML前端（8页面侧边栏）
+│   └── static/
+│       ├── style.css            # 企业级CSS设计系统
+│       └── commands.js          # 运维命令数据库（136条）
 │
 ├── utils/
 │   ├── config.py                # 配置加载器
 │   ├── database.py              # SQLite 数据库（3表）
+│   ├── dashboard.py             # [v2.3] 实时仪表盘数据管理
 │   ├── alert.py                 # 告警通知（邮件/钉钉/企微）
 │   ├── scheduler.py             # 定时调度
 │   ├── doc_parser.py            # 文档解析（含OCR）
@@ -181,8 +186,8 @@ oa-ops-agent/
 ═══════════════════════════════════════════════════════════
 
 ☐ 进程/服务管理模块（Top N进程、僵尸进程、系统负载）
-☐ 快速命令工具箱（分类命令速查 + 一键执行）
-✅ FastAPI REST API 层（v2.2 已完成，36个端点）
+✅ 快速命令大全（136条/6分类/双向搜索/卡片展开）— v2.3 已完成
+✅ FastAPI REST API 层（v2.3 已完成，39个端点）
 ☐ HTTPS 支持
 ☐ Linux 本机巡检支持
 ☐ 前端迁移 React/Vue（当前为 FastAPI + 纯HTML/CSS/JS）
@@ -408,6 +413,7 @@ oa-ops-agent/
   config.yaml 新增 ssl_monitor / network_diag / db_inspection / security 四个配置块
 
 四、Git 版本
+  8fe7d62 v2.3: 实时监控仪表盘 + 运维命令大全 + 知识问答命令推荐
   fd0db04 feat: OCR支持 — 知识库图片导入/日志截图识别，CnOCR国内直连
   3829d60 docs: 维护日志+交接文档更新至0611
   281a019 feat: 恢复知识库拖拽上传 + Docker文件同步v2.2 + 同步清单

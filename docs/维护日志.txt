@@ -446,3 +446,65 @@ Git 版本: 81ee4d4 + ba638a9（squash后2个commit）
 六、Git 版本
   fd0db04 feat: OCR支持 — 知识库图片导入/日志截图识别，CnOCR国内直连
   3829d60 docs: 维护日志+交接文档更新至0611
+
+
+═══════════════════════════════════════════
+【2026-06-22 — v2.3 实时监控仪表盘 + 运维命令大全 + 知识问答命令推荐】
+═══════════════════════════════════════════
+
+一、环境
+  开发机: Windows 11 Home China 10.0.26200
+  项目路径: E:\YunweiAgent\oa-ops-agent
+  Python: 3.11 (env_new 虚拟环境)
+  数据库: SQLite (data/oa_ops.db, WAL 模式)
+
+二、新增功能
+
+1. 实时监控仪表盘
+   - 后端: utils/dashboard.py (642 行)
+     · DashboardManager 单例: SSE 发布订阅 + 指标解析 + 历史时序缓存
+     · parse_inspection_to_metrics(): 统一解析模拟/本机/SSH 三种巡检文本
+     · _split_inspection_text(): 按检测项切分 + AI 报告区截断去重
+   - API: GET /api/dashboard/metrics, /api/dashboard/stream (SSE), /api/dashboard/history
+   - 巡检集成: _inspect_with_dashboard() 包装 run_unified_inspection()
+   - 前端: 5 状态卡片 + Chart.js 趋势图 + 告警时间线 + 终端日志控制台
+   - SSE 降级: EventSource 不可用时自动切 5s 轮询
+   - 去重: 时间戳去重防止 SSE+refresh 双重推送
+
+2. 运维命令大全
+   - 数据: ui/static/commands.js (710 行, 136 条命令)
+   - 6 大分类: 系统管理(27) / 网络诊断(21) / 文件操作(31) / 进程管理(21) / 日志查看(16) / 权限管理(22)
+   - 工具函数: searchCommands() 双向检索 + highlightText() 关键词高亮
+   - 前端: 左侧分类导航 + 搜索框 + 命令卡片 + 点击展开语法/示例/标签
+   - 响应式: 窄屏分类导航变横排
+
+3. 知识问答命令推荐
+   - kbAsk() 调用 searchCommands() 自动匹配场景命令
+   - renderQaCommands() 渲染推荐卡片（最多 8 条）
+   - 点击展开查看语法和示例
+
+三、文件变更
+
+  新增:
+    utils/dashboard.py         — 仪表盘数据管理 (642 行)
+    ui/static/commands.js      — 运维命令数据库 (710 行, 136 条)
+
+  修改:
+    main.py                    — v2.2 → v2.3 全线版本号
+    ui/server.py                — +101 行 (3 个仪表盘 API + 巡检集成 + StreamingResponse)
+    ui/templates/index.html     — +577 行 (仪表盘页面 + 命令大全页面 + 命令推荐组件)
+    ui/static/style.css         — +506 行 (仪表盘 + 命令大全 + 命令推荐样式)
+    README.md                   — 功能列表 + 目录结构 + FAQ 版本号
+    docs/同步清单.md            — 6/22 遗漏记录
+    docs/维护日志.txt           — 本次更新
+    docs/交接文档.txt           — 同步 v2.3
+
+四、关键设计决策
+  - SSE 而非 WebSocket: 单向推送够用，EventSource 原生支持，自动重连
+  - 指标解析器: 兼容模拟/本机 Windows/SSH Linux 三种格式
+  - 文本切分: [HOSTNAME] 标记优先 → [状态] 行次之 → AI 报告区截断
+  - 命令大全: 纯前端搜索（searchCommands），无需后端 API
+  - 命令推荐: 前端在 kbAsk 后自动调用 searchCommands
+
+五、Git 版本
+  8fe7d62 v2.3: 实时监控仪表盘 + 运维命令大全 + 知识问答命令推荐
