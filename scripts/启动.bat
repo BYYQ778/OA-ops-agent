@@ -71,7 +71,7 @@ if %errorlevel% neq 0 (
 )
 
 set "OLLAMA_MODEL=qwen3:8b"
-for /f "tokens=2" %%a in ('findstr "model:" config.yaml ^| findstr /v "api_key\|base_url\|temperature\|max_tokens"') do set "OLLAMA_MODEL=%%a"
+for /f "tokens=2" %%a in ('findstr "model:" config.yaml ^| findstr /v "api_key\|base_url\|temperature\|max_tokens\|model_name"') do set "OLLAMA_MODEL=%%a"
 
 ollama list 2>nul | findstr /i "%OLLAMA_MODEL%" >nul
 if %errorlevel%==0 (

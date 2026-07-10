@@ -83,18 +83,24 @@ def run_cli_mode():
     print("输入 'exit' 退出")
     print("=" * 55 + "\n")
 
-    # 从配置读取 LLM 参数
-    api_key = config.get("llm.api_key")
-    api_base = config.get("llm.base_url")
-    api_model = config.get("llm.model")
+    # 从配置读取 LLM 参数（根据 provider 选择 Ollama 或云端）
+    provider = config.get("llm.provider", "ollama")
+    if provider == "ollama":
+        api_key = "ollama"
+        api_base = config.get("llm.ollama.base_url", "http://localhost:11434/v1")
+        api_model = config.get("llm.ollama.model", "qwen3:8b")
+    else:
+        api_key = config.get("llm.api_key")
+        api_base = config.get("llm.base_url")
+        api_model = config.get("llm.model")
 
     from agents.inspection_agent import InspectionAgent
     from agents.log_analysis_agent import LogAnalysisAgent
 
-    if api_key:
+    if provider == "ollama" or api_key:
         insp_agent = InspectionAgent(api_key, api_base, api_model)
         log_agent = LogAnalysisAgent(api_key, api_base, api_model)
-        print("✓ Agent已初始化（使用API模式）\n")
+        print(f"✓ Agent已初始化（{provider}/{api_model}）\n")
     else:
         insp_agent = None
         log_agent = None
@@ -178,12 +184,17 @@ def main():
         # Web模式 — FastAPI + 纯HTML/CSS/JS
         from ui.server import run_server
 
-        api_key = config.get("llm.api_key")
-        if api_key:
-            print(f"[OK] LLM 已配置（{config.get('llm.provider')}/{config.get('llm.model')}）")
+        provider = config.get("llm.provider", "ollama")
+        if provider == "ollama":
+            model = config.get("llm.ollama.model", "qwen3:8b")
+            print(f"[OK] LLM 本地离线模式（Ollama/{model}）")
         else:
-            print("⚠️ 未配置 LLM API Key，知识库问答功能不可用")
-            print("   请编辑 .env 文件填入 OA_LLM_API_KEY")
+            api_key = config.get("llm.api_key")
+            if api_key:
+                print(f"[OK] LLM 已配置（{provider}/{config.get('llm.model')}）")
+            else:
+                print("⚠️ 未配置 LLM API Key，知识库问答功能不可用")
+                print("   请编辑 .env 文件填入 OA_LLM_API_KEY")
 
         print(f"启动Web界面: http://{host}:{port}")
         print("按 Ctrl+C 停止服务\n")

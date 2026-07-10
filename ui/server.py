@@ -303,15 +303,19 @@ def get_kb_agent():
     global _kb_agent
     if _kb_agent is None:
         try:
-            api_key = app_config.get("llm.api_key", "")
-            base_url = app_config.get("llm.base_url", "")
-            model = app_config.get("llm.model", "")
-            if not api_key:
-                from agents.knowledge_agent import KnowledgeBaseAgent
-                _kb_agent = KnowledgeBaseAgent(llm_api_key="ollama", llm_base_url="http://localhost:11434/v1", llm_model="qwen3:8b")
+            provider = app_config.get("llm.provider", "ollama")
+            if provider == "ollama":
+                api_key = "ollama"
+                base_url = app_config.get("llm.ollama.base_url", "http://localhost:11434/v1")
+                model = app_config.get("llm.ollama.model", "qwen3:8b")
             else:
-                from agents.knowledge_agent import KnowledgeBaseAgent
-                _kb_agent = KnowledgeBaseAgent(llm_api_key=api_key, llm_base_url=base_url, llm_model=model)
+                api_key = app_config.get("llm.api_key", "")
+                base_url = app_config.get("llm.base_url", "")
+                model = app_config.get("llm.model", "")
+                if not api_key:
+                    return None
+            from agents.knowledge_agent import KnowledgeBaseAgent
+            _kb_agent = KnowledgeBaseAgent(llm_api_key=api_key, llm_base_url=base_url, llm_model=model)
         except Exception as e:
             return None
     return _kb_agent
@@ -370,6 +374,170 @@ async def api_kb_clear():
     if kb is None:
         return {"result": "知识库引擎未就绪"}
     return {"result": kb.clear_knowledge_base()}
+
+
+# ============ 对话 Chat API (v2.4) ============
+
+@app.post("/api/kb/chat")
+async def api_kb_chat(
+    message: str = Form(...),
+    conversation_id: str = Form("default"),
+):
+    """
+    多轮对话问答（带记忆）。
+
+    Args:
+        message: 用户消息
+        conversation_id: 对话 ID，不同 ID 独立记忆。默认 "default"
+    """
+    kb = get_kb_agent()
+    if kb is None:
+        return {"answer": "知识库引擎未就绪，请确认嵌入模型已加载且 LLM 配置正确"}
+    answer = kb.chat(message, conversation_id=conversation_id)
+    return {"answer": answer, "conversation_id": conversation_id}
+
+
+@app.post("/api/kb/chat/clear")
+async def api_kb_chat_clear(conversation_id: str = Form("default")):
+    """清除指定对话的历史记录。"""
+    kb = get_kb_agent()
+    if kb is None:
+        return {"ok": False}
+    kb.clear_conversation(conversation_id)
+    return {"ok": True, "conversation_id": conversation_id}
+
+
+@app.get("/api/kb/chat/history")
+async def api_kb_chat_history(conversation_id: str = "default"):
+    """获取对话历史。"""
+    kb = get_kb_agent()
+    if kb is None:
+        return {"messages": []}
+    return {"messages": kb.get_conversation(conversation_id)}
+
+
+# ============ 批量问答 API (v2.4) ============
+
+@app.post("/api/kb/batch-ask")
+async def api_kb_batch_ask(questions: str = Form("")):
+    """
+    批量处理多个问题（最多 20 题并行）。
+
+    Args:
+        questions: 换行分隔的问题列表
+    """
+    kb = get_kb_agent()
+    if kb is None:
+        return {"results": [], "error": "知识库引擎未就绪"}
+
+    question_list = [q.strip() for q in questions.split("\n") if q.strip()]
+    if not question_list:
+        return {"results": [], "error": "未提供有效问题"}
+
+    max_batch = app_config.get("knowledge_base.agentic_rag.batch_max_questions", 20)
+    if len(question_list) > max_batch:
+        question_list = question_list[:max_batch]
+
+    import concurrent.futures
+
+    provider = app_config.get("llm.provider", "ollama")
+    max_workers = min(len(question_list), app_config.get("knowledge_base.agentic_rag.parallel_workers", 5))
+
+    logger.info(f"批量问答: {len(question_list)} 题, workers={max_workers}")
+
+    results = [None] * len(question_list)
+
+    def process(idx, q):
+        try:
+            return idx, kb.query(q)
+        except Exception as e:
+            return idx, f"[错误] {str(e)}"
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(process, i, q): i for i, q in enumerate(question_list)}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                idx, answer = future.result()
+                results[idx] = {"question": question_list[idx], "answer": answer}
+            except Exception as e:
+                idx = futures[future]
+                results[idx] = {"question": question_list[idx], "answer": f"[错误] {e}"}
+
+    return {"results": results, "total": len(results)}
+
+
+# ============ 知识图谱 API (v2.4) ============
+
+def _get_kg_store():
+    """获取知识图谱存储实例（从 KB Agent 中提取）。"""
+    kb = get_kb_agent()
+    if kb is None:
+        return None
+    if not hasattr(kb, "kg_store") or kb.kg_store is None:
+        return None
+    if kb.kg_store.graph.number_of_nodes() == 0:
+        return None
+    return kb.kg_store
+
+
+@app.post("/api/kg/search")
+async def api_kg_search(query: str = Form(...), entity_type: str = Form(None)):
+    """搜索知识图谱中的实体（按名称/描述）。"""
+    store = _get_kg_store()
+    if store is None:
+        return JSONResponse(
+            {"error": "知识图谱不可用。请先导入文档以构建图谱。"},
+            status_code=503,
+        )
+    etype = entity_type if entity_type and entity_type != "all" else None
+    results = store.search_nodes(query, entity_type=etype, limit=30)
+    return {
+        "results": results,
+        "total": len(results),
+        "stats": store.get_stats(),
+    }
+
+
+@app.post("/api/kg/explore")
+async def api_kg_explore(node_id: str = Form(...), depth: int = Form(2)):
+    """提取以指定节点为中心的子图（供可视化）。"""
+    store = _get_kg_store()
+    if store is None:
+        return JSONResponse(
+            {"error": "知识图谱不可用"},
+            status_code=503,
+        )
+    subgraph = store.extract_subgraph(node_id, depth=min(depth, 5))
+    return {"subgraph": subgraph}
+
+
+@app.post("/api/kg/path")
+async def api_kg_path(source: str = Form(...), target: str = Form(...)):
+    """查找两个实体之间的最短路径。"""
+    store = _get_kg_store()
+    if store is None:
+        return JSONResponse(
+            {"error": "知识图谱不可用"},
+            status_code=503,
+        )
+    result = store.find_shortest_path(source, target)
+    if result.get("error"):
+        return {"error": result["error"], "path": [], "length": -1}
+    return {"path": result["path"], "length": result["length"], "nodes": result.get("nodes", []), "edges": result.get("edges", [])}
+
+
+@app.get("/api/kg/stats")
+async def api_kg_stats():
+    """获取知识图谱统计信息。"""
+    store = _get_kg_store()
+    if store is None:
+        return {
+            "available": False,
+            "message": "知识图谱不可用。请先导入文档或启用 kg.enabled。",
+        }
+    stats = store.get_stats()
+    stats["available"] = True
+    return stats
 
 
 # ============ 运维命令大全 API ============

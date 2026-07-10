@@ -153,28 +153,77 @@ class KnowledgeBaseAgent:
             max_tokens=2048,
         )
 
-        # ---- 构建RAG专用的Agent ----
+        # ---- 初始化知识图谱（可选，config 控制）----
+        self.kg_store = None
+        self.kg_builder = None
+        self._init_kg()
+
+        # ---- 对话记忆（chatbot 多轮对话）----
+        self.conversations: Dict[str, List[Dict]] = {}
+
+        # ---- 构建 Agent（Agentic RAG 或简单 RAG）----
+        self.agentic_graph = None
         self._setup_agent()
 
         logger.info("知识库Agent初始化完成")
 
+    def _init_kg(self):
+        """根据配置初始化知识图谱（Phase 2）。"""
+        try:
+            from utils.config import config as app_config
+            kg_enabled = app_config.get("knowledge_base.kg.enabled", False)
+        except Exception:
+            kg_enabled = False
+
+        if not kg_enabled:
+            logger.info("知识图谱未启用（config.knowledge_base.kg.enabled=false）")
+            return
+
+        try:
+            from utils.kg_store import KGStore
+            from agents.kg_builder import KnowledgeGraphBuilder
+            from utils.config import config as app_config
+
+            storage_dir = app_config.get("knowledge_base.kg.storage_dir", "data/knowledge_graph")
+            provider = app_config.get("llm.provider", "ollama")
+
+            self.kg_store = KGStore(storage_dir)
+            self.kg_builder = KnowledgeGraphBuilder(
+                llm=self.llm,
+                kg_store=self.kg_store,
+                provider=provider,
+            )
+            logger.info("知识图谱已初始化" + (f" ({self.kg_store.get_stats()['total_nodes']} 节点)" if self.kg_store.graph.number_of_nodes() > 0 else ""))
+        except Exception as e:
+            logger.warning(f"知识图谱初始化失败（KG 功能不可用）: {e}")
+            self.kg_store = None
+            self.kg_builder = None
+
     def _setup_agent(self):
-        """构建LangChain Agent，注册知识库工具"""
-        kb = self  # 闭包引用，避免 self 被 @tool 识别为工具参数
+        """构建 Agent。根据 config 选择 Agentic RAG 或简单 RAG。"""
+        try:
+            from utils.config import config as app_config
+            use_agentic = app_config.get("knowledge_base.agentic_rag.enabled", False)
+        except Exception:
+            use_agentic = False
+
+        if use_agentic:
+            self._setup_agentic_rag()
+        else:
+            self._setup_legacy_agent()
+
+    def _setup_legacy_agent(self):
+        """构建简单 LangChain Agent（v2.x 兼容模式）。"""
+        kb = self
 
         @tool
         def search_knowledge_base(query: str) -> str:
-            """
-            从运维知识库中检索与用户问题最相关的文档内容。
-            此工具会返回知识库中最匹配的文档片段。
-            """
+            """从运维知识库中检索与用户问题最相关的文档内容。"""
             return kb._retrieve_context(query)
 
         @tool
         def get_kb_stats(dummy: str = "") -> str:
-            """
-            获取当前知识库的统计信息，包括文档总数、分块总数等。
-            """
+            """获取当前知识库的统计信息。"""
             return kb.get_stats()
 
         self.agent = create_agent(
@@ -182,6 +231,243 @@ class KnowledgeBaseAgent:
             tools=[search_knowledge_base, get_kb_stats],
             system_prompt=RAG_SYSTEM_PROMPT,
         )
+        logger.info("简单 RAG Agent 已就绪")
+
+    # ========== Agentic RAG — LangGraph ReAct ==========
+
+    AGENTIC_RAG_PROMPT = """你是一个 OA 运维知识库智能助手，可以多步检索来回答问题。
+
+## 可用工具
+1. search_kb — 向量语义搜索，从知识库找相关文档片段
+2. search_kg — 搜索知识图谱，查找相关实体（技术/概念/组织等）
+3. explore_graph — 探索图谱中某个实体的邻居，发现关联概念
+
+## 决策流程
+每次收到用户问题后，按以下步骤操作：
+- 第一步：使用 search_kb 做宽泛的语义检索
+- 第二步：使用 search_kg 查找问题中涉及的关键实体
+- 第三步：如发现有价值的实体，用 explore_graph 探索其关联
+- 第四步：综合所有信息，给出最终答案
+
+## 回答规则
+- **只能**基于检索到的内容回答，禁止使用外部知识
+- 如检索结果不足以回答，明确告知用户
+- 引用具体的文档来源
+- 按步骤列出操作建议
+
+## 输出格式
+每次你的回复必须以以下格式开头：
+NEXT_ACTION: search_kb | search_kg | explore_graph | answer
+
+如果是 answer，之后的内容就是给用户的最终回答。
+如果是其他 action，之后的内容是传给该工具的查询关键词（纯文本，不含引号）。"""
+
+    def _setup_agentic_rag(self):
+        """构建 LangGraph ReAct Agent（支持 Ollama 和 DeepSeek）。"""
+        try:
+            from langgraph.graph import StateGraph, END
+            from typing import TypedDict, Annotated, List as ListType
+        except ImportError:
+            logger.warning("langgraph 未安装，回退到简单 RAG")
+            self._setup_legacy_agent()
+            return
+
+        # 检查 KG 是否就绪
+        has_kg = self.kg_store is not None and self.kg_store.graph.number_of_nodes() > 0
+        if not has_kg:
+            logger.info("知识图谱为空或未启用，Agentic RAG 仅使用向量检索")
+
+        kb = self
+
+        # ---- State ----
+        class AgenticState(TypedDict):
+            messages: list
+            question: str
+            kb_context: str
+            kg_context: str
+            reasoning_steps: int
+            next_action: str
+            final_answer: str
+
+        # ---- Router Node ----
+        def router_node(state: dict) -> dict:
+            step = state.get("reasoning_steps", 0) + 1
+            max_steps = self._get_agentic_config("max_reasoning_steps", 5)
+
+            if step > max_steps:
+                return {"next_action": "answer", "reasoning_steps": step}
+
+            # 构建 router prompt
+            tool_list = "search_kb, answer"
+            if has_kg:
+                tool_list = "search_kb, search_kg, explore_graph, answer"
+
+            context_summary = ""
+            if state.get("kb_context"):
+                context_summary += f"[向量检索结果] {state['kb_context'][:500]}\n"
+            if state.get("kg_context"):
+                context_summary += f"[图谱检索结果] {state['kg_context'][:500]}\n"
+
+            router_msg = f"""问题: {state['question']}
+
+当前步骤: {step}/{max_steps}
+已获取的信息:
+{context_summary if context_summary else '（暂无，这是第一步）'}
+
+可用工具: {tool_list}
+
+基于当前信息，决定下一步。如果已有足够信息回答用户，选择 answer。"""
+
+            try:
+                resp = kb.llm.invoke([
+                    {"role": "system", "content": kb.AGENTIC_RAG_PROMPT},
+                    {"role": "user", "content": router_msg},
+                ])
+                content = resp.content if hasattr(resp, "content") else str(resp)
+
+                # 解析 NEXT_ACTION
+                import re as _re
+                action_match = _re.search(r"NEXT_ACTION:\s*(\w+)", content, _re.IGNORECASE)
+                if action_match:
+                    action = action_match.group(1).strip().lower()
+                    if action not in ("search_kb", "search_kg", "explore_graph", "answer"):
+                        action = "search_kb"
+                else:
+                    # 如果 LLM 没有遵循格式，检查是否看起来像一个答案
+                    if len(content) > 100 and "NEXT_ACTION" not in content.upper():
+                        action = "answer"
+                    else:
+                        action = "search_kb"
+
+                if action in ("search_kg", "explore_graph") and not has_kg:
+                    action = "search_kb"
+
+            except Exception as e:
+                logger.warning(f"Router LLM 调用失败: {e}")
+                action = "search_kb"
+
+            # 提取工具参数（NEXT_ACTION 行之后的内容）
+            tool_input = content
+            if action_match:
+                tool_input = content[action_match.end():].strip()
+                if not tool_input:
+                    tool_input = state["question"]
+
+            return {
+                "messages": state.get("messages", []) + [{"role": "assistant", "content": content}],
+                "next_action": action,
+                "reasoning_steps": step,
+                "_tool_input": tool_input,
+            }
+
+        # ---- search_kb Node ----
+        def search_kb_node(state: dict) -> dict:
+            query = state.get("_tool_input", state["question"])
+            ctx = kb._retrieve_context(query)
+            existing = state.get("kb_context", "")
+            return {"kb_context": (existing + "\n\n" + ctx).strip(), "_tool_input": ""}
+
+        # ---- search_kg Node ----
+        def search_kg_node(state: dict) -> dict:
+            if not has_kg:
+                return {}
+            query = state.get("_tool_input", state["question"])
+            ctx = kb.kg_store.to_context_string(query)
+            existing = state.get("kg_context", "")
+            return {"kg_context": (existing + "\n\n" + ctx).strip(), "_tool_input": ""}
+
+        # ---- explore_graph Node ----
+        def explore_graph_node(state: dict) -> dict:
+            if not has_kg:
+                return {}
+            query = state.get("_tool_input", state["question"])
+            # 查找第一个匹配的实体，提取其子图
+            nodes = kb.kg_store.search_nodes(query, limit=3)
+            if not nodes:
+                return {"kg_context": state.get("kg_context", "") + f"\n[图谱探索] 未找到与 '{query}' 相关的实体", "_tool_input": ""}
+
+            parts = []
+            for node in nodes[:2]:
+                sub = kb.kg_store.extract_subgraph(node["id"], depth=2)
+                related_names = [n["name"] for n in sub.get("nodes", []) if n.get("name") != node["name"]]
+                parts.append(f"[{node['type']}] {node['name']} → 关联: {', '.join(related_names[:10])}")
+
+            existing = state.get("kg_context", "")
+            return {"kg_context": (existing + "\n[图谱探索]\n" + "\n".join(parts)).strip(), "_tool_input": ""}
+
+        # ---- Answer Node ----
+        def answer_node(state: dict) -> dict:
+            kb_ctx = state.get("kb_context", "")
+            kg_ctx = state.get("kg_context", "")
+
+            answer_prompt = f"""基于以下检索到的信息回答用户问题。
+
+## 知识库检索结果
+{kb_ctx if kb_ctx else '（无结果）'}
+
+## 知识图谱信息
+{kg_ctx if kg_ctx else '（无图谱数据）'}
+
+## 用户问题
+{state['question']}
+
+请给出完整、准确的回答。引用来源。如果信息不足，请明确说明。"""
+
+            try:
+                resp = kb.llm.invoke([
+                    {"role": "system", "content": "你是一个 OA 运维知识库助手。严格基于提供的检索信息回答，禁止编造。"},
+                    {"role": "user", "content": answer_prompt},
+                ])
+                answer = resp.content if hasattr(resp, "content") else str(resp)
+            except Exception as e:
+                logger.warning(f"Answer LLM 调用失败: {e}")
+                answer = f"[检索模式] 以下是与您问题相关的内容（LLM 暂不可用）：\n\n{kb_ctx}\n\n{kg_ctx}"
+
+            return {
+                "final_answer": answer,
+                "messages": state.get("messages", []) + [{"role": "assistant", "content": answer}],
+            }
+
+        # ---- Build Graph ----
+        builder = StateGraph(AgenticState)
+
+        builder.add_node("router", router_node)
+        builder.add_node("search_kb", search_kb_node)
+        builder.add_node("search_kg", search_kg_node)
+        builder.add_node("explore_graph", explore_graph_node)
+        builder.add_node("answer", answer_node)
+
+        builder.set_entry_point("router")
+
+        # Conditional edges from router
+        def route_after_router(state: dict) -> str:
+            return state.get("next_action", "search_kb")
+
+        builder.add_conditional_edges("router", route_after_router, {
+            "search_kb": "search_kb",
+            "search_kg": "search_kg",
+            "explore_graph": "explore_graph",
+            "answer": "answer",
+        })
+
+        # Tool nodes → back to router
+        builder.add_edge("search_kb", "router")
+        builder.add_edge("search_kg", "router")
+        builder.add_edge("explore_graph", "router")
+
+        # Answer → END
+        builder.add_edge("answer", END)
+
+        self.agentic_graph = builder.compile()
+        logger.info(f"Agentic RAG (LangGraph ReAct) 已就绪" + (" (含 KG)" if has_kg else " (仅向量检索)"))
+
+    def _get_agentic_config(self, key: str, default):
+        """读取 agentic_rag 配置项。"""
+        try:
+            from utils.config import config as app_config
+            return app_config.get(f"knowledge_base.agentic_rag.{key}", default)
+        except Exception:
+            return default
 
     # ========== 核心功能 ==========
 
@@ -270,12 +556,23 @@ class KnowledgeBaseAgent:
             self.vector_store.add_documents(documents)
             logger.info(f"  向量化并存入Chroma完成")
 
+            # 第5步：构建知识图谱（非阻塞，失败不影响向量库）
+            kg_entity_count = 0
+            if self.kg_builder is not None:
+                try:
+                    kg_entity_count = self.kg_builder.add_document(raw_text, file_name)
+                    self.kg_store.save()
+                    logger.info(f"  知识图谱构建完成: {kg_entity_count} 个实体")
+                except Exception as e:
+                    logger.warning(f"  知识图谱构建失败（向量库已正常导入）: {e}")
+
             summary = (
                 f"文档导入成功！\n"
                 f"  文件名: {file_name}\n"
                 f"  文档长度: {len(raw_text)} 字符\n"
-                f"  分块数量: {len(chunks)} 块\n"
-                f"  分块大小: {CHUNK_SIZE} 字/块 (重叠 {CHUNK_OVERLAP} 字)\n"
+                f"  分块数量: {len(chunks)} 块 (向量库)\n"
+                + (f"  实体提取: {kg_entity_count} 个实体 (知识图谱)\n" if kg_entity_count else "")
+                + f"  分块大小: {CHUNK_SIZE} 字/块 (重叠 {CHUNK_OVERLAP} 字)\n"
                 f"  存储位置: {CHROMA_DB_DIR}"
             )
             return summary
@@ -284,34 +581,154 @@ class KnowledgeBaseAgent:
             logger.error(f"文档导入失败: {e}")
             return f"[错误] 文档导入失败: {str(e)}"
 
+    # ========== 对话 Chatbot ==========
+
+    def chat(self, message: str, conversation_id: str = "default") -> str:
+        """
+        多轮对话问答（带记忆）。
+
+        Args:
+            message: 用户当前消息
+            conversation_id: 对话 ID（不同 ID 独立记忆）
+
+        Returns:
+            基于知识库 + 对话历史的回答
+        """
+        if not message.strip():
+            return "[提示] 请输入您想咨询的运维问题。"
+
+        # 获取或创建对话历史
+        if conversation_id not in self.conversations:
+            self.conversations[conversation_id] = []
+        history = self.conversations[conversation_id]
+
+        logger.info(f"对话 [{conversation_id}] 第 {len(history)//2 + 1} 轮: {message[:50]}...")
+
+        # 构建对话上下文
+        memory_turns = self._get_agentic_config("chat_max_turns", 10)
+        chat_context = self._format_chat_history(history, max_turns=memory_turns)
+
+        # ---- Agentic RAG 路径 ----
+        if self.agentic_graph is not None:
+            answer = self._query_agentic(message, chat_history=chat_context)
+        else:
+            answer = self._query_legacy(message, chat_history=chat_context)
+
+        # 保存到历史
+        history.append({"role": "user", "content": message})
+        history.append({"role": "assistant", "content": answer})
+
+        # 限制历史长度（最多保留 30 轮 = 60 条消息）
+        max_messages = self._get_agentic_config("chat_max_history", 30) * 2
+        if len(history) > max_messages:
+            self.conversations[conversation_id] = history[-max_messages:]
+
+        return answer
+
+    def clear_conversation(self, conversation_id: str = "default"):
+        """清除指定对话的历史记录。"""
+        self.conversations.pop(conversation_id, None)
+
+    def get_conversation(self, conversation_id: str = "default") -> List[Dict]:
+        """获取对话历史。"""
+        return self.conversations.get(conversation_id, [])
+
+    def _format_chat_history(self, history: List[Dict], max_turns: int = 10) -> str:
+        """将对话历史格式化为上下文字符串。"""
+        if not history:
+            return "（这是对话的第一轮）"
+
+        recent = history[-max_turns * 2:]  # 每轮 = user + assistant
+        lines = ["## 对话历史"]
+        for i, msg in enumerate(recent):
+            role = "用户" if msg["role"] == "user" else "助手"
+            content = msg["content"][:500]  # 每条消息最多 500 字，避免撑爆上下文
+            lines.append(f"{role}: {content}")
+        return "\n".join(lines)
+
+    # ========== 单次问答 ==========
+
     def query(self, question: str) -> str:
         """
-        基于RAG回答运维知识问题。
+        单次问答（无记忆），基于 RAG / Agentic RAG。
 
         Args:
             question: 用户的运维问题
-
-        Returns:
-            基于知识库的回答
         """
         if not question.strip():
             return "[提示] 请输入您想咨询的运维问题。"
 
-        # 先获取知识库概况
+        logger.info(f"问答: {question[:50]}...")
+
+        if self.agentic_graph is not None:
+            return self._query_agentic(question)
+
+        return self._query_legacy(question)
+
+    def _query_agentic(self, question: str, chat_history: str = "") -> str:
+        """LangGraph ReAct Agent 多步推理问答。"""
+        try:
+            # 将对话历史注入到初始消息
+            initial_messages = []
+            if chat_history:
+                initial_messages.append({
+                    "role": "user",
+                    "content": f"{chat_history}\n\n## 当前问题\n{question}"
+                })
+                # 把历史当上下文给 router，但把原始问题保留给检索
+                effective_question = question
+            else:
+                effective_question = question
+
+            result = self.agentic_graph.invoke({
+                "messages": initial_messages,
+                "question": effective_question,
+                "kb_context": "",
+                "kg_context": "",
+                "reasoning_steps": 0,
+                "next_action": "search_kb",
+                "final_answer": "",
+            })
+            answer = result.get("final_answer", "")
+            if answer:
+                return answer
+            # 回退：从 messages 中提取最后一条
+            messages = result.get("messages", [])
+            if messages:
+                return messages[-1].get("content", "问答处理异常，请重试")
+            return "问答处理异常，请重试"
+
+        except Exception as e:
+            logger.warning(f"Agentic RAG 异常，降级到检索模式: {e}")
+            context = self._retrieve_context(question)
+            if self.kg_store:
+                try:
+                    kg_ctx = self.kg_store.to_context_string(question)
+                    context = context + "\n\n[知识图谱]\n" + kg_ctx
+                except Exception:
+                    pass
+            return (
+                f"[检索降级模式] 以下是与您问题相关的知识库内容：\n\n"
+                f"{context}"
+            )
+
+    def _query_legacy(self, question: str, chat_history: str = "") -> str:
+        """简单 RAG 问答（v2.x 兼容）。"""
         kb_info = self.get_stats()
 
-        logger.info(f"RAG问答: {question[:50]}...")
+        prompt = question
+        if chat_history:
+            prompt = f"{chat_history}\n\n## 当前问题\n{question}"
 
         try:
             result = self.agent.invoke({
                 "messages": [
-                    {"role": "user", "content": f"{question}\n\n当前知识库状态: {kb_info}"}
+                    {"role": "user", "content": f"{prompt}\n\n当前知识库状态: {kb_info}"}
                 ]
             })
             messages = result.get("messages", [])
             return messages[-1].content if messages else "问答处理异常，请重试"
         except Exception as e:
-            # LLM不可用时，降级为仅检索（不生成回答）
             logger.warning(f"LLM调用异常，降级为检索模式: {e}")
             context = self._retrieve_context(question)
             return (
@@ -388,6 +805,14 @@ class KnowledgeBaseAgent:
             self.vector_store.delete(ids=ids_to_delete)
             logger.info(f"已删除文档 '{doc_name}' 的 {len(ids_to_delete)} 个分块")
 
+            # 同步清理知识图谱
+            if self.kg_builder is not None:
+                try:
+                    self.kg_builder.remove_document(doc_name)
+                    self.kg_store.save()
+                except Exception as e:
+                    logger.warning(f"KG 清理失败（不影响向量库删除）: {e}")
+
             return f"文档 '{doc_name}' 已从知识库删除（共移除 {len(ids_to_delete)} 个分块）。"
 
         except Exception as e:
@@ -395,7 +820,7 @@ class KnowledgeBaseAgent:
 
     def get_stats(self) -> str:
         """
-        获取知识库统计信息。
+        获取知识库统计信息（含知识图谱）。
 
         Returns:
             统计数据字符串
@@ -403,23 +828,38 @@ class KnowledgeBaseAgent:
         try:
             all_data = self.vector_store.get()
             if not all_data["ids"]:
-                return "知识库为空，尚未导入任何文档。"
+                base = "知识库为空，尚未导入任何文档。"
+            else:
+                total_chunks = len(all_data["ids"])
+                total_chars = sum(
+                    m.get("chunk_size", 0) for m in all_data["metadatas"]
+                )
+                unique_docs = len(set(
+                    m.get("source", "") for m in all_data["metadatas"]
+                ))
+                base = (
+                    f"知识库概况:\n"
+                    f"  文档数量: {unique_docs} 份\n"
+                    f"  分块总数: {total_chunks} 块\n"
+                    f"  总字数: {total_chars} 字\n"
+                    f"  存储路径: {CHROMA_DB_DIR}"
+                )
 
-            total_chunks = len(all_data["ids"])
-            total_chars = sum(
-                m.get("chunk_size", 0) for m in all_data["metadatas"]
-            )
-            unique_docs = len(set(
-                m.get("source", "") for m in all_data["metadatas"]
-            ))
+            # 附加 KG 统计
+            if self.kg_store is not None:
+                try:
+                    kg_stats = self.kg_store.get_stats()
+                    base += (
+                        f"\n\n知识图谱概况:\n"
+                        f"  实体总数: {kg_stats['total_nodes']}\n"
+                        f"  关联边数: {kg_stats['total_edges']}\n"
+                        f"  实体类型: {kg_stats['nodes_by_type']}\n"
+                        f"  存储路径: {kg_stats['storage_dir']}"
+                    )
+                except Exception:
+                    pass
 
-            return (
-                f"知识库概况:\n"
-                f"  文档数量: {unique_docs} 份\n"
-                f"  分块总数: {total_chunks} 块\n"
-                f"  总字数: {total_chars} 字\n"
-                f"  存储路径: {CHROMA_DB_DIR}"
-            )
+            return base
 
         except Exception as e:
             return f"统计获取失败: {str(e)}"
@@ -446,6 +886,14 @@ class KnowledgeBaseAgent:
                 count = len(all_data["ids"])
                 self.vector_store.delete(ids=all_data["ids"])
                 logger.info(f"知识库已清空，共删除 {count} 条记录")
+
+                # 同步清空知识图谱
+                if self.kg_store is not None:
+                    try:
+                        self.kg_store.clear()
+                    except Exception as e:
+                        logger.warning(f"KG 清空失败: {e}")
+
                 return f"知识库已清空，共删除 {count} 个文档分块。"
             return "知识库原本就是空的。"
         except Exception as e:

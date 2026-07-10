@@ -634,7 +634,7 @@ const OPS_COMMANDS = {
     { name:"last", category:"permission", syntax:"last [-n 数量] [用户]", description:"查看用户登录历史记录", keywords:["权限","用户","登录","历史","last","登录记录"], examples:[
       {cmd:"last -10", desc:"查看最近10次登录记录"},
       {cmd:"last john", desc:"查看john的登录历史"}
-    ]}
+    ]},
     { name:"groups", category:"permission", syntax:"groups [用户名]", description:"查看用户所属的所有组", keywords:["用户","组","查看","权限"], examples:[
       {cmd:"groups", desc:"查看当前用户所属组"},
       {cmd:"groups john", desc:"查看john所属的组"}

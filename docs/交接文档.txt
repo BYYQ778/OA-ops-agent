@@ -1,10 +1,10 @@
-OA运维多智能Agent巡检问答系统 - 交接文档 v2.3
+OA运维多智能Agent巡检问答系统 - 交接文档 v2.4
 =================================================
-创建: 2026-05-07（v1.0）→ 最后更新: 2026-06-22（v2.3 实时仪表盘 + 命令大全）
-版本: v2.3
+创建: 2026-05-07（v1.0）→ 最后更新: 2026-07-10（v2.4 知识图谱 + Agentic RAG + 多格式解析）
+版本: v2.4
 状态: GitHub开源已发布、可演示、可部署、本机离线运行
 仓库: https://github.com/BYYQ778/OA-ops-agent
-最后更新: 2026-06-22 — v2.3 实时监控仪表盘/运维命令大全(136条)/知识问答命令推荐
+最后更新: 2026-07-10 — v2.4 知识图谱构建/Agentic RAG(LangGraph ReAct)/多格式解析(PPTX+HTML+MinerU)
 
 ═══════════════════════════════════════════════════════════
 一、项目概述
@@ -17,12 +17,15 @@ OA运维多智能Agent巡检问答系统，面向运维实习生的智能运维�
   实时监控仪表盘 → SSE推送 + 5状态卡片 + Chart.js趋势图 + 告警时间线 + 日志控制台
   巡检Agent → 端口/Nginx/OA服务/磁盘/内存 五项检测
   日志分析Agent → 10+正则规则自动识别故障
-  知识库Agent → RAG 智能问答 + 场景自动推荐匹配命令
+  知识库Agent → 多轮对话 Chatbot + Agentic RAG + 知识图谱多步推理 + 批量问答(20题)
+  知识图谱 → LLM实体提取(5种类型) + NetworkX图谱存储 + 节点搜索/路径发现/子图探索
+  Agentic RAG → LangGraph ReAct Agent，向量检索+图谱推理多步决策
+  多格式解析 → PDF/Word/PPT/HTML/TXT/图片 + MinerU多模态(可选) + OCR
   诊断工具箱 → SSL证书 / 网络诊断 / 数据库巡检(MySQL+MSSQL+Oracle+Redis) / 安全基线
   OCR识别 → 知识库图片导入 / 日志截图识别（CnOCR + hf-mirror国内直连）
   本机巡检 → Windows 原生命令真实数据采集
   AI 报告 → 巡检后自动生成预警分析 + 改进策略
-  运维命令大全 → 136条命令/6大分类/双向搜索/卡片展开/关键词高亮
+  运维命令大全 → 138条命令/6大分类/双向搜索/卡片展开/关键词高亮
 
 ═══════════════════════════════════════════════════════════
 二、当前环境
@@ -35,7 +38,7 @@ Python:    3.11.9
 配置:      config.yaml（主配置）+ .env（敏感信息）
 认证:      v2.3 FastAPI 未接入登录认证（旧 Gradio 版 admin/admin123 已随框架移除）
 巡检模式:  local（本机 Windows 真实检测）
-Git:       已初始化，9次提交（master）
+Git:       已初始化，12次提交（master）
 
 ═══════════════════════════════════════════════════════════
 三、v2.0 MVP 全部改造清单（12项）
@@ -100,7 +103,7 @@ Git:       已初始化，9次提交（master）
    - Ollama离线部署指南.md
 
 ═══════════════════════════════════════════════════════════
-四、项目文件结构（v2.3）
+四、项目文件结构（v2.4）
 ═══════════════════════════════════════════════════════════
 
 oa-ops-agent/
@@ -118,11 +121,13 @@ oa-ops-agent/
 │   ├── setup_ollama.bat         # Ollama 安装
 │   └── 打包离线部署包.bat       # 离线打包脚本
 │
-├── agents/                      # Agent 业务模块（9个）
+├── agents/                      # Agent 业务模块（11个）
 │   ├── inspection_agent.py      # 巡检Agent（模拟+LLM汇总）
 │   ├── inspection_real.py       # 真实巡检（SSH+本机Local）
 │   ├── log_analysis_agent.py    # 日志分析（10+正则规则）
-│   ├── knowledge_agent.py       # 知识库RAG（Chroma）
+│   ├── knowledge_agent.py       # 知识库RAG + Agentic RAG + KG
+│   ├── entity_extractor.py      # [v2.4] LLM 实体提取
+│   ├── kg_builder.py            # [v2.4] 知识图谱构建编排
 │   ├── ai_reporter.py           # AI报告生成（预警+策略）
 │   ├── ssl_monitor.py           # [v2.1] SSL证书监控
 │   ├── network_diag.py          # [v2.1] 网络诊断工具
@@ -130,24 +135,28 @@ oa-ops-agent/
 │   └── security_audit.py        # [v2.1] 安全基线检查
 │
 ├── ui/                          # [v2.3] FastAPI + 纯HTML/CSS/JS
-│   ├── server.py                # FastAPI服务端（39个API端点）
+│   ├── server.py                # FastAPI服务端（44个API端点）
 │   ├── templates/index.html     # 纯HTML前端（8页面侧边栏）
 │   └── static/
 │       ├── style.css            # 企业级CSS设计系统
-│       └── commands.js          # 运维命令数据库（136条）
+│       └── commands.js          # 运维命令数据库（138条）
 │
-├── utils/
+├── utils/                       # 基础设施（11个）
 │   ├── config.py                # 配置加载器
 │   ├── database.py              # SQLite 数据库（3表）
 │   ├── dashboard.py             # [v2.3] 实时仪表盘数据管理
 │   ├── alert.py                 # 告警通知（邮件/钉钉/企微）
 │   ├── scheduler.py             # 定时调度
-│   ├── doc_parser.py            # 文档解析（含OCR）
+│   ├── doc_parser.py            # 文档解析（多格式 + OCR）
+│   ├── doc_parser_v2.py         # [v2.4] 多模态解析编排（MinerU + 回退）
+│   ├── mineru_adapter.py        # [v2.4] MinerU 适配器（可选）
+│   ├── kg_store.py              # [v2.4] 知识图谱存储（NetworkX + JSONL）
 │   ├── ocr.py                   # 图片文字识别（CnOCR）
 │   └── logger.py                # 日志工具
 │
 ├── data/                        # 运行时数据
 │   ├── oa_ops.db                # SQLite 数据库
+│   ├── knowledge_graph/         # [v2.4] 知识图谱数据
 │   ├── sample_logs/             # 示例日志
 │   ├── sample_docs/             # 示例文档
 │   ├── inspection_logs/         # 巡检日志
@@ -159,6 +168,7 @@ oa-ops-agent/
     ├── OA运维Agent项目全流程文档_v2.0.docx
     ├── 交接文档.txt
     ├── 维护日志.txt
+    ├── 同步清单.md
     ├── 离线部署说明.txt
     └── Ollama离线部署指南.md
 
@@ -186,8 +196,13 @@ oa-ops-agent/
 ═══════════════════════════════════════════════════════════
 
 ☐ 进程/服务管理模块（Top N进程、僵尸进程、系统负载）
-✅ 快速命令大全（136条/6分类/双向搜索/卡片展开）— v2.3 已完成
-✅ FastAPI REST API 层（v2.3 已完成，39个端点）
+✅ 快速命令大全（138条/6分类/双向搜索/卡片展开）— v2.3 已完成
+✅ FastAPI REST API 层（v2.4 已完成，44个端点含 KG 图谱 + 批量问答）
+✅ 知识图谱构建（v2.4 已完成 — entity_extractor + kg_builder + kg_store）
+✅ Agentic RAG（v2.4 已完成 — LangGraph ReAct 多步推理，含 KG 集成）
+✅ 图谱探索 API（v2.4 已完成 — /api/kg/search/explore/path/stats）
+✅ 批量问答（v2.4 已完成 — /api/kb/batch-ask 最多 20 题并行）
+✅ 多格式文档解析（v2.4 已完成 — PPTX/HTML + MinerU 可选）
 ☐ HTTPS 支持
 ☐ Linux 本机巡检支持
 ☐ 前端迁移 React/Vue（当前为 FastAPI + 纯HTML/CSS/JS）
@@ -423,3 +438,136 @@ oa-ops-agent/
   ffd5532 v2.2: Gradio替换为FastAPI + 纯HTML/CSS/JS前端
   b9d04d1 v2.1: 新增诊断工具箱(SSL/网络/数据库/安全)共4个模块
   6533be8 v2.1: OA运维多智能Agent巡检问答系统
+
+
+═══════════════════════════════════════
+【2026-07-10 — v2.4 知识图谱 + Agentic RAG + 多格式解析 + Bug修复】
+═══════════════════════════════════════
+
+一、Bug 修复（5项）
+  1. 运维命令大全加载失败
+     - 根因: ui/static/commands.js:637 "last" 条目末尾缺逗号，JS 语法错误
+     - 修复: ]} → ]},
+     - 影响: OPS_COMMANDS 全局变量未定义，命令大全页面白屏
+
+  2. LLM 调用异常
+     - 根因: main.py 和 ui/server.py 不检查 llm.provider，直接用顶层的 api_key
+            + base_url + model，把 qwen3:8b 发到 DeepSeek API → 400 错误
+     - 修复: main.py 和 ui/server.py 参考 ai_reporter.py 的 provider 路由逻辑：
+            ollama → llm.ollama.*, 其他 → llm.*
+     - 涉及: main.py (CLI + Web), ui/server.py (get_kb_agent)
+
+  3. 双击启动.bat 打不开
+     - 根因: 启动.bat:74 findstr "model:" 误匹配 config.yaml 第25行
+            model_name（嵌入模型），OLLAMA_MODEL 被设为 paraphrase-multilingual-...
+     - 修复: findstr 排除列表加 model_name
+     - 影响: ollama pull <嵌入模型名> 失败 → 启动脚本退出
+
+  4. 巡检降级策略回退
+     - 根因: 之前 auto/local 模式失败直接报错不降级，导致启动后巡检报错
+     - 修复: git checkout 回退到 v2.3 版本（auto 模式保留三级降级）
+
+  5. config.yaml provider 不一致
+     - 根因: provider=ollama 但 .env 有 DeepSeek Key → 混合状态
+     - 修复: 统一提供 provider 路由逻辑（见上第2项）
+
+二、v2.4 知识库模块升级（Phase 1-2 已完成，Phase 3-5 待实施）
+
+  Phase 1: 多格式解析 ✅
+    - 新增 utils/mineru_adapter.py — MinerU 适配器，懒加载，默认关闭
+    - 新增 utils/doc_parser_v2.py — 多模态解析编排，MinerU + 传统回退
+    - 修改 utils/doc_parser.py — 新增 parse_pptx(), parse_html()
+    - 新增依赖: python-pptx, beautifulsoup4, lxml
+    - 支持格式: PDF/Word/PPTX/HTML/TXT/图片（原仅 PDF/Word/TXT/图片）
+
+  Phase 2: 知识图谱 ✅
+    - 新增 utils/kg_store.py — NetworkX + JSONL 持久化存储
+      · search_nodes() / extract_subgraph() / find_shortest_path() / get_stats()
+    - 新增 agents/entity_extractor.py — LLM 实体提取（双策略）
+      · DeepSeek: function-calling 结构化输出
+      · Ollama: Prompt 工程 + JSON 解析 + 3 层回退
+    - 新增 agents/kg_builder.py — 图谱构建编排
+      · 分块→提取→建节点→共现边→持久化
+    - 修改 agents/knowledge_agent.py — 4 处集成点
+      · _init_kg() / import_document 第5步 / delete_document / clear_knowledge_base
+    - 新增依赖: networkx, langgraph
+    - config 新增 knowledge_base.kg / knowledge_base.agentic_rag 配置块
+
+  Phase 3-5: 待实施
+    ☐ Agentic RAG — LangGraph ReAct Agent 多步推理
+    ☐ 图谱探索 API — /api/kg/search /explore /path /stats
+    ☐ 批量问答 — /api/kb/batch-ask (最多20题并行)
+
+三、文件变更统计
+  新增 6 文件:
+    utils/mineru_adapter.py, utils/doc_parser_v2.py, utils/kg_store.py
+    agents/entity_extractor.py, agents/kg_builder.py
+
+  修改 5 文件:
+    agents/knowledge_agent.py, utils/doc_parser.py
+    config.yaml, requirements.txt, main.py
+    ui/server.py, ui/static/commands.js, scripts/启动.bat
+
+  文档同步:
+    README.md, docs/交接文档.txt, docs/维护日志.txt, docs/同步清单.md
+
+四、Git 状态
+  当前分支: master (afd5c01)
+  未提交改动: Phase 1-6 全部 + 5 项 Bug 修复
+
+
+═══════════════════════════════════════
+【2026-07-10 下午 — Phase 3-6 完成】
+═══════════════════════════════════════
+
+Phase 3: Agentic RAG (LangGraph ReAct)
+  - knowledge_agent.py 新增 _setup_agentic_rag() + 5 个图节点
+  - 路由: router → [search_kb | search_kg | explore_graph | answer]
+  - Ollama 兼容: prompt 工程 + NEXT_ACTION 解析
+  - 降级: 异常回退检索模式，KG 为空时仅向量检索
+  - 自检: Graph 编译 + invoke 路由闭环验证 ✅
+
+Phase 4: 图谱探索 API + 前端
+  - 新增 4 端点: /api/kg/search /explore /path /stats
+  - _get_kg_store() 辅助函数，空 KG 返回 503
+  - 前端: 知识库页面新增"图谱探索"子标签
+    实体搜索(5类型筛选) / 点击探索子图 / 路径发现 / 统计面板
+  - 上传提示更新: PDF · Word · PPT · HTML · TXT · 图片
+  - 自检: 4 路由 + 12 个前端元素 ✅
+
+Phase 5: 批量问答
+  - 新增 /api/kb/batch-ask，ThreadPoolExecutor 并发
+  - 前端: 批量问答卡片（textarea + 手风琴结果列表）
+  - 修复: Form(...) → Form("") 解决空输入 422 错误
+  - 自检: API 路由 + 9 个 UI 元素 ✅
+
+Phase 6: 全链路 E2E 验证
+  - 启动服务器 4 秒就绪
+  - 22 项测试全部通过 (Homepage/Core/KG/KB/Diagnostics/Dashboard/Commands)
+  - 确认: KG 空状态 503 / batch 空输入正常 / 所有现有功能回归
+
+五、最终文件变更统计
+  新增 5 文件:
+    utils/mineru_adapter.py, utils/doc_parser_v2.py, utils/kg_store.py
+    agents/entity_extractor.py, agents/kg_builder.py
+
+  修改 9 文件:
+    agents/knowledge_agent.py (+320行), utils/doc_parser.py
+    ui/server.py (+120行, 5个新端点), ui/templates/index.html (+200行)
+    config.yaml, requirements.txt, main.py
+    ui/static/commands.js, scripts/启动.bat
+
+  文档同步: README.md, docs/交接文档.txt, docs/维护日志.txt
+
+
+═══════════════════════════════════════
+【2026-07-10 晚 — Chatbot 多轮对话改造】
+═══════════════════════════════════════
+
+- knowledge_agent.py 新增 chat() / clear_conversation() / get_conversation()
+- 对话记忆: 内存保留 30 轮，每次传最近 10 轮给 LLM
+- 消息截断 500 字/条，适配 8K 上下文窗口
+- server.py 新增 3 端点: /api/kb/chat /chat/clear /chat/history
+- 前端改造为 Chatbot 对话气泡界面，支持多轮追问
+- config 新增 chat_max_turns(10) / chat_max_history(30)
+- API 端点总计: 39 → 47

@@ -168,45 +168,124 @@
   <!-- Page: 知识问答 -->
   <section class="page" id="page-qa">
     <h1 class="page-title">💬 知识问答</h1>
-    <p class="page-subtitle">基于 RAG 的运维知识智能问答 · 回答严格依据知识库文档</p>
+    <p class="page-subtitle" id="qa-subtitle">Agentic RAG 多步推理 · 多轮对话记忆 · 回答严格依据知识库</p>
 
-    <div class="ops-card">
-      <div class="input-row">
-        <input type="text" id="qa-question" placeholder="例如：OA 审批流程卡死了怎么办？" style="flex:1;">
-        <button class="btn btn-primary" onclick="kbAsk()">提问</button>
+    <!-- 工具栏 -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <button class="btn btn-secondary btn-sm" onclick="chatNew()" title="新建对话">🔄 新对话</button>
+      <span style="font-size:12px;color:#8b8fa3;" id="chat-info">就绪</span>
+      <span style="flex:1;"></span>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('batch-panel').style.display = document.getElementById('batch-panel').style.display==='none'?'block':'none'">📋 批量问答</button>
+    </div>
+
+    <!-- 对话区 -->
+    <div class="ops-card" style="padding:0;overflow:hidden;">
+      <div id="chat-messages" style="height:420px;overflow-y:auto;padding:16px;">
+        <div class="chat-welcome">
+          <div class="chat-welcome-icon">💬</div>
+          <p>你好！我是 OA 运维知识助手。</p>
+          <p style="color:#8b8fa3;">可以问我任何运维相关问题，我会基于知识库为你解答。支持多轮对话记忆。</p>
+        </div>
       </div>
-      <div class="output-box" id="qa-output" style="margin-top:12px; min-height:60px; white-space:pre-wrap;">AI 将基于知识库为您解答...</div>
-      <div id="qa-commands" style="margin-top:12px;"></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--border-color);background:var(--bg-secondary);">
+        <input type="text" id="chat-input" placeholder="输入问题，如「OA 审批流程卡死了怎么办？」" style="flex:1;"
+               onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatSend();}">
+        <button class="btn btn-primary" id="chat-send-btn" onclick="chatSend()">发送</button>
+      </div>
+    </div>
+
+    <!-- 历史消息 -->
+    <div id="qa-history-area" style="display:none;"></div>
+
+    <!-- 批量问答面板（可折叠） -->
+    <div id="batch-panel" style="display:none;">
+      <div class="ops-card" style="margin-top:12px;">
+        <h4>📋 批量问答 <span style="font-size:12px;color:#8b8fa3;font-weight:400;">（每行一题，最多 20 题）</span></h4>
+        <textarea id="batch-questions" placeholder="OA 审批流程卡死了怎么办？&#10;OA 系统使用的数据库是什么？" style="height:80px;width:100%;"></textarea>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="btn btn-primary btn-sm" onclick="batchAsk()">⚡ 批量提问</button>
+          <span id="batch-progress" style="font-size:12px;color:#8b8fa3;line-height:28px;margin-left:12px;"></span>
+        </div>
+        <div id="batch-results" style="margin-top:10px;"></div>
+      </div>
     </div>
   </section>
 
   <!-- Page: 知识库 -->
   <section class="page" id="page-kb">
     <h1 class="page-title">📚 知识库</h1>
-    <p class="page-subtitle">上传运维文档 · 自动分块向量化 · 智能检索问答</p>
+    <p class="page-subtitle">多格式文档上传 · 自动分块向量化 · 知识图谱探索</p>
 
-    <div class="ops-card">
-      <!-- 拖拽上传区域 -->
-      <div id="kb-drop-zone" class="drop-zone"
-           ondragover="event.preventDefault(); this.classList.add('drag-over')"
-           ondragleave="this.classList.remove('drag-over')"
-           ondrop="kbDrop(event)">
-        <div class="drop-icon">📂</div>
-        <span class="drop-title">拖拽文档到此处上传</span>
-        <p class="drop-hint">支持 PDF · Word · TXT · 图片 (自动OCR)</p>
-        <input type="file" id="kb-file-input" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.bmp,.tiff,.webp" onchange="kbUpload()" style="display:none;">
-        <button class="btn btn-secondary drop-btn" onclick="document.getElementById('kb-file-input').click()">或点击选择文件</button>
-        <span id="kb-upload-status" style="font-size:13px;color:#6b7280;"></span>
+    <!-- Sub-tabs -->
+    <div class="sub-tabs">
+      <button class="sub-tab active" onclick="switchKBSubTab('docs', this)">📂 文档管理</button>
+      <button class="sub-tab" onclick="switchKBSubTab('graph', this)">🔗 图谱探索</button>
+    </div>
+
+    <!-- Sub-page: 文档管理 -->
+    <div class="sub-page active" id="sub-kb-docs">
+      <div class="ops-card">
+        <div id="kb-drop-zone" class="drop-zone"
+             ondragover="event.preventDefault(); this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="kbDrop(event)">
+          <div class="drop-icon">📂</div>
+          <span class="drop-title">拖拽文档到此处上传</span>
+          <p class="drop-hint">支持 PDF · Word · PPT · HTML · TXT · 图片 (自动OCR)</p>
+          <input type="file" id="kb-file-input" accept=".pdf,.docx,.pptx,.html,.htm,.txt,.png,.jpg,.jpeg,.bmp,.tiff,.webp" onchange="kbUpload()" style="display:none;">
+          <button class="btn btn-secondary drop-btn" onclick="document.getElementById('kb-file-input').click()">或点击选择文件</button>
+          <span id="kb-upload-status" style="font-size:13px;color:#6b7280;"></span>
+        </div>
+
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-secondary" onclick="kbList()">全部文档</button>
+          <button class="btn btn-secondary" onclick="kbStats()">统计</button>
+          <input type="text" id="kb-delete-name" placeholder="输入文件名删除" style="width:200px;">
+          <button class="btn btn-danger" onclick="kbDelete()">删除</button>
+          <button class="btn btn-danger" onclick="kbClear()">清空知识库</button>
+        </div>
+        <pre class="output-box" id="kb-output" style="margin-top:12px;">点击按钮查看...</pre>
+      </div>
+    </div>
+
+    <!-- Sub-page: 图谱探索 -->
+    <div class="sub-page" id="sub-kb-graph">
+      <!-- 搜索 -->
+      <div class="ops-card">
+        <h4>🔍 实体搜索</h4>
+        <div class="input-row">
+          <input type="text" id="kg-search-query" placeholder="搜索实体名称，如「Nginx」「MySQL」..." style="flex:1;" onkeydown="if(event.key==='Enter')kgSearch()">
+          <select id="kg-search-type" style="width:140px;">
+            <option value="all">全部类型</option>
+            <option value="TECHNOLOGY">技术</option>
+            <option value="ORGANIZATION">组织</option>
+            <option value="PERSON">人员</option>
+            <option value="LOCATION">位置</option>
+            <option value="CONCEPT">概念</option>
+          </select>
+          <button class="btn btn-primary" onclick="kgSearch()">搜索</button>
+        </div>
+        <div id="kg-search-results" style="margin-top:10px;"></div>
       </div>
 
-      <div class="btn-row" style="margin-top:12px;">
-        <button class="btn btn-secondary" onclick="kbList()">全部文档</button>
-        <button class="btn btn-secondary" onclick="kbStats()">统计</button>
-        <input type="text" id="kb-delete-name" placeholder="输入文件名删除" style="width:200px;">
-        <button class="btn btn-danger" onclick="kbDelete()">删除</button>
-        <button class="btn btn-danger" onclick="kbClear()">清空知识库</button>
+      <!-- 路径发现 -->
+      <div class="ops-card">
+        <h4>🛤️ 路径发现</h4>
+        <div class="input-row">
+          <input type="text" id="kg-path-source" placeholder="起始实体" style="flex:1;">
+          <span style="line-height:36px;color:#8b8fa3;">→</span>
+          <input type="text" id="kg-path-target" placeholder="目标实体" style="flex:1;">
+          <button class="btn btn-primary" onclick="kgFindPath()">发现路径</button>
+        </div>
+        <div id="kg-path-result" style="margin-top:10px;"></div>
       </div>
-      <pre class="output-box" id="kb-output" style="margin-top:12px;">点击按钮查看...</pre>
+
+      <!-- 图谱统计 -->
+      <div class="ops-card">
+        <h4>📊 图谱概况</h4>
+        <button class="btn btn-secondary" onclick="kgLoadStats()">刷新统计</button>
+        <div id="kg-stats-view" style="margin-top:8px;"></div>
+      </div>
     </div>
   </section>
 
@@ -380,6 +459,106 @@ function switchSubTab(sub, btn) {
   document.querySelectorAll('.sub-page').forEach(el => el.classList.remove('active'));
   document.getElementById('sub-' + sub).classList.add('active');
 }
+function switchKBSubTab(sub, btn) {
+  document.querySelectorAll('#page-kb .sub-tab').forEach(el => el.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('#page-kb .sub-page').forEach(el => el.classList.remove('active'));
+  document.getElementById('sub-kb-' + sub).classList.add('active');
+  if (sub === 'graph') { kgLoadStats(); }
+}
+
+// ============ Knowledge Graph Explorer ============
+
+function kgSearch() {
+  var q = document.getElementById('kg-search-query').value.trim();
+  var t = document.getElementById('kg-search-type').value;
+  if (!q && t === 'all') { kgLoadStats(); return; }
+  var container = document.getElementById('kg-search-results');
+  container.innerHTML = '<span style="color:#8b8fa3;">搜索中...</span>';
+  var body = { query: q };
+  if (t !== 'all') body.entity_type = t;
+  post('/api/kg/search', body).then(function(r) {
+    if (r.error) { container.innerHTML = '<div class="cmd-no-results"><p>' + escapeHtml(r.error) + '</p></div>'; return; }
+    if (!r.results || r.results.length === 0) {
+      container.innerHTML = '<div class="cmd-no-results"><p>未找到匹配的实体</p></div>';
+      return;
+    }
+    var h = '<div style="font-size:12px;color:#8b8fa3;margin-bottom:8px;">找到 ' + r.total + ' 个实体</div>';
+    r.results.forEach(function(node) {
+      h += '<div class="kg-node-item" style="display:flex;align-items:center;gap:10px;padding:8px 12px;margin:4px 0;background:var(--bg-secondary);border-radius:6px;cursor:pointer;" onclick="kgExplore(\'' + node.id + '\')" title="点击探索邻居">';
+      h += '<span class="kg-type-badge" style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--blue-100);color:var(--blue-700);white-space:nowrap;">' + escapeHtml(node.type) + '</span>';
+      h += '<strong style="flex:1;">' + escapeHtml(node.name) + '</strong>';
+      h += '<span style="font-size:11px;color:#8b8fa3;">' + (node.frequency || 1) + '次</span>';
+      h += '</div>';
+    });
+    container.innerHTML = h;
+  });
+}
+
+function kgExplore(nodeId) {
+  var container = document.getElementById('kg-search-results');
+  container.innerHTML = '<span style="color:#8b8fa3;">探索中...</span>';
+  post('/api/kg/explore', { node_id: nodeId, depth: 2 }).then(function(r) {
+    if (r.error || !r.subgraph) { container.innerHTML = '<p style="color:var(--red-500);">探索失败</p>'; return; }
+    var sg = r.subgraph;
+    var h = '<div style="font-size:13px;font-weight:600;margin-bottom:8px;">子图 (' + sg.nodes.length + ' 节点, ' + sg.edges.length + ' 边)</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+    sg.nodes.forEach(function(n) {
+      h += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;font-size:13px;">';
+      h += '<span class="kg-type-badge" style="font-size:10px;padding:1px 6px;border-radius:8px;background:var(--blue-100);color:var(--blue-700);margin-right:4px;">' + escapeHtml(n.type) + '</span>';
+      h += '<strong>' + escapeHtml(n.name) + '</strong>';
+      if (n.relation) h += '<br><small style="color:#8b8fa3;">' + escapeHtml(n.relation) + ' (权重' + (n.weight||1) + ')</small>';
+      h += '</div>';
+    });
+    h += '</div>';
+    if (sg.edges.length > 0) {
+      h += '<div style="margin-top:8px;font-size:12px;color:#8b8fa3;">';
+      sg.edges.forEach(function(e) {
+        h += '<div>关系: ' + escapeHtml(e.relation) + ' (权重 ' + e.weight + ')</div>';
+      });
+      h += '</div>';
+    }
+    container.innerHTML = h;
+  });
+}
+
+function kgFindPath() {
+  var src = document.getElementById('kg-path-source').value.trim();
+  var tgt = document.getElementById('kg-path-target').value.trim();
+  var container = document.getElementById('kg-path-result');
+  if (!src || !tgt) { container.innerHTML = '<span style="color:var(--red-500);">请输入起始和目标实体</span>'; return; }
+  container.innerHTML = '<span style="color:#8b8fa3;">查找中...</span>';
+  post('/api/kg/path', { source: src, target: tgt }).then(function(r) {
+    if (r.error) { container.innerHTML = '<div class="cmd-no-results"><p>' + escapeHtml(r.error) + '</p></div>'; return; }
+    if (!r.path || r.path.length === 0) { container.innerHTML = '<p>未找到路径</p>'; return; }
+    var h = '<div style="font-size:13px;font-weight:600;margin-bottom:6px;">路径长度: ' + r.length + ' 步</div>';
+    h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
+    r.path.forEach(function(name, i) {
+      if (i > 0) h += '<span style="color:var(--blue-500);font-weight:bold;">→</span>';
+      h += '<span style="padding:4px 10px;background:var(--blue-50);color:var(--blue-700);border-radius:12px;font-size:13px;font-weight:500;">' + escapeHtml(name) + '</span>';
+    });
+    h += '</div>';
+    container.innerHTML = h;
+  });
+}
+
+function kgLoadStats() {
+  var container = document.getElementById('kg-stats-view');
+  container.innerHTML = '<span style="color:#8b8fa3;">加载中...</span>';
+  get('/api/kg/stats').then(function(r) {
+    if (!r.available) { container.innerHTML = '<p style="color:#8b8fa3;">' + escapeHtml(r.message || '知识图谱不可用') + '</p>'; return; }
+    var h = '<div class="kg-stats-grid">';
+    h += '<div><strong>' + r.total_nodes + '</strong><br><small>实体总数</small></div>';
+    h += '<div><strong>' + r.total_edges + '</strong><br><small>关联边数</small></div>';
+    if (r.nodes_by_type) {
+      Object.keys(r.nodes_by_type).forEach(function(t) {
+        h += '<div><strong>' + r.nodes_by_type[t] + '</strong><br><small>' + escapeHtml(t) + '</small></div>';
+      });
+    }
+    h += '</div>';
+    container.innerHTML = h;
+  });
+}
 
 // ============ API Helper ============
 async function post(url, body) {
@@ -408,52 +587,178 @@ function updateStatus() { get('/api/inspect/status').then(r => { document.getEle
 function logAnalyze() { var txt = document.getElementById('log-input').value; if(!txt.trim()) return; setLoading('log-output'); post('/api/log/analyze', {log_text: txt}).then(r => setOutput('log-output', r.result)); }
 function logOCR() { var f = document.getElementById('log-image-input').files[0]; if(!f) return; var fd = new FormData(); fd.append('file', f); document.getElementById('log-ocr-status').textContent = 'OCR 识别中...'; setLoading('log-output'); fetch('/api/log/ocr', {method:'POST', body:fd}).then(r => r.json()).then(r => { document.getElementById('log-input').value = r.text; document.getElementById('log-ocr-status').textContent = '✓ 识别完成，' + r.text.length + ' 字'; document.getElementById('log-image-input').value = ''; setOutput('log-output', r.result); }); }
 
-// ============ Knowledge Base ============
-function kbAsk() {
-  var q = document.getElementById('qa-question').value;
-  if(!q.trim()) return;
-  var out = document.getElementById('qa-output');
-  out.textContent = '思考中...\n正在检索知识库并匹配相关命令...';
-  document.getElementById('qa-commands').innerHTML = '';
+// ============ Chatbot ============
 
-  post('/api/kb/ask', {question: q}).then(function(r) {
-    out.textContent = r.result;
+var chatConversationId = 'default';
 
-    // 自动从命令大全推荐相关命令
+function chatSend() {
+  var input = document.getElementById('chat-input');
+  var msg = input.value.trim();
+  if (!msg) return;
+
+  // 禁用输入
+  input.disabled = true;
+  document.getElementById('chat-send-btn').disabled = true;
+
+  // 添加用户气泡
+  appendChatBubble('user', msg);
+  input.value = '';
+
+  // 添加思考中气泡
+  var thinkingId = appendChatBubble('assistant', '思考中...', true);
+
+  // 清除欢迎消息
+  var welcome = document.querySelector('.chat-welcome');
+  if (welcome) welcome.remove();
+
+  post('/api/kb/chat', { message: msg, conversation_id: chatConversationId }).then(function(r) {
+    // 移除思考中气泡
+    var thinking = document.getElementById(thinkingId);
+    if (thinking) thinking.remove();
+
+    // 添加回答气泡
+    appendChatBubble('assistant', r.answer);
+
+    // 更新对话信息
+    document.getElementById('chat-info').textContent = '对话 ' + (r.conversation_id || chatConversationId);
+
+    // 推荐命令
     if (typeof searchCommands !== 'undefined') {
-      var cmds = searchCommands(q, null);
+      var cmds = searchCommands(msg, null);
       if (cmds.length > 0) {
-        renderQaCommands(cmds.slice(0, 8), q);
+        renderChatCommands(cmds.slice(0, 5));
       }
     }
+  }).catch(function(e) {
+    var thinking = document.getElementById(thinkingId);
+    if (thinking) thinking.remove();
+    appendChatBubble('assistant', '[错误] 请求失败，请检查服务状态');
+  }).finally(function() {
+    input.disabled = false;
+    document.getElementById('chat-send-btn').disabled = false;
+    input.focus();
   });
 }
 
-function renderQaCommands(cmds, keyword) {
-  var container = document.getElementById('qa-commands');
-  if (!container || cmds.length === 0) return;
+function appendChatBubble(role, content, isThinking) {
+  var container = document.getElementById('chat-messages');
+  var id = 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  var div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = 'margin-bottom:12px;display:flex;' + (role === 'user' ? 'justify-content:flex-end;' : 'justify-content:flex-start;');
 
-  var h = '<div class="qa-cmd-section">';
-  h += '<div class="qa-cmd-title">🛠 相关命令推荐（' + cmds.length + ' 条）</div>';
-  h += '<div class="qa-cmd-list">';
-  cmds.forEach(function(cmd) {
-    var hlName = typeof highlightText !== 'undefined' ? highlightText(cmd.name, keyword) : cmd.name;
-    h += '<div class="qa-cmd-item" onclick="this.classList.toggle(\'expanded\')">';
-    h += '<div class="qa-cmd-head"><code>' + hlName + '</code><span>' + escapeHtml(cmd.description) + '</span><span class="qa-cmd-arrow">▶</span></div>';
-    h += '<div class="qa-cmd-body">';
-    h += '<div class="qa-cmd-syntax">' + escapeHtml(cmd.syntax) + '</div>';
-    if (cmd.examples && cmd.examples.length > 0) {
-      h += '<div class="qa-cmd-examples">';
-      cmd.examples.slice(0, 2).forEach(function(ex) {
-        h += '<div class="qa-cmd-ex"><code>' + escapeHtml(ex.cmd) + '</code><span>' + escapeHtml(ex.desc) + '</span></div>';
-      });
+  var bubble = document.createElement('div');
+  var bg = role === 'user' ? 'var(--blue-500)' : 'var(--bg-secondary)';
+  var color = role === 'user' ? '#fff' : 'var(--text-primary)';
+  var align = role === 'user' ? 'right' : 'left';
+  bubble.style.cssText = 'max-width:75%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;background:' + bg + ';color:' + color + ';text-align:' + align + ';';
+
+  if (isThinking) {
+    bubble.textContent = content;
+    bubble.style.opacity = '0.6';
+    bubble.style.fontStyle = 'italic';
+  } else {
+    // 渲染 Markdown 风格的代码块
+    bubble.innerHTML = formatChatContent(content);
+  }
+
+  div.appendChild(bubble);
+  container.appendChild(div);
+
+  // 滚动到底部
+  container.scrollTop = container.scrollHeight;
+  return id;
+}
+
+function formatChatContent(text) {
+  // 简单格式化：代码块和换行
+  var escaped = escapeHtml(text);
+  // 代码块 ```
+  escaped = escaped.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre style="background:rgba(0,0,0,0.06);padding:8px;border-radius:4px;overflow-x:auto;font-size:13px;"><code>$2</code></pre>');
+  // 行内代码 `
+  escaped = escaped.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.08);padding:1px 4px;border-radius:3px;font-size:13px;">$1</code>');
+  // 换行
+  escaped = escaped.replace(/\n/g, '<br>');
+  return escaped;
+}
+
+function chatNew() {
+  post('/api/kb/chat/clear', { conversation_id: chatConversationId }).then(function() {
+    var container = document.getElementById('chat-messages');
+    container.innerHTML = '<div class="chat-welcome"><div class="chat-welcome-icon">💬</div><p>新对话已开始</p><p style="color:#8b8fa3;">可以问我任何运维相关问题</p></div>';
+    document.getElementById('chat-info').textContent = '新对话';
+    document.getElementById('chat-input').focus();
+  });
+}
+
+function renderChatCommands(cmds) {
+  // 在最后一条消息后添加命令推荐
+  var container = document.getElementById('chat-messages');
+  if (cmds.length === 0) return;
+  var div = document.createElement('div');
+  div.style.cssText = 'margin:4px 0 12px 0;padding-left:10px;';
+  div.innerHTML = '<div style="font-size:12px;color:#8b8fa3;margin-bottom:6px;">🛠 相关命令推荐：' +
+    cmds.map(function(c) { return '<code style="cursor:pointer;margin:0 4px;padding:2px 6px;background:var(--bg-secondary);border-radius:4px;" onclick="document.getElementById(\'chat-input\').value=\'' + escapeHtml(c.name) + ' 的用法\';chatSend();">' + escapeHtml(c.name) + '</code>'; }).join('') +
+    '</div>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+// Keep old kbAsk for compatibility (single-shot, no memory)
+function kbAsk() {
+  var q = document.getElementById('chat-input').value;
+  if (!q.trim()) return;
+  chatSend();
+}
+
+// ============ Batch Q&A ============
+
+function batchAsk() {
+  var text = document.getElementById('batch-questions').value;
+  var lines = text.split('\n').filter(function(l) { return l.trim(); });
+  if (lines.length === 0) return;
+
+  var maxBatch = 20;
+  if (lines.length > maxBatch) {
+    lines = lines.slice(0, maxBatch);
+    alert('最多 ' + maxBatch + ' 题，已截取前 ' + maxBatch + ' 题');
+  }
+
+  var btn = document.getElementById('batch-ask-btn');
+  var progress = document.getElementById('batch-progress');
+  var container = document.getElementById('batch-results');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ 处理中...';
+  progress.textContent = '0/' + lines.length;
+  container.innerHTML = '';
+
+  post('/api/kb/batch-ask', { questions: lines.join('\n') }).then(function(r) {
+    btn.disabled = false;
+    btn.textContent = '⚡ 批量提问';
+    progress.textContent = '';
+
+    if (r.error) { container.innerHTML = '<p style="color:var(--red-500);">' + escapeHtml(r.error) + '</p>'; return; }
+
+    var total = r.total || 0;
+    var h = '<div style="font-size:13px;color:#8b8fa3;margin-bottom:10px;">共 ' + total + ' 题</div>';
+    r.results.forEach(function(item, i) {
+      h += '<div class="batch-result-item" style="margin-bottom:10px;border:1px solid var(--border-color);border-radius:8px;overflow:hidden;">';
+      h += '<div class="batch-q" onclick="var b=this.nextElementSibling;b.style.display=b.style.display===\'none\'?\'block\':\'none\';" style="padding:10px 14px;background:var(--bg-secondary);cursor:pointer;font-weight:500;font-size:14px;">';
+      h += '<span style="color:var(--blue-500);margin-right:6px;">Q' + (i+1) + '.</span> ' + escapeHtml(item.question);
+      h += '<span style="float:right;color:#8b8fa3;font-size:11px;">' + (item.answer ? '已完成' : '处理中') + '</span>';
       h += '</div>';
-    }
-    h += '</div></div>';
+      h += '<div class="batch-a" style="display:block;padding:10px 14px;background:white;white-space:pre-wrap;font-size:13px;line-height:1.6;">' + escapeHtml(item.answer || '（无回答）') + '</div>';
+      h += '</div>';
+    });
+    container.innerHTML = h;
+  }).catch(function(e) {
+    btn.disabled = false;
+    btn.textContent = '⚡ 批量提问';
+    progress.textContent = '请求失败';
   });
-  h += '</div></div>';
-  container.innerHTML = h;
 }
+
 function kbList() { setLoading('kb-output'); get('/api/kb/list').then(r => setOutput('kb-output', r.result)); }
 function kbStats() { setLoading('kb-output'); get('/api/kb/stats').then(r => setOutput('kb-output', r.result)); }
 function kbDelete() { var n = document.getElementById('kb-delete-name').value; if(!n.trim()) return; setLoading('kb-output'); post('/api/kb/delete', {doc_name: n}).then(r => setOutput('kb-output', r.result)); }

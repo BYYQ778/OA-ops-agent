@@ -40,6 +40,20 @@ openai>=2.0.0
 # ---- OCR (图片文字识别，CnOCR 走 hf-mirror 国内直连) ----
 cnocr>=2.3
 
+# ---- Multi-format Document Parsing ----
+python-pptx>=0.6.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+
+# ---- Knowledge Graph ----
+networkx>=3.2
+
+# ---- Agentic RAG ----
+langgraph>=0.2.0
+
+# ---- MinerU (optional, ~3GB model download) ----
+# Uncomment to enable: magic-pdf>=0.7.0
+
 # ---- Utilities ----
 tiktoken>=0.5.0
 httpx>=0.27.0

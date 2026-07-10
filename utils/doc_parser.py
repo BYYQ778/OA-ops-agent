@@ -85,18 +85,93 @@ def parse_txt(file_path: str) -> str:
         return f.read()
 
 
-def parse_document(file_path: str) -> str:
+def parse_pptx(file_path: str) -> str:
+    """
+    解析 PowerPoint(.pptx) 文件，提取所有幻灯片文本和表格。
+
+    Args:
+        file_path: pptx 文件的绝对路径
+
+    Returns:
+        提取到的文本字符串
+    """
+    try:
+        from pptx import Presentation
+        prs = Presentation(file_path)
+        parts = []
+        for i, slide in enumerate(prs.slides, 1):
+            slide_text = []
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for para in shape.text_frame.paragraphs:
+                        txt = para.text.strip()
+                        if txt:
+                            slide_text.append(txt)
+                if shape.has_table:
+                    table = shape.table
+                    rows = []
+                    for row in table.rows:
+                        cells = [cell.text.strip() for cell in row.cells]
+                        rows.append(" | ".join(cells))
+                    if rows:
+                        slide_text.append("\n".join(rows))
+            if slide_text:
+                parts.append(f"[Slide {i}]\n" + "\n".join(slide_text))
+        return "\n\n".join(parts)
+    except ImportError:
+        raise ImportError("请安装 python-pptx 库: pip install python-pptx")
+    except Exception as e:
+        raise RuntimeError(f"PowerPoint 解析失败 [{file_path}]: {e}")
+
+
+def parse_html(file_path: str) -> str:
+    """
+    解析 HTML 文件，提取文本内容（去除脚本和样式标签）。
+
+    Args:
+        file_path: HTML 文件的绝对路径
+
+    Returns:
+        提取到的文本字符串
+    """
+    try:
+        from bs4 import BeautifulSoup
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            soup = BeautifulSoup(f.read(), "lxml")
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
+            tag.decompose()
+        return soup.get_text(separator="\n", strip=True)
+    except ImportError:
+        raise ImportError("请安装 beautifulsoup4 + lxml: pip install beautifulsoup4 lxml")
+    except Exception as e:
+        raise RuntimeError(f"HTML 解析失败 [{file_path}]: {e}")
+
+
+def parse_document(file_path: str, use_mineru: bool = None) -> str:
     """
     通用文档解析入口：根据文件后缀自动选择解析器。
 
-    支持格式：.pdf / .docx / .txt
+    支持格式：.pdf / .docx / .pptx / .html / .htm / .txt / 图片格式
 
     Args:
         file_path: 文档文件路径
+        use_mineru: 是否尝试 MinerU 解析。None=按 config 配置决定。
 
     Returns:
         清洗后的纯文本内容
     """
+    # MinerU 路径
+    if use_mineru is None:
+        from utils.config import config
+        use_mineru = config.get("knowledge_base.mineru.enabled", False)
+
+    if use_mineru:
+        try:
+            from utils.doc_parser_v2 import parse_document_v2
+            return parse_document_v2(file_path, use_mineru=True)
+        except Exception:
+            pass  # 回退到传统解析
+
     ext = os.path.splitext(file_path)[1].lower()
 
     from utils.ocr import SUPPORTED_IMAGE_EXTS
@@ -105,12 +180,19 @@ def parse_document(file_path: str) -> str:
         raw_text = parse_pdf(file_path)
     elif ext == ".docx":
         raw_text = parse_docx(file_path)
+    elif ext == ".pptx":
+        raw_text = parse_pptx(file_path)
+    elif ext in (".htm", ".html"):
+        raw_text = parse_html(file_path)
     elif ext == ".txt":
         raw_text = parse_txt(file_path)
     elif ext in SUPPORTED_IMAGE_EXTS:
         raw_text = parse_image(file_path)
     else:
-        raise ValueError(f"不支持的文件格式: {ext}（支持 .pdf / .docx / .txt / 图片格式）")
+        raise ValueError(
+            f"不支持的文件格式: {ext}"
+            f"（支持 .pdf / .docx / .pptx / .html / .txt / 图片格式）"
+        )
 
     return clean_text(raw_text)
 

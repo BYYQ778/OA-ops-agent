@@ -10,11 +10,11 @@
 - **实时监控仪表盘** — SSE 实时推送 + 5 状态卡片 + Chart.js 趋势图 + 告警时间线 + 终端日志控制台
 - **巡检监控** — 自动检测端口、服务、磁盘、内存，支持 Local/SSH/Simulated 三种模式，定时调度 + 历史查询
 - **日志分析** — 上传或粘贴运维日志，正则匹配 10 种常见故障（502/503/OOM/磁盘满等），输出排查建议
-- **知识库问答** — 上传 PDF/Word/TXT 文档，基于 RAG 检索增强生成，严格限制仅基于知识库作答
+- **知识库问答** — 多轮对话 Chatbot + Agentic RAG 多步推理 + 知识图谱探索，支持单题/批量(20题并行)
 - **AI 报告** — 巡检完成后自动生成预警分析与改进策略，支持 Ollama 本地离线 / DeepSeek 云端两种后端
 - **诊断工具箱** — SSL 证书过期检测、网络诊断（Ping/端口/DNS/路由/HTTP）、数据库巡检（MySQL/MSSQL/Oracle/Redis）、安全基线审计
 - **OCR 识别** — 知识库支持导入截图/扫描件自动 OCR；日志分析支持上传报错截图识别后分析
-- **运维命令大全** — 收录 92 条常用运维命令（6 大分类），支持按命令名/功能关键词双向检索，点击卡片展开详情
+- **运维命令大全** — 收录 138 条常用运维命令（6 大分类），支持按命令名/功能关键词双向检索，点击卡片展开详情
 
 ## 快速开始
 
@@ -93,6 +93,29 @@ inspection:
 | `simulated` | 随机模拟数据，无需外部依赖 |
 | `auto` | SSH 优先 → 本机 → 模拟，逐级降级 |
 
+### 知识库
+
+```yaml
+knowledge_base:
+  chunk_size: 500
+  chunk_overlap: 50
+
+  # MinerU 多模态解析（可选，需 pip install magic-pdf）
+  mineru:
+    enabled: false
+
+  # 知识图谱
+  kg:
+    enabled: true
+    entity_types: [TECHNOLOGY, ORGANIZATION, PERSON, LOCATION, CONCEPT]
+
+  # Agentic RAG（LangGraph ReAct 多步推理）
+  agentic_rag:
+    enabled: true
+    max_reasoning_steps: 5
+    batch_max_questions: 20
+```
+
 ### LLM 后端
 
 ```yaml
@@ -124,31 +147,36 @@ oa-ops-agent/
 ├── scripts/                   # 启动 & 部署脚本
 │   ├── 启动.bat               # Windows 一键启动
 │   └── 打包离线部署包.bat     # 离线打包
-├── agents/                    # Agent 模块（9个）
+├── agents/                    # Agent 模块（11个）
 │   ├── inspection_agent.py    # 巡检（模拟 + 统一入口）
 │   ├── inspection_real.py     # 真实巡检（SSH + Local）
 │   ├── log_analysis_agent.py  # 日志分析（正则规则库）
-│   ├── knowledge_agent.py     # 知识库 RAG
+│   ├── knowledge_agent.py     # 知识库 RAG + Agentic RAG + KG
+│   ├── entity_extractor.py    # LLM 实体提取（KG 构建）
+│   ├── kg_builder.py          # 知识图谱构建编排
 │   ├── ai_reporter.py         # AI 报告生成
 │   ├── ssl_monitor.py         # SSL 证书监控
 │   ├── network_diag.py        # 网络诊断
 │   ├── db_inspector.py        # 数据库巡检
 │   └── security_audit.py      # 安全基线检查
-├── utils/                     # 基础设施
+├── utils/                     # 基础设施（11个）
 │   ├── config.py              # 配置管理
 │   ├── database.py            # SQLite 持久化
 │   ├── dashboard.py           # 实时仪表盘数据管理
 │   ├── logger.py              # 日志
 │   ├── scheduler.py           # 定时调度
-│   ├── doc_parser.py          # 文档解析（含OCR）
+│   ├── doc_parser.py          # 文档解析（多格式 + OCR）
+│   ├── doc_parser_v2.py       # 多模态解析编排（MinerU + 回退）
+│   ├── mineru_adapter.py      # MinerU 适配器（可选）
+│   ├── kg_store.py            # 知识图谱存储（NetworkX + JSONL）
 │   ├── ocr.py                 # 图片文字识别
 │   └── alert.py               # 告警通知
 └── ui/
-    ├── server.py              # FastAPI 服务端（39个API端点）
+    ├── server.py              # FastAPI 服务端（47个API端点，含 Chat + KG + 批量问答）
     ├── templates/index.html   # 纯HTML前端（8页面侧边栏）
     └── static/
         ├── style.css          # 样式
-        └── commands.js        # 运维命令数据库（92条）
+        └── commands.js        # 运维命令数据库（138条）
 ```
 
 ## 技术栈
@@ -158,7 +186,9 @@ oa-ops-agent/
 | FastAPI | Web 服务端 |
 | Jinja2 | 模板渲染 |
 | LangChain | Agent 编排、RAG |
+| LangGraph | Agentic RAG ReAct 多步推理 |
 | Chroma | 向量存储 |
+| NetworkX | 知识图谱存储与查询 |
 | sentence-transformers | 文档嵌入 |
 | SQLite | 数据持久化 |
 | CnOCR | 图片文字识别 |

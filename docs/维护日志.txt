@@ -1,7 +1,7 @@
 OA运维多智能Agent巡检问答系统 - 维护日志
 ===========================================
 创建时间: 2026-05-07
-最后更新: 2026-06-14 21:30
+最后更新: 2026-07-10 20:15
 
 ═══════════════════════════════════════════
 【2026-05-25 11:30-11:35 — 启动.bat 完整模式修复】
@@ -508,3 +508,110 @@ Git 版本: 81ee4d4 + ba638a9（squash后2个commit）
 
 五、Git 版本
   8fe7d62 v2.3: 实时监控仪表盘 + 运维命令大全 + 知识问答命令推荐
+
+
+═══════════════════════════════════════════
+【2026-07-10 — v2.4 知识图谱 + Agentic RAG + 多格式解析 + Bug修复】
+═══════════════════════════════════════════
+
+一、Bug 修复（5项）
+
+1. 命令大全 JS 语法错误
+   文件: ui/static/commands.js:637
+   问题: "last" 条目末尾 ]} 缺逗号，OPS_COMMANDS 未定义
+   修复: ]} → ]},
+
+2. LLM provider 路由缺失
+   文件: main.py, ui/server.py
+   问题: 不检查 provider，直接发 qwen3:8b 到 DeepSeek API → 400
+   修复: 参考 ai_reporter.py 的路由逻辑
+
+3. 启动.bat 模型名检测 Bug
+   文件: scripts/启动.bat:74
+   问题: findstr "model:" 误匹配 model_name（嵌入模型行）
+   修复: findstr 排除列表新增 model_name
+
+4. 巡检降级策略回退
+   文件: agents/inspection_agent.py, agents/inspection_real.py
+   问题: 上次改动 auto/local 失败直接报错不降级
+   修复: git checkout 回退到 v2.3 的降级逻辑
+
+5. config.yaml provider 不一致
+   问题: provider=ollama 但 .env 有 DeepSeek Key
+   修复: 代码层统一 provider 路由（见第2项）
+
+二、v2.4 知识库模块升级（Phase 1-2 完成）
+
+Phase 1: 多格式解析
+  新增:
+    utils/mineru_adapter.py — MinerU 适配器（懒加载，默认关闭）
+    utils/doc_parser_v2.py — 多模态解析编排（MinerU + 回退）
+  修改:
+    utils/doc_parser.py — 新增 parse_pptx(), parse_html()
+  新增依赖: python-pptx, beautifulsoup4, lxml
+  新增格式支持: .pptx, .html/.htm
+
+Phase 2: 知识图谱
+  新增:
+    utils/kg_store.py — NetworkX + JSONL 持久化（~270行）
+    agents/entity_extractor.py — LLM 实体提取，双策略（~250行）
+    agents/kg_builder.py — 图谱构建编排（~120行）
+  修改:
+    agents/knowledge_agent.py — _init_kg() + import/delete/clear 钩子
+    config.yaml — 新增 knowledge_base.kg / agentic_rag 配置块
+  新增依赖: networkx, langgraph
+
+Phase 3: Agentic RAG ✅ (2026-07-10 下午)
+  - knowledge_agent.py 新增 _setup_agentic_rag()
+  - LangGraph StateGraph: router → search_kb/search_kg/explore_graph/answer
+  - Ollama 兼容: NEXT_ACTION prompt 工程 + 正则解析
+  - Config 驱动: agentic_rag.enabled 默认 true
+  - 降级: 异常回退检索模式，KG 为空仅向量检索
+  - 自检: Graph compile + invoke 路由闭环 ✅
+
+Phase 4: 图谱探索 API ✅ (2026-07-10 下午)
+  - ui/server.py: 新增 4 端点 + _get_kg_store() 辅助函数
+  - 前端: 知识库页面"图谱探索"子标签
+    实体搜索(5类型) / 子图探索(点击展开) / 路径发现 / 统计面板
+  - 上传提示: PDF·Word·PPT·HTML·TXT·图片
+  - 自检: API 路由 + 12 UI 元素 + 5 JS 函数 ✅
+
+Phase 5: 批量问答 ✅ (2026-07-10 下午)
+  - /api/kb/batch-ask: ThreadPoolExecutor 并发(max_workers=5)
+  - 前端: 批量问答卡片(textarea + 手风琴结果)
+  - 修复: Form(...) → Form("") 空输入 422
+  - 自检: API + 9 UI 元素 ✅
+
+Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
+  - 启动 4s 就绪，22/22 测试通过
+  - KG 空状态 503 / batch 空输入 / SSL/网络/安全/仪表盘/命令 全部正常
+
+三、测试自检
+  - KGStore CRUD / 搜索 / 子图 / 路径 ✅
+  - KGStore 持久化（保存+重新加载）✅
+  - EntityExtractor JSON 解析（3层回退）✅
+  - 多格式解析（PPTX/HTML）✅
+  - LangGraph 编译 + 路由闭环 ✅
+  - E2E 全链路 22/22 ✅
+  - 向后兼容（关闭 KG/Agentic RAG 后行为不变）✅
+  - 降级保障（MinerU/KG/LLM 失败不影响向量库）✅
+  - main.py 启动 + HTTP 200 ✅
+
+四、文件变更统计
+  新增: 5 文件 (mineru_adapter, doc_parser_v2, kg_store, entity_extractor, kg_builder)
+  修改: 9 文件 (knowledge_agent +320行, doc_parser, main, server +120行, config, requirements, commands.js, 启动.bat, index.html +200行)
+  文档: README, 交接文档, 维护日志, 同步清单
+
+五、Git 状态
+  当前: master (afd5c01) + 全部 Phase 1-6 改动待提交
+
+
+═══════════════════════════════════════════
+【2026-07-10 晚 — Chatbot 多轮对话改造】
+═══════════════════════════════════════════
+- knowledge_agent 新增 chat() 方法 + conversations 字典存储多会话记忆
+- 记忆策略: 保留 30 轮，每次传最近 10 轮给 LLM，单条截断 500 字
+- 新增 3 个 API: /api/kb/chat /chat/clear /chat/history
+- 前端改造: 对话气泡 + 输入框 + 新对话按钮 + 命令推荐
+- 配置: config.yaml 新增 chat_max_turns / chat_max_history
+- 自检: 多轮记忆 ✅ 独立会话 ✅ 清除 ✅ API 端点总计 47

@@ -107,6 +107,30 @@ knowledge_base:
   chroma_dir: data/chroma_db
   top_k: 5                     # 检索返回的最相关文档数
 
+  # 多模态解析 — MinerU 集成（可选，需 pip install magic-pdf 并下载 ~3GB 模型）
+  mineru:
+    enabled: false
+    method: auto               # auto / ocr / txt
+    backend: pytorch           # pytorch / onnx
+
+  # 知识图谱
+  kg:
+    enabled: true
+    storage_dir: data/knowledge_graph
+    entity_types: [TECHNOLOGY, ORGANIZATION, PERSON, LOCATION, CONCEPT]
+    co_occurrence_window: 3    # 共现窗口（同一 chunk 内的实体建边）
+
+  # Agentic RAG — LangGraph ReAct 多步推理
+  agentic_rag:
+    enabled: true
+    max_reasoning_steps: 5
+    parallel_workers: 5
+    batch_max_questions: 20
+
+  # 对话记忆（Chatbot 多轮对话）
+  chat_max_turns: 10            # 每次传给 LLM 的最近对话轮数
+  chat_max_history: 30          # 内存中最多保留的对话轮数（超出后自动淘汰旧消息）
+
 # ---- 日志配置 ----
 logging:
   level: INFO                   # DEBUG / INFO / WARNING / ERROR
