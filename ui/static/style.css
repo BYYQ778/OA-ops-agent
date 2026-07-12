@@ -5,9 +5,12 @@
 
 :root {
   --bg: #f5f6f8;
+  --bg-secondary: #f0f1f3;
   --card: #fff;
   --border: #e8eaed;
+  --border-color: #e8eaed;
   --text: #1a1a2e;
+  --text-primary: #1a1a2e;
   --text-secondary: #8b8fa3;
   --text-muted: #6b7280;
   --primary: #4f46e5;
@@ -16,6 +19,10 @@
   --danger: #dc2626;
   --danger-bg: #fef2f2;
   --danger-border: #fca5a5;
+  --blue-50: #eef2ff;
+  --blue-100: #dbeafe;
+  --blue-500: #3b82f6;
+  --blue-700: #1d4ed8;
   --sidebar-w: 220px;
   --radius: 8px;
 }
@@ -727,6 +734,32 @@ hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .qa-cmd-ex span {
   color: var(--text-muted);
   line-height: 1.6;
+}
+
+/* ===== Knowledge Graph Visualization ===== */
+#kg-graph-container {
+  height: 500px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: #fff;
+}
+.kg-graph-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.kg-graph-legend span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.kg-graph-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
 }
 
 @media (max-width: 700px) {

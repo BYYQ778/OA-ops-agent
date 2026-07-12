@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css?v={{ cache_buster }}">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/vis-network@9.1.6/dist/vis-network.min.js"></script>
 <script src="/static/commands.js?v={{ cache_buster }}"></script>
 </head>
 <body>
@@ -268,6 +269,26 @@
         <div id="kg-search-results" style="margin-top:10px;"></div>
       </div>
 
+      <!-- 可视化图谱 -->
+      <div class="ops-card" id="kg-graph-card" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <h4 style="margin:0;">🕸️ 关系图谱 <span id="kg-graph-info" style="font-size:12px;color:#8b8fa3;font-weight:400;"></span></h4>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-secondary btn-sm" id="kg-back-btn" onclick="kgGoBack()" disabled>↩ 返回</button>
+            <button class="btn btn-secondary btn-sm" onclick="kgToggleView()" title="切换卡片/图谱视图">📋 卡片</button>
+            <button class="btn btn-secondary btn-sm" onclick="kgLoadFullGraph()" title="加载全部实体">🌐 全图</button>
+          </div>
+        </div>
+        <div class="kg-graph-legend" style="margin-bottom:6px;">
+          <span><span class="kg-graph-dot" style="background:#3B82F6;"></span> 技术</span>
+          <span><span class="kg-graph-dot" style="background:#F59E0B;"></span> 组织</span>
+          <span><span class="kg-graph-dot" style="background:#8B5CF6;"></span> 人员</span>
+          <span><span class="kg-graph-dot" style="background:#10B981;"></span> 位置</span>
+          <span><span class="kg-graph-dot" style="background:#E5E7EB;border:1px solid #9CA3AF;"></span> 概念</span>
+        </div>
+        <div id="kg-graph-container"></div>
+      </div>
+
       <!-- 路径发现 -->
       <div class="ops-card">
         <h4>🛤️ 路径发现</h4>
@@ -340,7 +361,7 @@
           <input type="text" id="mysql-host" value="127.0.0.1" placeholder="主机" style="width:140px;">
           <input type="number" id="mysql-port" value="3306" placeholder="端口" style="width:80px;">
           <input type="text" id="mysql-user" value="root" placeholder="用户" style="width:100px;">
-          <input type="password" id="mysql-pass" placeholder="密码" style="width:120px;">
+          <input type="password" id="mysql-pass" autocomplete="off" placeholder="密码" style="width:120px;">
           <button class="btn btn-primary" onclick="dbCheck('mysql')">健康检查</button>
           <button class="btn btn-secondary" onclick="dbCheck('mysql_slow')">慢查询</button>
         </div>
@@ -351,7 +372,7 @@
         <div class="input-row">
           <input type="text" id="redis-host" value="127.0.0.1" style="width:140px;">
           <input type="number" id="redis-port" value="6379" style="width:80px;">
-          <input type="password" id="redis-pass" placeholder="密码" style="width:120px;">
+          <input type="password" id="redis-pass" autocomplete="off" placeholder="密码" style="width:120px;">
           <button class="btn btn-primary" onclick="dbCheck('redis')">健康检查</button>
         </div>
         <pre class="output-box" id="redis-output"></pre>
@@ -362,7 +383,7 @@
           <input type="text" id="ms-host" value="127.0.0.1" style="width:140px;">
           <input type="number" id="ms-port" value="1433" style="width:80px;">
           <input type="text" id="ms-user" value="sa" style="width:100px;">
-          <input type="password" id="ms-pass" placeholder="密码" style="width:120px;">
+          <input type="password" id="ms-pass" autocomplete="off" placeholder="密码" style="width:120px;">
           <button class="btn btn-primary" onclick="dbCheck('mssql')">健康检查</button>
         </div>
         <pre class="output-box" id="ms-output"></pre>
@@ -373,7 +394,7 @@
           <input type="text" id="ora-host" value="127.0.0.1" style="width:140px;">
           <input type="number" id="ora-port" value="1521" style="width:80px;">
           <input type="text" id="ora-user" value="system" style="width:100px;">
-          <input type="password" id="ora-pass" placeholder="密码" style="width:100px;">
+          <input type="password" id="ora-pass" autocomplete="off" placeholder="密码" style="width:100px;">
           <input type="text" id="ora-svc" value="orcl" placeholder="服务名" style="width:80px;">
           <button class="btn btn-primary" onclick="dbCheck('oracle')">健康检查</button>
         </div>
@@ -411,12 +432,12 @@
         <button class="btn btn-secondary" id="mode-api-btn" onclick="switchMode('api')">云端在线 · DeepSeek</button>
       </div>
       <div class="input-row">
-        <input type="password" id="api-key" placeholder="离线模式无需填写" style="flex:1;" disabled>
+        <input type="password" id="api-key" placeholder="离线模式无需填写" style="flex:1;" disabled autocomplete="off">
         <input type="text" id="api-base" value="http://localhost:11434/v1" style="width:240px;" disabled>
         <input type="text" id="api-model" value="qwen3:8b" style="width:140px;" disabled>
       </div>
       <div class="input-row" style="margin-top:10px;">
-        <button class="btn btn-primary" onclick="initSystem()">应用并初始化</button>
+        <button class="btn btn-primary" onclick="initSystem()">💾 保存配置并热切换</button>
         <span id="mode-status" style="font-size:13px;color:#8b8fa3;line-height:36px;margin-left:12px;">当前：本机离线 · Ollama qwen3:8b</span>
       </div>
       <pre class="output-box" id="init-log" style="margin-top:10px;height:80px;">就绪</pre>
@@ -495,30 +516,209 @@ function kgSearch() {
   });
 }
 
+// ============ Graph Visualization ============
+var _kgNetwork = null;          // vis.js network instance
+var _kgCurrentSubgraph = null;  // current subgraph data
+var _kgViewMode = 'graph';      // 'graph' or 'cards'
+var _kgHistory = [];            // 历史记录栈 [{subgraph, centerId}]
+
+// 节点颜色配置：浅色背景用深色字，深色背景用白色字
+var KG_NODE_COLORS = {
+  TECHNOLOGY:   { bg: '#3B82F6', border: '#1D4ED8', font: '#fff', highlight: {bg: '#60A5FA', border: '#3B82F6'} },
+  ORGANIZATION: { bg: '#F59E0B', border: '#B45309', font: '#1a1a2e', highlight: {bg: '#FBBF24', border: '#F59E0B'} },
+  PERSON:       { bg: '#8B5CF6', border: '#6D28D9', font: '#fff', highlight: {bg: '#A78BFA', border: '#8B5CF6'} },
+  LOCATION:     { bg: '#10B981', border: '#047857', font: '#1a1a2e', highlight: {bg: '#34D399', border: '#10B981'} },
+  CONCEPT:      { bg: '#E5E7EB', border: '#9CA3AF', font: '#1a1a2e', highlight: {bg: '#F3F4F6', border: '#D1D5DB'} }
+};
+var KG_DEFAULT_COLOR = { bg: '#D1D5DB', border: '#9CA3AF', font: '#1a1a2e', highlight: {bg: '#E5E7EB', border: '#9CA3AF'} };
+
+function renderGraph(subgraph, pushHistory) {
+  // 保存当前图谱到历史记录
+  if (pushHistory !== false && _kgCurrentSubgraph) {
+    _kgHistory.push({ subgraph: _kgCurrentSubgraph });
+    // 最多保留 20 层历史
+    if (_kgHistory.length > 20) _kgHistory.shift();
+    document.getElementById('kg-back-btn').disabled = false;
+  }
+  _kgCurrentSubgraph = subgraph;
+  _kgViewMode = 'graph';
+
+  var card = document.getElementById('kg-graph-card');
+  card.style.display = 'block';
+
+  var container = document.getElementById('kg-graph-container');
+  container.innerHTML = '';
+
+  var info = document.getElementById('kg-graph-info');
+  info.textContent = subgraph.nodes.length + ' 节点, ' + subgraph.edges.length + ' 边';
+
+  // 字段映射
+  var nodes = subgraph.nodes.map(function(n) {
+    var c = KG_NODE_COLORS[n.type] || KG_DEFAULT_COLOR;
+    var freq = n.frequency || 1;
+    // 节点大小：基础25 + 频次加成，范围 25~55
+    var nodeSize = Math.min(25 + freq * 6, 55);
+    // 长名称截断
+    var label = n.name.length > 10 ? n.name.substring(0, 9) + '...' : n.name;
+    return {
+      id: n.id,
+      label: label,
+      title: '<div style="max-width:240px;"><b style="color:' + c.bg + '">' + escapeHtml(n.type) + '</b><br>' +
+             '<span style="font-size:14px;font-weight:600;">' + escapeHtml(n.name) + '</span>' +
+             (n.description ? '<br><small style="color:#6b7280;">' + escapeHtml(n.description).substring(0, 100) + '</small>' : '') +
+             '<br><small style="color:#9ca3af;">频次: ' + freq + ' | 点击展开邻居</small></div>',
+      color: { background: c.bg, border: c.border, highlight: c.highlight },
+      borderWidth: 2.5,
+      size: nodeSize,
+      font: { color: c.font, size: 13, face: 'Inter, -apple-system, sans-serif', strokeWidth: 2, strokeColor: '#ffffff66', bold: true }
+    };
+  });
+
+  var edges = subgraph.edges.map(function(e) {
+    var w = e.weight || 1;
+    return {
+      from: e.source_id,
+      to: e.target_id,
+      value: w,
+      width: Math.min(1 + w * 0.6, 5),
+      title: '<b>' + escapeHtml(e.relation) + '</b><br>权重: ' + w,
+      color: { color: '#9CA3AF', highlight: '#4B5563', opacity: 0.6 },
+      arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+      smooth: { type: 'curvedCW', roundness: 0.15 }
+    };
+  });
+
+  // vis.js 配置
+  var options = {
+    physics: {
+      solver: 'barnesHut',
+      barnesHut: { gravitationalConstant: -1800, centralGravity: 0.35, springLength: 160, springConstant: 0.05 },
+      stabilization: { iterations: 250, fit: true }
+    },
+    interaction: {
+      hover: true,
+      tooltipDelay: 150,
+      zoomView: true,
+      dragView: true,
+      navigationButtons: false
+    },
+    nodes: {
+      shape: 'dot',
+      borderWidth: 2.5,
+      shadow: { enabled: true, color: 'rgba(0,0,0,0.15)', size: 6, x: 1, y: 2 },
+      scaling: { min: 20, max: 55, label: { enabled: true, min: 11, max: 15 } }
+    },
+    edges: {
+      smooth: { type: 'curvedCW', roundness: 0.15 },
+      width: 1.5,
+      selectionWidth: 2.5
+    },
+    layout: { improvedLayout: true }
+  };
+
+  _kgNetwork = new vis.Network(container, { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) }, options);
+
+  // 点击节点 → 以该节点为中心展开
+  _kgNetwork.on('click', function(params) {
+    if (params.nodes.length > 0) {
+      var nodeId = params.nodes[0];
+      kgExplore(nodeId);
+    }
+  });
+}
+
+function kgGoBack() {
+  if (_kgHistory.length === 0) return;
+  var prev = _kgHistory.pop();
+  if (_kgHistory.length === 0) {
+    document.getElementById('kg-back-btn').disabled = true;
+  }
+  // 不回写历史，直接渲染
+  renderGraph(prev.subgraph, false);
+}
+
+function kgToggleView() {
+  if (_kgViewMode === 'graph' && _kgCurrentSubgraph) {
+    // 切换到卡片视图
+    _kgViewMode = 'cards';
+    document.getElementById('kg-graph-card').style.display = 'none';
+    renderSubgraphCards(_kgCurrentSubgraph);
+    document.querySelector('#kg-graph-card .btn-secondary:first-child').textContent = '🕸️ 图谱视图';
+  } else {
+    // 切换回图谱视图
+    _kgViewMode = 'graph';
+    if (_kgCurrentSubgraph) {
+      document.getElementById('kg-graph-card').style.display = 'block';
+      renderGraph(_kgCurrentSubgraph);
+      document.querySelector('#kg-graph-card .btn-secondary:first-child').textContent = '📋 卡片视图';
+    }
+  }
+}
+
+function renderSubgraphCards(sg) {
+  var container = document.getElementById('kg-search-results');
+  var h = '<div style="font-size:13px;font-weight:600;margin-bottom:8px;">子图 (' + sg.nodes.length + ' 节点, ' + sg.edges.length + ' 边)</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+  sg.nodes.forEach(function(n) {
+    h += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;font-size:13px;cursor:pointer;" onclick="kgExplore(\'' + n.id + '\')">';
+    h += '<span class="kg-type-badge" style="font-size:10px;padding:1px 6px;border-radius:8px;background:var(--blue-100);color:var(--blue-700);margin-right:4px;">' + escapeHtml(n.type) + '</span>';
+    h += '<strong>' + escapeHtml(n.name) + '</strong>';
+    if (n.relation) h += '<br><small style="color:#8b8fa3;">' + escapeHtml(n.relation) + ' (权重' + (n.weight||1) + ')</small>';
+    h += '</div>';
+  });
+  h += '</div>';
+  container.innerHTML = h;
+}
+
 function kgExplore(nodeId) {
   var container = document.getElementById('kg-search-results');
   container.innerHTML = '<span style="color:#8b8fa3;">探索中...</span>';
   post('/api/kg/explore', { node_id: nodeId, depth: 2 }).then(function(r) {
-    if (r.error || !r.subgraph) { container.innerHTML = '<p style="color:var(--red-500);">探索失败</p>'; return; }
-    var sg = r.subgraph;
-    var h = '<div style="font-size:13px;font-weight:600;margin-bottom:8px;">子图 (' + sg.nodes.length + ' 节点, ' + sg.edges.length + ' 边)</div>';
-    h += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
-    sg.nodes.forEach(function(n) {
-      h += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;font-size:13px;">';
-      h += '<span class="kg-type-badge" style="font-size:10px;padding:1px 6px;border-radius:8px;background:var(--blue-100);color:var(--blue-700);margin-right:4px;">' + escapeHtml(n.type) + '</span>';
-      h += '<strong>' + escapeHtml(n.name) + '</strong>';
-      if (n.relation) h += '<br><small style="color:#8b8fa3;">' + escapeHtml(n.relation) + ' (权重' + (n.weight||1) + ')</small>';
-      h += '</div>';
-    });
-    h += '</div>';
-    if (sg.edges.length > 0) {
-      h += '<div style="margin-top:8px;font-size:12px;color:#8b8fa3;">';
-      sg.edges.forEach(function(e) {
-        h += '<div>关系: ' + escapeHtml(e.relation) + ' (权重 ' + e.weight + ')</div>';
-      });
-      h += '</div>';
+    if (r.error || !r.subgraph) { container.innerHTML = '<p style="color:var(--danger);">探索失败</p>'; return; }
+    renderGraph(r.subgraph);
+  });
+}
+
+function kgLoadFullGraph() {
+  var container = document.getElementById('kg-search-results');
+  container.innerHTML = '';
+  // 空搜索获取全部实体
+  post('/api/kg/search', { query: '' }).then(function(r) {
+    if (r.error) { container.innerHTML = '<p style="color:var(--danger);">' + escapeHtml(r.error) + '</p>'; return; }
+    if (!r.results || r.results.length === 0) {
+      container.innerHTML = '<p style="color:#8b8fa3;">图谱为空，请先导入文档</p>';
+      return;
     }
-    container.innerHTML = h;
+    // 获取所有实体的ID，然后通过它们构建全图
+    // 对前20个节点做BFS聚合
+    var allNodeIds = r.results.map(function(n) { return n.id; });
+    var topIds = allNodeIds.slice(0, 10);
+    // 依次探索，合并子图
+    var merged = { nodes: [], edges: [] };
+    var seenNodes = {};
+    var seenEdges = {};
+    var completed = 0;
+    topIds.forEach(function(nid) {
+      post('/api/kg/explore', { node_id: nid, depth: 1 }).then(function(resp) {
+        if (resp.subgraph) {
+          resp.subgraph.nodes.forEach(function(n) {
+            if (!seenNodes[n.id]) { seenNodes[n.id] = true; merged.nodes.push(n); }
+          });
+          resp.subgraph.edges.forEach(function(e) {
+            var key = e.source_id + '|' + e.target_id;
+            if (!seenEdges[key]) { seenEdges[key] = true; merged.edges.push(e); }
+          });
+        }
+        completed++;
+        if (completed >= topIds.length) {
+          if (merged.nodes.length === 0) {
+            document.getElementById('kg-search-results').innerHTML = '<p style="color:#8b8fa3;">无法加载图谱</p>';
+            return;
+          }
+          renderGraph(merged);
+        }
+      });
+    });
   });
 }
 
@@ -794,17 +994,46 @@ function switchMode(mode) {
   if(mode === 'local') {
     document.getElementById('api-key').disabled = true; document.getElementById('api-base').disabled = true; document.getElementById('api-model').disabled = true;
     document.getElementById('api-key').value = 'ollama'; document.getElementById('api-base').value = 'http://localhost:11434/v1'; document.getElementById('api-model').value = 'qwen3:8b';
+    document.getElementById('api-key').placeholder = '离线模式无需填写';
     document.getElementById('mode-status').textContent = '当前：本机离线 · Ollama qwen3:8b';
   } else {
     document.getElementById('api-key').disabled = false; document.getElementById('api-base').disabled = false; document.getElementById('api-model').disabled = false;
     document.getElementById('api-key').value = ''; document.getElementById('api-base').value = 'https://api.deepseek.com/v1'; document.getElementById('api-model').value = 'deepseek-chat';
+    document.getElementById('api-key').placeholder = '请输入 API Key';
     document.getElementById('mode-status').textContent = '当前：云端在线 · DeepSeek';
   }
+  document.getElementById('init-log').textContent = '已切换模式，请点击「保存配置并热切换」使配置生效';
 }
-function initSystem() {
-  document.getElementById('init-log').textContent = '初始化需要加载嵌入模型，请查看服务器终端输出...';
-  // 知识库 Agent 会在首次 API 调用时惰性初始化
-  setTimeout(() => { document.getElementById('init-log').textContent = '设置已保存。知识库引擎将在首次问答时自动加载。'; }, 500);
+async function initSystem() {
+  var logEl = document.getElementById('init-log');
+  logEl.textContent = '正在保存配置...';
+  var provider = currentMode === 'local' ? 'ollama' : 'deepseek';
+  var apiKey = document.getElementById('api-key').value;
+  var baseUrl = document.getElementById('api-base').value;
+  var model = document.getElementById('api-model').value;
+
+  if (currentMode !== 'local' && !apiKey) {
+    logEl.textContent = '❌ 云端模式需要填写 API Key';
+    return;
+  }
+
+  try {
+    var resp = await post('/api/config/save', {
+      provider: provider,
+      api_key: apiKey,
+      base_url: baseUrl,
+      model: model
+    });
+    if (resp.ok) {
+      document.getElementById('mode-status').textContent =
+        '当前：' + (provider === 'ollama' ? '本机离线 · ' + model : '云端在线 · ' + (resp.model || model));
+      logEl.textContent = '✅ 已切换到 ' + (provider === 'ollama' ? 'Ollama ' + model : '云端 ' + (resp.model || model)) + '，下次问答即刻生效';
+    } else {
+      logEl.textContent = '❌ 保存失败: ' + (resp.error || '未知错误');
+    }
+  } catch(e) {
+    logEl.textContent = '❌ 请求失败: ' + e.message;
+  }
 }
 
 // ============ Periodic Status Update ============
@@ -1231,6 +1460,16 @@ if (document.getElementById('page-dashboard').classList.contains('active')) {
     }
   });
 }
+</script>
+
+<script>
+// 全局禁用浏览器自动填充 — SPA单页，所有"页面"共享同一DOM，
+// 密码字段（api-key/mysql-pass等）导致浏览器误判所有输入框为登录表单
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('input').forEach(function(el) {
+    el.setAttribute('autocomplete', 'off');
+  });
+});
 </script>
 
 </body>

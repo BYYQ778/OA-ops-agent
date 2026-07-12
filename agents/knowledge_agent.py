@@ -65,8 +65,6 @@ RAG_SYSTEM_PROMPT = """你是一名OA运维知识库助手，你的职责是基�
 - 先给出直接答案
 - 然后列出依据（引用的文档片段）
 - 如果涉及操作，给出具体步骤和命令
-
-## 用户提问时，会同时提供当前知识库的状态信息，请据此判断能否回答问题。
 """
 
 # ========== 文档分块配置 ==========
@@ -221,14 +219,9 @@ class KnowledgeBaseAgent:
             """从运维知识库中检索与用户问题最相关的文档内容。"""
             return kb._retrieve_context(query)
 
-        @tool
-        def get_kb_stats(dummy: str = "") -> str:
-            """获取当前知识库的统计信息。"""
-            return kb.get_stats()
-
         self.agent = create_agent(
             model=self.llm,
-            tools=[search_knowledge_base, get_kb_stats],
+            tools=[search_knowledge_base],
             system_prompt=RAG_SYSTEM_PROMPT,
         )
         logger.info("简单 RAG Agent 已就绪")
@@ -714,8 +707,6 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 
     def _query_legacy(self, question: str, chat_history: str = "") -> str:
         """简单 RAG 问答（v2.x 兼容）。"""
-        kb_info = self.get_stats()
-
         prompt = question
         if chat_history:
             prompt = f"{chat_history}\n\n## 当前问题\n{question}"
@@ -723,7 +714,7 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
         try:
             result = self.agent.invoke({
                 "messages": [
-                    {"role": "user", "content": f"{prompt}\n\n当前知识库状态: {kb_info}"}
+                    {"role": "user", "content": prompt}
                 ]
             })
             messages = result.get("messages", [])

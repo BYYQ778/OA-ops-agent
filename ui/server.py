@@ -294,6 +294,52 @@ async def api_dashboard_history(minutes: int = 60):
     return {"timeline": timeline}
 
 
+# ============ 系统配置 API ============
+
+@app.post("/api/config/save")
+async def api_config_save(
+    provider: str = Form(...),
+    api_key: str = Form(""),
+    base_url: str = Form(""),
+    model: str = Form(""),
+):
+    """
+    保存 LLM 配置到 config.yaml 并热切换。
+    provider: ollama / deepseek
+    """
+    valid_providers = {"ollama", "deepseek", "qwen", "openai"}
+    if provider not in valid_providers:
+        return {"ok": False, "error": f"无效的 provider: {provider}，支持: {', '.join(valid_providers)}"}
+
+    # 构建要更新的配置项
+    updates = {"llm.provider": provider}
+
+    if provider == "ollama":
+        updates["llm.ollama.model"] = model or "qwen3:8b"
+        updates["llm.ollama.base_url"] = base_url or "http://localhost:11434/v1"
+        updates["llm.ollama.api_key"] = api_key or "ollama"
+    else:
+        updates["llm.model"] = model or "deepseek-chat"
+        updates["llm.base_url"] = base_url or "https://api.deepseek.com/v1"
+        if api_key:
+            updates["llm.api_key"] = api_key
+
+    # 持久化到 config.yaml
+    if not app_config.update_file(updates):
+        return {"ok": False, "error": "配置文件写入失败，请检查 config.yaml 是否被占用"}
+
+    # 热切换：重置知识库 agent，下次问答自动用新配置重建
+    global _kb_agent
+    _kb_agent = None
+
+    logger.info(f"LLM 配置已热切换: provider={provider}, model={model or updates.get('llm.model', updates.get('llm.ollama.model', ''))}")
+    return {
+        "ok": True,
+        "provider": provider,
+        "model": model or (updates.get("llm.model") or updates.get("llm.ollama.model", "")),
+    }
+
+
 # ============ 知识库 API（需 LLM 初始化后可用）============
 
 # 知识库 Agent 需要嵌入模型，延迟初始化

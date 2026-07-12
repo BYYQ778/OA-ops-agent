@@ -2,11 +2,11 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0.."
 chcp 65001 >nul
-title OA运维智能Agent巡检系统
+title OA运维智能Agent巡检系统 v2.4.1
 
 echo.
 echo ╔══════════════════════════════════════════════╗
-echo ║  OA运维多智能Agent巡检问答系统 v2.2         ║
+echo ║  OA运维多智能Agent巡检问答系统 v2.4.1       ║
 echo ╚══════════════════════════════════════════════╝
 echo.
 
@@ -65,10 +65,30 @@ echo [3/5] 检查 Ollama 服务...
 
 tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /i "ollama.exe" >nul
 if %errorlevel% neq 0 (
+    echo   ! Ollama 服务未运行
     echo   正在启动 Ollama...
-    start "" "ollama" serve >nul 2>&1
-    timeout /t 3 /nobreak >nul
+    start "" ollama serve >nul 2>&1
+    echo   等待 Ollama 就绪（最多20秒）...
+    set "OLLAMA_OK=0"
+    for /l %%i in (1,1,20) do (
+        timeout /t 1 /nobreak >nul
+        ollama list >nul 2>&1
+        if not errorlevel 1 set "OLLAMA_OK=1"
+        if "!OLLAMA_OK!"=="1" (
+            echo   √ Ollama 服务就绪 ^(%%i秒^)
+            goto :ollama_ready
+        )
+    )
+    :ollama_ready
+    if "!OLLAMA_OK!"=="0" (
+        echo   ! Ollama 启动超时，请手动启动 Ollama 后重试
+        pause
+        exit /b 1
+    )
+    goto :model_check
 )
+echo   √ Ollama 服务已在运行
+:model_check
 
 set "OLLAMA_MODEL=qwen3:8b"
 for /f "tokens=2" %%a in ('findstr "model:" config.yaml ^| findstr /v "api_key\|base_url\|temperature\|max_tokens\|model_name"') do set "OLLAMA_MODEL=%%a"

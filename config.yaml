@@ -7,18 +7,18 @@
 
 # ---- LLM 大模型配置 ----
 llm:
-  provider: ollama           # deepseek / qwen / openai / ollama
+  provider: deepseek  # deepseek / qwen / openai / ollama
   api_key: ${OA_LLM_API_KEY:}  # ollama 模式可留空
   base_url: https://api.deepseek.com/v1
-  model: qwen3:8b
+  model: deepseek-chat
   temperature: 0.3
   max_tokens: 2048
 
   # 本地离线模型（provider=ollama 时生效）
   ollama:
     base_url: http://localhost:11434/v1
-    model: qwen3:8b          # 推荐: qwen2.5:7b / deepseek-r1:8b / llama3:8b
-    api_key: ollama             # Ollama 不需要真key，填任意值即可
+    model: qwen3:8b  # 推荐: qwen2.5:7b / deepseek-r1:8b / llama3:8b
+    api_key: ollama  # Ollama 不需要真key，填任意值即可
 
 # ---- 嵌入模型配置 ----
 embedding:

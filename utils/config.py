@@ -129,6 +129,95 @@ class Config:
             data = data[key]
         data[keys[-1]] = value
 
+    def update_file(self, updates: dict) -> bool:
+        """
+        持久化配置更新到 config.yaml，保留注释和格式。
+
+        通过按 YAML 缩进级别精确定位 key，替换冒号后的值，
+        保留行内注释。不存在的 key 会在正确缩进位置插入。
+
+        Args:
+            updates: 点号路径到值的映射，如 {"llm.provider": "deepseek"}
+
+        Returns:
+            True 表示写入成功，False 表示某个 key 定位失败
+        """
+        config_path = os.path.join(PROJECT_ROOT, "config.yaml")
+        with open(config_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        for path, value in updates.items():
+            if not self._replace_in_lines(lines, path.split("."), str(value)):
+                return False
+
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+
+        self.reload()
+        return True
+
+    def _replace_in_lines(self, lines: list, keys: list, new_value: str) -> bool:
+        """
+        在 YAML 行数组中定位并替换指定的点号路径。
+
+        按缩进级别逐级导航 section header，在目标缩进级别
+        找到匹配 key 后替换其值。如果 key 不存在则在正确位置插入。
+        """
+        start_line = 0
+        indent = 0
+
+        # 逐级导航到目标 key 的父级 section
+        for parent_key in keys[:-1]:
+            parent_indent = "  " * indent
+            found_parent = False
+            for i in range(start_line, len(lines)):
+                line = lines[i]
+                if not line.strip() or line.strip().startswith("#"):
+                    continue
+                current_indent = len(line) - len(line.lstrip())
+                if current_indent == indent * 2:
+                    if ":" in line:
+                        key_part = line.lstrip().split(":")[0].strip()
+                        if key_part == parent_key:
+                            start_line = i + 1
+                            indent += 1
+                            found_parent = True
+                            break
+            if not found_parent:
+                return False
+
+        # 在父级 section 内找到目标 key
+        target_key = keys[-1]
+        target_indent = "  " * indent
+        for i in range(start_line, len(lines)):
+            line = lines[i]
+            # 跳过空行和纯注释行
+            if not line.strip() or line.strip().startswith("#"):
+                continue
+
+            current_indent = len(line) - len(line.lstrip())
+
+            # 如果缩进小于目标级别，已经离开了该 section（key 不存在）
+            if current_indent < indent * 2:
+                # 在离开点之前插入新行
+                lines.insert(i, f"{target_indent}{target_key}: {new_value}\n")
+                return True
+
+            # 匹配目标缩进级别的 key
+            if current_indent == indent * 2 and ":" in line:
+                key_part = line.lstrip().split(":")[0].strip()
+                if key_part == target_key:
+                    # 保留行内注释
+                    comment = ""
+                    if "#" in line:
+                        comment = "  " + line[line.index("#"):].rstrip("\n")
+                    lines[i] = f"{target_indent}{target_key}: {new_value}{comment}\n"
+                    return True
+
+        # 遍历完所有行都没找到，追加到末尾
+        lines.append(f"\n{target_indent}{target_key}: {new_value}\n")
+        return True
+
     def all(self) -> dict:
         """返回全部配置数据"""
         return self._data.copy()
