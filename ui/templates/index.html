@@ -176,25 +176,37 @@
       <button class="btn btn-secondary btn-sm" onclick="chatNew()" title="新建对话">🔄 新对话</button>
       <span style="font-size:12px;color:#8b8fa3;" id="chat-info">就绪</span>
       <span style="flex:1;"></span>
+      <button class="btn btn-secondary btn-sm" onclick="qaTogglePanel()" title="收起/展开会话列表">☰ 会话</button>
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('batch-panel').style.display = document.getElementById('batch-panel').style.display==='none'?'block':'none'">📋 批量问答</button>
     </div>
 
-    <!-- 对话区 -->
-    <div class="ops-card" style="padding:0;overflow:hidden;">
-      <div id="chat-messages" style="height:420px;overflow-y:auto;padding:16px;">
-        <div class="chat-welcome">
-          <div class="chat-welcome-icon">💬</div>
-          <p>你好！我是 OA 运维知识助手。</p>
-          <p style="color:#8b8fa3;">可以问我任何运维相关问题，我会基于知识库为你解答。支持多轮对话记忆。</p>
+    <!-- 对话区：左会话列表 + 右聊天 -->
+    <div class="qa-layout" id="qa-layout">
+      <!-- 会话列表 -->
+      <div class="qa-conv-panel" id="qa-conv-panel">
+        <div class="qa-conv-header">
+          <span>💬 会话列表</span>
+          <button class="btn btn-secondary btn-sm" onclick="qaTogglePanel()" title="收起列表">«</button>
+        </div>
+        <div class="qa-conv-list" id="conv-list"></div>
+      </div>
+
+      <!-- 聊天区 -->
+      <div class="ops-card qa-chat-card" style="padding:0;overflow:hidden;flex:1;min-width:0;">
+        <div id="chat-messages" style="overflow-y:auto;padding:16px;">
+          <div class="chat-welcome">
+            <div class="chat-welcome-icon">💬</div>
+            <p>你好！我是 OA 运维知识助手。</p>
+            <p style="color:#8b8fa3;">可以问我任何运维相关问题，我会基于知识库为你解答。支持多轮对话记忆与历史记录。</p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--border-color);background:var(--bg-secondary);">
+          <input type="text" id="chat-input" placeholder="输入问题，如「OA 审批流程卡死了怎么办？」" style="flex:1;"
+                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatSend();}">
+          <button class="btn btn-primary" id="chat-send-btn" onclick="chatSend()">发送</button>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--border-color);background:var(--bg-secondary);">
-        <input type="text" id="chat-input" placeholder="输入问题，如「OA 审批流程卡死了怎么办？」" style="flex:1;"
-               onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatSend();}">
-        <button class="btn btn-primary" id="chat-send-btn" onclick="chatSend()">发送</button>
-      </div>
     </div>
-
     <!-- 历史消息 -->
     <div id="qa-history-area" style="display:none;"></div>
 
@@ -233,7 +245,7 @@
           <div class="drop-icon">📂</div>
           <span class="drop-title">拖拽文档到此处上传</span>
           <p class="drop-hint">支持 PDF · Word · PPT · HTML · TXT · 图片 (自动OCR)</p>
-          <input type="file" id="kb-file-input" accept=".pdf,.docx,.pptx,.html,.htm,.txt,.png,.jpg,.jpeg,.bmp,.tiff,.webp" onchange="kbUpload()" style="display:none;">
+          <input type="file" id="kb-file-input" accept=".pdf,.docx,.pptx,.html,.htm,.txt,.md,.png,.jpg,.jpeg,.bmp,.tiff,.webp" onchange="kbUpload()" style="display:none;">
           <button class="btn btn-secondary drop-btn" onclick="document.getElementById('kb-file-input').click()">或点击选择文件</button>
           <span id="kb-upload-status" style="font-size:13px;color:#6b7280;"></span>
         </div>
@@ -277,16 +289,26 @@
             <button class="btn btn-secondary btn-sm" id="kg-back-btn" onclick="kgGoBack()" disabled>↩ 返回</button>
             <button class="btn btn-secondary btn-sm" onclick="kgToggleView()" title="切换卡片/图谱视图">📋 卡片</button>
             <button class="btn btn-secondary btn-sm" onclick="kgLoadFullGraph()" title="加载全部实体">🌐 全图</button>
+            <button class="btn btn-secondary btn-sm" onclick="kgToggleFullscreen()" title="全屏展示">📺 全屏</button>
           </div>
         </div>
         <div class="kg-graph-legend" style="margin-bottom:6px;">
-          <span><span class="kg-graph-dot" style="background:#3B82F6;"></span> 技术</span>
-          <span><span class="kg-graph-dot" style="background:#F59E0B;"></span> 组织</span>
-          <span><span class="kg-graph-dot" style="background:#8B5CF6;"></span> 人员</span>
-          <span><span class="kg-graph-dot" style="background:#10B981;"></span> 位置</span>
-          <span><span class="kg-graph-dot" style="background:#E5E7EB;border:1px solid #9CA3AF;"></span> 概念</span>
+          <span><span class="kg-graph-dot" style="background:#5b9bd5;"></span> 技术</span>
+          <span><span class="kg-graph-dot" style="background:#e0a040;"></span> 组织</span>
+          <span><span class="kg-graph-dot" style="background:#9b7ec4;"></span> 人员</span>
+          <span><span class="kg-graph-dot" style="background:#5aaa8c;"></span> 位置</span>
+          <span><span class="kg-graph-dot" style="background:#8e98a8;"></span> 概念</span>
         </div>
-        <div id="kg-graph-container"></div>
+        <div style="display:flex;gap:10px;" id="kg-main-area">
+          <div style="position:relative;flex:1;">
+            <div id="kg-graph-container"></div>
+            <div id="kg-floating-label" style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);padding:5px 16px;background:rgba(0,0,0,0.78);color:#fff;border-radius:16px;font-size:12px;pointer-events:none;opacity:0;transition:opacity 0.2s;white-space:nowrap;z-index:10;backdrop-filter:blur(4px);">● 节点名</div>
+          </div>
+          <div id="kg-node-detail" style="display:none;width:260px;min-width:260px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border-color);font-size:13px;overflow-y:auto;max-height:500px;">
+            <div style="text-align:center;color:var(--text-muted);padding-top:60px;">👆 点击图谱中的节点<br>查看详细信息</div>
+          </div>
+        </div>
+        <div id="kg-orphan-list" style="display:none;margin-top:8px;"></div>
       </div>
 
       <!-- 路径发现 -->
@@ -442,6 +464,16 @@
       </div>
       <pre class="output-box" id="init-log" style="margin-top:10px;height:80px;">就绪</pre>
     </div>
+
+    <!-- 外观设置 -->
+    <div class="ops-card" style="margin-top:16px;">
+      <label>外观主题</label>
+      <div class="btn-row" style="margin-bottom:12px;">
+        <button class="btn btn-primary" id="theme-light-btn" onclick="switchTheme('light')">☀️ 浅色模式</button>
+        <button class="btn btn-secondary" id="theme-dark-btn" onclick="switchTheme('dark')">🌙 深色模式</button>
+      </div>
+      <span id="theme-status" style="font-size:13px;color:#8b8fa3;">当前：跟随系统</span>
+    </div>
   </section>
 
   <!-- Page: 运维命令大全 -->
@@ -522,15 +554,15 @@ var _kgCurrentSubgraph = null;  // current subgraph data
 var _kgViewMode = 'graph';      // 'graph' or 'cards'
 var _kgHistory = [];            // 历史记录栈 [{subgraph, centerId}]
 
-// 节点颜色配置：浅色背景用深色字，深色背景用白色字
+// Obsidian Graph View 风格：柔和、低饱和、静谧
 var KG_NODE_COLORS = {
-  TECHNOLOGY:   { bg: '#3B82F6', border: '#1D4ED8', font: '#fff', highlight: {bg: '#60A5FA', border: '#3B82F6'} },
-  ORGANIZATION: { bg: '#F59E0B', border: '#B45309', font: '#1a1a2e', highlight: {bg: '#FBBF24', border: '#F59E0B'} },
-  PERSON:       { bg: '#8B5CF6', border: '#6D28D9', font: '#fff', highlight: {bg: '#A78BFA', border: '#8B5CF6'} },
-  LOCATION:     { bg: '#10B981', border: '#047857', font: '#1a1a2e', highlight: {bg: '#34D399', border: '#10B981'} },
-  CONCEPT:      { bg: '#E5E7EB', border: '#9CA3AF', font: '#1a1a2e', highlight: {bg: '#F3F4F6', border: '#D1D5DB'} }
+  TECHNOLOGY:   { dot: '#5b9bd5', glow: '#5b9bd566' },
+  ORGANIZATION: { dot: '#e0a040', glow: '#e0a04066' },
+  PERSON:       { dot: '#9b7ec4', glow: '#9b7ec466' },
+  LOCATION:     { dot: '#5aaa8c', glow: '#5aaa8c66' },
+  CONCEPT:      { dot: '#8e98a8', glow: '#8e98a866' }
 };
-var KG_DEFAULT_COLOR = { bg: '#D1D5DB', border: '#9CA3AF', font: '#1a1a2e', highlight: {bg: '#E5E7EB', border: '#9CA3AF'} };
+var KG_DEFAULT_COLOR = { dot: '#6b7280', glow: '#6b728066' };
 
 function renderGraph(subgraph, pushHistory) {
   // 保存当前图谱到历史记录
@@ -552,79 +584,223 @@ function renderGraph(subgraph, pushHistory) {
   var info = document.getElementById('kg-graph-info');
   info.textContent = subgraph.nodes.length + ' 节点, ' + subgraph.edges.length + ' 边';
 
-  // 字段映射
-  var nodes = subgraph.nodes.map(function(n) {
+  // 字段映射 — 拆分：有连接的节点进图，孤立节点单独列
+  _kgNodeMap = {};
+  subgraph.nodes.forEach(function(n) { _kgNodeMap[n.id] = n; });
+
+  // 统计每个节点的连接数（全局保存供详情面板用）
+  _kgConnectedCount = {};
+  subgraph.edges.forEach(function(e) {
+    _kgConnectedCount[e.source_id] = (_kgConnectedCount[e.source_id] || 0) + 1;
+    _kgConnectedCount[e.target_id] = (_kgConnectedCount[e.target_id] || 0) + 1;
+  });
+  var connectedNodes = _kgConnectedCount;
+
+  var graphNodes = [];
+  var orphans = [];
+  subgraph.nodes.forEach(function(n) {
+    if (connectedNodes[n.id]) {
+      graphNodes.push(n);
+    } else {
+      orphans.push(n);
+    }
+  });
+
+  // 如果全图都孤立（如搜索单个实体而无边），也全部渲染
+  if (graphNodes.length === 0) { graphNodes = subgraph.nodes; orphans = []; }
+
+  info.textContent = graphNodes.length + ' 节点, ' + subgraph.edges.length + ' 边' +
+    (orphans.length > 0 ? '（' + orphans.length + ' 个孤立实体已折叠）' : '');
+
+  var nodes = graphNodes.map(function(n) {
     var c = KG_NODE_COLORS[n.type] || KG_DEFAULT_COLOR;
-    var freq = n.frequency || 1;
-    // 节点大小：基础25 + 频次加成，范围 25~55
-    var nodeSize = Math.min(25 + freq * 6, 55);
-    // 长名称截断
-    var label = n.name.length > 10 ? n.name.substring(0, 9) + '...' : n.name;
+    var edgeCount = connectedNodes[n.id] || 0;
+    var nodeSize = edgeCount >= 5 ? 8 : (edgeCount >= 2 ? 6 : 4.5);
+    var shortName = n.name.length > 8 ? n.name.substring(0, 7) + '~' : n.name;
     return {
       id: n.id,
-      label: label,
-      title: '<div style="max-width:240px;"><b style="color:' + c.bg + '">' + escapeHtml(n.type) + '</b><br>' +
-             '<span style="font-size:14px;font-weight:600;">' + escapeHtml(n.name) + '</span>' +
-             (n.description ? '<br><small style="color:#6b7280;">' + escapeHtml(n.description).substring(0, 100) + '</small>' : '') +
-             '<br><small style="color:#9ca3af;">频次: ' + freq + ' | 点击展开邻居</small></div>',
-      color: { background: c.bg, border: c.border, highlight: c.highlight },
-      borderWidth: 2.5,
+      label: shortName,             // 短标签，缩放拉近时可见
+      title: '<b>' + escapeHtml(n.name) + '</b><br><small>' + escapeHtml(n.type) + '</small>' +
+             (n.description ? '<br><small style="opacity:0.7;">' + escapeHtml(n.description).substring(0, 80) + '</small>' : ''),
+      color: {
+        background: c.dot,
+        border: c.dot,
+        highlight: { background: c.dot, border: c.dot },
+        hover: { background: c.dot, border: c.dot }
+      },
+      borderWidth: 0,
+      borderWidthSelected: 2,
       size: nodeSize,
-      font: { color: c.font, size: 13, face: 'Inter, -apple-system, sans-serif', strokeWidth: 2, strokeColor: '#ffffff66', bold: true }
+      font: { color: '#999999', size: 10, face: 'Inter, sans-serif', strokeWidth: 0, strokeColor: 'transparent', align: 'center' }
     };
   });
 
+  // 判断是否深色主题，标签颜色跟随
+  var labelColor = document.documentElement.getAttribute('data-theme') === 'dark' ? '#666666' : '#aaaaaa';
+  nodes.forEach(function(nd) { nd.font.color = labelColor; });
+
   var edges = subgraph.edges.map(function(e) {
+    if (!_kgNodeMap[e.source_id] || !_kgNodeMap[e.target_id]) return null;
     var w = e.weight || 1;
     return {
       from: e.source_id,
       to: e.target_id,
       value: w,
-      width: Math.min(1 + w * 0.6, 5),
-      title: '<b>' + escapeHtml(e.relation) + '</b><br>权重: ' + w,
-      color: { color: '#9CA3AF', highlight: '#4B5563', opacity: 0.6 },
-      arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-      smooth: { type: 'curvedCW', roundness: 0.15 }
+      width: w >= 3 ? 0.6 : 0.3,   // 极细边
+      title: escapeHtml(e.relation) + ' · 权重 ' + w,
+      color: { color: '#888888', highlight: '#aaaaaa', opacity: 0.18, hover: { opacity: 0.5 } },
+      arrows: { to: { enabled: false } },  // 无箭头
+      smooth: { type: 'continuous', roundness: 0.5 }
     };
-  });
+  }).filter(Boolean);
 
-  // vis.js 配置
+  // 孤立节点显示为下方文字列表
+  var orphanEl = document.getElementById('kg-orphan-list');
+  if (orphans.length > 0) {
+    var oh = '';
+    orphans.forEach(function(n) {
+      oh += '<span style="display:inline-block;padding:2px 8px;margin:2px;background:var(--bg-secondary);border-radius:10px;font-size:11px;cursor:pointer;" onclick="kgExplore(\'' + n.id + '\')" title="点击探索">' +
+            '<span class="kg-type-badge" style="font-size:9px;padding:1px 5px;border-radius:6px;background:var(--blue-100);color:var(--blue-700);margin-right:3px;">' + escapeHtml(n.type) + '</span>' +
+            escapeHtml(n.name) + '</span>';
+    });
+    orphanEl.innerHTML = '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">孤立实体（无关联边，点击可探索）：</div>' + oh;
+    orphanEl.style.display = 'block';
+  } else {
+    orphanEl.style.display = 'none';
+  }
+
+  // Obsidian Graph View 风格配置
   var options = {
+    autoResize: true,
     physics: {
-      solver: 'barnesHut',
-      barnesHut: { gravitationalConstant: -1800, centralGravity: 0.35, springLength: 160, springConstant: 0.05 },
-      stabilization: { iterations: 250, fit: true }
+      solver: 'forceAtlas2Based',
+      forceAtlas2Based: {
+        gravitationalConstant: -35,
+        centralGravity: 0.008,
+        springLength: 120,
+        springConstant: 0.02,
+        damping: 0.65,
+        avoidOverlap: 0.3
+      },
+      stabilization: { iterations: 400, fit: true, updateInterval: 25 },
+      maxVelocity: 8,
+      minVelocity: 0.2,
+      timestep: 0.5
     },
     interaction: {
       hover: true,
-      tooltipDelay: 150,
+      hoverConnectedEdges: true,
+      tooltipDelay: 200,
       zoomView: true,
       dragView: true,
-      navigationButtons: false
+      navigationButtons: false,
+      hideEdgesOnDrag: true,
+      keyboard: { enabled: true, bindToWindow: false }
     },
     nodes: {
       shape: 'dot',
-      borderWidth: 2.5,
-      shadow: { enabled: true, color: 'rgba(0,0,0,0.15)', size: 6, x: 1, y: 2 },
-      scaling: { min: 20, max: 55, label: { enabled: true, min: 11, max: 15 } }
+      borderWidth: 0,
+      borderWidthSelected: 2,
+      chosen: {
+        node: function(values) { values.size = 12; values.borderWidth = 2; values.borderColor = '#fff'; },
+        label: false
+      },
+      color: { highlight: { border: '#ffffff88' } },
+      shadow: { enabled: false },
+      scaling: {
+        min: 3, max: 10,
+        label: { enabled: true, min: 7, max: 20, maxVisible: 30, drawThreshold: 3 }
+      }
     },
     edges: {
-      smooth: { type: 'curvedCW', roundness: 0.15 },
-      width: 1.5,
-      selectionWidth: 2.5
+      smooth: { type: 'continuous', roundness: 0.6 },
+      width: 0.5,
+      selectionWidth: 1,
+      hoverWidth: 0.5,
+      chosen: { edge: function(values) { values.width = 1.5; values.color = '#999999'; } },
+      color: { inherit: false }
     },
-    layout: { improvedLayout: true }
+    layout: { improvedLayout: true, randomSeed: 42 }
   };
 
   _kgNetwork = new vis.Network(container, { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) }, options);
 
-  // 点击节点 → 以该节点为中心展开
-  _kgNetwork.on('click', function(params) {
+  // 选中节点时在底部浮动条显示名称
+  var floatingEl = document.getElementById('kg-floating-label');
+  _kgNetwork.on('selectNode', function(params) {
     if (params.nodes.length > 0) {
-      var nodeId = params.nodes[0];
-      kgExplore(nodeId);
+      var n = _kgNodeMap[params.nodes[0]];
+      if (n) {
+        floatingEl.innerHTML = '<span style="color:' + (KG_NODE_COLORS[n.type]||KG_DEFAULT_COLOR).dot + ';">●</span> ' +
+          escapeHtml(n.name) + ' <small style="opacity:0.5;">' + escapeHtml(n.type) + '</small>' +
+          ' <small style="opacity:0.4;">· 双击展开</small>';
+        floatingEl.style.opacity = '1';
+        showNodeDetail(params.nodes[0]);
+      }
     }
   });
+  _kgNetwork.on('deselectNode', function() {
+    floatingEl.style.opacity = '0';
+  });
+
+  // 单击空白 → 取消选中
+  _kgNetwork.on('click', function(params) {
+    if (params.nodes.length === 0) {
+      _kgNetwork.unselectAll();
+      document.getElementById('kg-node-detail').innerHTML =
+        '<div style="text-align:center;color:var(--text-muted);padding-top:60px;">👆 点击节点查看详情<br><small>双击展开邻居</small></div>';
+    }
+  });
+
+  // 双击节点 → 展开
+  _kgNetwork.on('doubleClick', function(params) {
+    if (params.nodes.length > 0) {
+      kgExplore(params.nodes[0]);
+    }
+  });
+
+  // hover 时边高亮
+  _kgNetwork.on('hoverNode', function(params) {
+    if (params.node) {
+      floatingEl.innerHTML = '<span style="color:' + (KG_NODE_COLORS[_kgNodeMap[params.node]?.type]||KG_DEFAULT_COLOR).dot + ';">●</span> ' +
+        escapeHtml(_kgNodeMap[params.node]?.name || params.node);
+      floatingEl.style.opacity = '1';
+    } else {
+      floatingEl.style.opacity = _kgNetwork.getSelectedNodes().length > 0 ? '1' : '0';
+    }
+  });
+}
+
+var _kgNodeMap = {}; // 当前子图节点映射（供详情面板查询）
+
+function showNodeDetail(nodeId) {
+  var n = _kgNodeMap[nodeId];
+  if (!n) return;
+  var panel = document.getElementById('kg-node-detail');
+  panel.style.display = 'block';
+  var c = KG_NODE_COLORS[n.type] || KG_DEFAULT_COLOR;
+  var freq = n.frequency || 1;
+  var desc = n.description || '暂无描述';
+  var srcs = (n.sources || []).join('、') || '未知';
+  panel.innerHTML =
+    '<div style="font-size:16px;font-weight:600;margin-bottom:6px;color:' + c.dot + ';">' + escapeHtml(n.name) + '</div>' +
+    '<div style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:10px;background:' + c.dot + ';color:#fff;margin-bottom:10px;">' + escapeHtml(n.type) + '</div>' +
+    '<div style="margin-bottom:8px;line-height:1.6;color:var(--text);">' + escapeHtml(desc) + '</div>' +
+    '<div style="font-size:12px;color:var(--text-secondary);border-top:1px solid var(--border-color);padding-top:8px;">' +
+      '<div>📄 来源: ' + escapeHtml(srcs) + '</div>' +
+      '<div>🔢 频次: ' + freq + '</div>' +
+      '<div>🔗 关联: ' + (_kgConnectedCount[nodeId] || 0) + ' 条边</div>' +
+    '</div>' +
+    '<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%;" onclick="kgExplore(\'' + nodeId + '\')">🔍 展开此节点</button>';
+}
+
+function kgToggleFullscreen() {
+  var card = document.getElementById('kg-graph-card');
+  card.classList.toggle('kg-fullscreen');
+  // 全屏时调整画布高度
+  setTimeout(function() {
+    if (_kgNetwork) _kgNetwork.fit({ animation: { duration: 500 } });
+  }, 300);
 }
 
 function kgGoBack() {
@@ -760,19 +936,49 @@ function kgLoadStats() {
   });
 }
 
+// ============ Toast 提示 ============
+function showToast(message, type) {
+  var toast = document.createElement('div');
+  toast.className = 'toast ' + (type === 'error' ? 'toast-error' : 'toast-success');
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(function() {
+    toast.classList.add('toast-hide');
+    setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+  }, 2500);
+}
+
 // ============ API Helper ============
+// 统一请求封装：30s 超时 + 非 2xx 兜底 + 错误归一化。
+// 失败时不抛异常，返回 {error, msg}，避免调用链出现 unhandled rejection。
+async function request(url, opts) {
+  const controller = new AbortController();
+  const timer = setTimeout(function() { controller.abort(); }, 30000);
+  try {
+    const resp = await fetch(url, Object.assign({}, opts, { signal: controller.signal }));
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    return await resp.json();
+  } catch (e) {
+    const msg = (e && e.name === 'AbortError') ? '请求超时，请重试'
+      : ('请求失败: ' + ((e && e.message) || '网络错误'));
+    showToast(msg, 'error');
+    return { error: msg, msg: msg };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 async function post(url, body) {
-  const form = new FormData();
-  for (let k in body) form.append(k, body[k]);
-  const resp = await fetch(url, { method: 'POST', body: form });
-  return resp.json();
+  const form = (body instanceof FormData) ? body : new FormData();
+  if (!(body instanceof FormData)) {
+    for (let k in body) form.append(k, body[k]);
+  }
+  return request(url, { method: 'POST', body: form });
 }
 async function get(url) {
-  const resp = await fetch(url);
-  return resp.json();
+  return request(url, { method: 'GET' });
 }
-function setOutput(id, text) { document.getElementById(id).textContent = text; }
-function setLoading(id) { document.getElementById(id).textContent = '处理中...'; }
+function setOutput(id, text) { var el = document.getElementById(id); if (el) el.textContent = (text == null) ? '' : text; }
+function setLoading(id) { var el = document.getElementById(id); if (el) el.textContent = '处理中...'; }
 
 // ============ Inspection ============
 function inspectRun() { setLoading('inspect-output'); post('/api/inspect/run').then(r => setOutput('inspect-output', r.result)); }
@@ -785,16 +991,23 @@ function updateStatus() { get('/api/inspect/status').then(r => { document.getEle
 
 // ============ Log Analysis ============
 function logAnalyze() { var txt = document.getElementById('log-input').value; if(!txt.trim()) return; setLoading('log-output'); post('/api/log/analyze', {log_text: txt}).then(r => setOutput('log-output', r.result)); }
-function logOCR() { var f = document.getElementById('log-image-input').files[0]; if(!f) return; var fd = new FormData(); fd.append('file', f); document.getElementById('log-ocr-status').textContent = 'OCR 识别中...'; setLoading('log-output'); fetch('/api/log/ocr', {method:'POST', body:fd}).then(r => r.json()).then(r => { document.getElementById('log-input').value = r.text; document.getElementById('log-ocr-status').textContent = '✓ 识别完成，' + r.text.length + ' 字'; document.getElementById('log-image-input').value = ''; setOutput('log-output', r.result); }); }
+function logOCR() { var f = document.getElementById('log-image-input').files[0]; if(!f) return; var fd = new FormData(); fd.append('file', f); document.getElementById('log-ocr-status').textContent = 'OCR 识别中...'; setLoading('log-output'); post('/api/log/ocr', fd).then(function(r) { if (r.error) { document.getElementById('log-ocr-status').textContent = '✗ 识别失败'; return; } var text = r.text || ''; document.getElementById('log-input').value = text; document.getElementById('log-ocr-status').textContent = '✓ 识别完成，' + text.length + ' 字'; document.getElementById('log-image-input').value = ''; setOutput('log-output', r.result); }); }
 
 // ============ Chatbot ============
 
-var chatConversationId = 'default';
+var chatConversationId = null;
+var chatConversationTitle = '';
 
 function chatSend() {
   var input = document.getElementById('chat-input');
   var msg = input.value.trim();
   if (!msg) return;
+
+  // 确保有活动对话（首次进入/删除后可能为空）
+  if (!chatConversationId) {
+    ensureActiveConversation(function() { chatSend(); });
+    return;
+  }
 
   // 禁用输入
   input.disabled = true;
@@ -804,24 +1017,27 @@ function chatSend() {
   appendChatBubble('user', msg);
   input.value = '';
 
-  // 添加思考中气泡
-  var thinkingId = appendChatBubble('assistant', '思考中...', true);
+  // 创建回答气泡（先显示"思考中"，收到首个 token 后开始逐字输出）
+  var answerBubbleId = appendChatBubble('assistant', '思考中...', true);
 
   // 清除欢迎消息
   var welcome = document.querySelector('.chat-welcome');
   if (welcome) welcome.remove();
 
-  post('/api/kb/chat', { message: msg, conversation_id: chatConversationId }).then(function(r) {
-    // 移除思考中气泡
-    var thinking = document.getElementById(thinkingId);
-    if (thinking) thinking.remove();
+  // SSE 流式请求（POST + fetch ReadableStream）
+  var form = new FormData();
+  form.append('message', msg);
+  form.append('conversation_id', chatConversationId);
 
-    // 添加回答气泡
-    appendChatBubble('assistant', r.answer);
-
-    // 更新对话信息
-    document.getElementById('chat-info').textContent = '对话 ' + (r.conversation_id || chatConversationId);
-
+  var finished = false;
+  function finish() {
+    if (finished) return;
+    finished = true;
+    input.disabled = false;
+    document.getElementById('chat-send-btn').disabled = false;
+    input.focus();
+    // 刷新会话列表（更新排序/消息数/自动标题）
+    convRefresh();
     // 推荐命令
     if (typeof searchCommands !== 'undefined') {
       var cmds = searchCommands(msg, null);
@@ -829,14 +1045,80 @@ function chatSend() {
         renderChatCommands(cmds.slice(0, 5));
       }
     }
+  }
+  function getBubble() {
+    var row = document.getElementById(answerBubbleId);
+    return row ? row.querySelector('.chat-bubble') : null;
+  }
+
+  fetch('/api/kb/chat/stream', { method: 'POST', body: form }).then(function(resp) {
+    if (!resp.ok || !resp.body) {
+      throw new Error('HTTP ' + resp.status);
+    }
+    var reader = resp.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = '';
+    var fullText = '';
+    var started = false;
+
+    function handleLine(line) {
+      var t = line.trim();
+      if (!t || t.indexOf('data:') !== 0) return;
+      var payload;
+      try { payload = JSON.parse(t.slice(5).trim()); } catch (e) { return; }
+      var bubble = getBubble();
+      if (payload.error) {
+        if (bubble) {
+          bubble.classList.remove('thinking');
+          bubble.innerHTML = formatChatContent('[错误] ' + payload.error);
+        }
+        showToast('回答失败', 'error');
+        finish();
+        return;
+      }
+      if (payload.delta) {
+        if (!started) {
+          started = true;
+          if (bubble) bubble.classList.remove('thinking');
+        }
+        fullText += payload.delta;
+        if (bubble) bubble.innerHTML = formatChatContent(fullText);
+        return;
+      }
+      if (payload.done) {
+        finish();
+      }
+    }
+
+    function pump() {
+      return reader.read().then(function(result) {
+        if (result.done) {
+          // 流结束兜底
+          var bubble = getBubble();
+          if (!fullText && bubble) {
+            bubble.classList.remove('thinking');
+            bubble.innerHTML = formatChatContent('[提示] 未收到回答内容');
+          }
+          finish();
+          return;
+        }
+        buffer += decoder.decode(result.value, { stream: true });
+        var lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (var i = 0; i < lines.length; i++) handleLine(lines[i]);
+        return pump();
+      });
+    }
+
+    return pump();
   }).catch(function(e) {
-    var thinking = document.getElementById(thinkingId);
-    if (thinking) thinking.remove();
-    appendChatBubble('assistant', '[错误] 请求失败，请检查服务状态');
-  }).finally(function() {
-    input.disabled = false;
-    document.getElementById('chat-send-btn').disabled = false;
-    input.focus();
+    var bubble = getBubble();
+    if (bubble) {
+      bubble.classList.remove('thinking');
+      bubble.innerHTML = formatChatContent('[错误] 流式请求失败：' + (e.message || '网络错误'));
+    }
+    showToast('流式请求失败', 'error');
+    finish();
   });
 }
 
@@ -845,18 +1127,13 @@ function appendChatBubble(role, content, isThinking) {
   var id = 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
   var div = document.createElement('div');
   div.id = id;
-  div.style.cssText = 'margin-bottom:12px;display:flex;' + (role === 'user' ? 'justify-content:flex-end;' : 'justify-content:flex-start;');
+  div.className = 'chat-row ' + (role === 'user' ? 'user' : 'assistant');
 
   var bubble = document.createElement('div');
-  var bg = role === 'user' ? 'var(--blue-500)' : 'var(--bg-secondary)';
-  var color = role === 'user' ? '#fff' : 'var(--text-primary)';
-  var align = role === 'user' ? 'right' : 'left';
-  bubble.style.cssText = 'max-width:75%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;background:' + bg + ';color:' + color + ';text-align:' + align + ';';
+  bubble.className = 'chat-bubble ' + (role === 'user' ? 'user' : 'assistant') + (isThinking ? ' thinking' : '');
 
   if (isThinking) {
     bubble.textContent = content;
-    bubble.style.opacity = '0.6';
-    bubble.style.fontStyle = 'italic';
   } else {
     // 渲染 Markdown 风格的代码块
     bubble.innerHTML = formatChatContent(content);
@@ -877,18 +1154,204 @@ function formatChatContent(text) {
   escaped = escaped.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre style="background:rgba(0,0,0,0.06);padding:8px;border-radius:4px;overflow-x:auto;font-size:13px;"><code>$2</code></pre>');
   // 行内代码 `
   escaped = escaped.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.08);padding:1px 4px;border-radius:3px;font-size:13px;">$1</code>');
+  // 《文档名》→ 可点击链接
+  escaped = escaped.replace(/《([^》]+)》/g, '<a href="javascript:void(0)" onclick="showDocModal(\'$1\')" style="color:#4f46e5;text-decoration:underline;cursor:pointer;" title="点击查看文档全文">📄《$1》</a>');
   // 换行
   escaped = escaped.replace(/\n/g, '<br>');
   return escaped;
 }
 
-function chatNew() {
-  post('/api/kb/chat/clear', { conversation_id: chatConversationId }).then(function() {
-    var container = document.getElementById('chat-messages');
-    container.innerHTML = '<div class="chat-welcome"><div class="chat-welcome-icon">💬</div><p>新对话已开始</p><p style="color:#8b8fa3;">可以问我任何运维相关问题</p></div>';
-    document.getElementById('chat-info').textContent = '新对话';
-    document.getElementById('chat-input').focus();
+// ============ 文档预览弹窗 ============
+function showDocModal(docName) {
+  var modal = document.getElementById('doc-modal');
+  var body = document.getElementById('doc-modal-body');
+  body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-secondary);">⏳ 加载中...</div>';
+  modal.style.display = 'flex';
+  // 从 API 获取文档全文
+  get('/api/kb/document/' + encodeURIComponent(docName)).then(function(data) {
+    if (data && data.error) {
+      body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger);">' + escapeHtml(data.msg || '加载失败，请重试') + '</div>';
+      return;
+    }
+    var text = (data && data.result) || '';
+    if (text.indexOf('[错误]') === 0) {
+      body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger);">' + escapeHtml(text) + '</div>';
+      return;
+    }
+    body.innerHTML = '<pre style="white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.8;font-family:inherit;">' + escapeHtml(text) + '</pre>';
   });
+}
+function closeDocModal() {
+  document.getElementById('doc-modal').style.display = 'none';
+}
+
+function chatNew() {
+  // 新建对话（持久化）
+  post('/api/kb/conversation', {}).then(function(r) {
+    if (r && r.conversation_id) {
+      chatConversationId = r.conversation_id;
+      chatConversationTitle = r.title || '新对话';
+      resetChatArea();
+      document.getElementById('chat-info').textContent = '新对话';
+      document.getElementById('chat-input').focus();
+      convRefresh();
+    } else {
+      showToast((r && r.error) ? r.error : '新建对话失败', 'error');
+    }
+  });
+}
+
+// ============ 会话列表管理 ============
+function resetChatArea() {
+  var container = document.getElementById('chat-messages');
+  container.innerHTML = '<div class="chat-welcome"><div class="chat-welcome-icon">💬</div><p>你好！我是 OA 运维知识助手。</p><p style="color:#8b8fa3;">可以问我任何运维相关问题，我会基于知识库为你解答。支持多轮对话记忆与历史记录。</p></div>';
+}
+
+function qaInit() {
+  if (document.getElementById('conv-list').getAttribute('data-loaded') === '1') return;
+  document.getElementById('conv-list').setAttribute('data-loaded', '1');
+  // 恢复面板收起状态
+  if (localStorage.getItem('oa-qa-panel-collapsed') === '1') {
+    document.getElementById('qa-layout').classList.add('collapsed');
+  }
+  convLoad();
+}
+
+function qaTogglePanel() {
+  var layout = document.getElementById('qa-layout');
+  layout.classList.toggle('collapsed');
+  localStorage.setItem('oa-qa-panel-collapsed', layout.classList.contains('collapsed') ? '1' : '0');
+}
+
+function convLoad() {
+  get('/api/kb/conversations').then(function(r) {
+    var list = (r && r.conversations) || [];
+    if (list.length === 0) {
+      // 首次进入自动创建一个对话
+      post('/api/kb/conversation', {}).then(function(cr) {
+        if (cr && cr.conversation_id) {
+          chatConversationId = cr.conversation_id;
+          chatConversationTitle = cr.title || '新对话';
+          document.getElementById('chat-info').textContent = '新对话';
+          convRender([{ id: cr.conversation_id, title: cr.title || '新对话', message_count: 0, updated_at: '' }]);
+        }
+      });
+      return;
+    }
+    // 若当前没有选中对话，默认打开最近一个
+    if (!chatConversationId) {
+      chatConversationId = list[0].id;
+      loadConversationMessages(list[0].id);
+    }
+    convRender(list);
+  });
+}
+
+function convRefresh() {
+  get('/api/kb/conversations').then(function(r) {
+    var list = (r && r.conversations) || [];
+    convRender(list);
+  });
+}
+
+function convRender(list) {
+  var container = document.getElementById('conv-list');
+  if (!list || list.length === 0) {
+    container.innerHTML = '<div class="qa-conv-empty">暂无对话，点击「🔄 新对话」开始</div>';
+    return;
+  }
+  var html = '';
+  var activeInfo = null;
+  for (var i = 0; i < list.length; i++) {
+    var c = list[i];
+    var title = escapeHtml(c.title || '新对话');
+    var count = c.message_count || 0;
+    var time = qaTime(c.updated_at);
+    var activeCls = (c.id === chatConversationId) ? ' active' : '';
+    if (c.id === chatConversationId) activeInfo = c;
+    html += '<div class="conv-item' + activeCls + '" onclick="convSwitch(\'' + c.id + '\')">' +
+      '<button class="conv-item-del" title="删除对话" onclick="event.stopPropagation();convDelete(\'' + c.id + '\')">✕</button>' +
+      '<div class="conv-item-title">' + title + '</div>' +
+      '<div class="conv-item-meta">' + count + ' 条消息 · ' + time + '</div>' +
+      '</div>';
+  }
+  container.innerHTML = html;
+  if (activeInfo) {
+    chatConversationTitle = activeInfo.title || '新对话';
+    document.getElementById('chat-info').textContent = '对话：' + chatConversationTitle;
+  }
+}
+
+function convSwitch(id) {
+  if (id === chatConversationId) return;
+  chatConversationId = id;
+  chatConversationTitle = '';
+  document.getElementById('chat-info').textContent = '对话：加载中...';
+  loadConversationMessages(id);
+  convRefresh();
+}
+
+function loadConversationMessages(id) {
+  get('/api/kb/chat/history?conversation_id=' + encodeURIComponent(id)).then(function(r) {
+    var msgs = (r && r.messages) || [];
+    var container = document.getElementById('chat-messages');
+    if (msgs.length === 0) {
+      resetChatArea();
+      return;
+    }
+    container.innerHTML = '';
+    for (var i = 0; i < msgs.length; i++) {
+      if (msgs[i].role === 'user' || msgs[i].role === 'assistant') {
+        appendChatBubble(msgs[i].role, msgs[i].content);
+      }
+    }
+  });
+}
+
+function convDelete(id) {
+  if (!confirm('确定删除该对话吗？删除后不可恢复。')) return;
+  post('/api/kb/conversation/delete', { conversation_id: id }).then(function(r) {
+    if (r && r.ok) {
+      showToast('对话已删除', 'success');
+      if (id === chatConversationId) {
+        chatConversationId = null;
+        chatConversationTitle = '';
+        convLoad();
+      } else {
+        convRefresh();
+      }
+    } else {
+      showToast('删除失败', 'error');
+    }
+  });
+}
+
+function ensureActiveConversation(callback) {
+  if (chatConversationId) { if (callback) callback(); return; }
+  post('/api/kb/conversation', {}).then(function(r) {
+    if (r && r.conversation_id) {
+      chatConversationId = r.conversation_id;
+      chatConversationTitle = r.title || '新对话';
+      document.getElementById('chat-info').textContent = '新对话';
+      convRefresh();
+      if (callback) callback();
+    } else {
+      showToast((r && r.error) ? r.error : '新建对话失败', 'error');
+    }
+  });
+}
+
+function qaTime(ts) {
+  if (!ts) return '';
+  var t = new Date(String(ts).replace(' ', 'T'));
+  if (isNaN(t.getTime())) return '';
+  var diff = Math.floor((new Date() - t) / 1000);
+  if (diff < 60) return '刚刚';
+  if (diff < 3600) return Math.floor(diff / 60) + ' 分钟前';
+  if (diff < 86400) return Math.floor(diff / 3600) + ' 小时前';
+  var d = Math.floor(diff / 86400);
+  if (d < 30) return d + ' 天前';
+  return (t.getFullYear()) + '-' + (t.getMonth() + 1) + '-' + t.getDate();
 }
 
 function renderChatCommands(cmds) {
@@ -964,7 +1427,7 @@ function kbStats() { setLoading('kb-output'); get('/api/kb/stats').then(r => set
 function kbDelete() { var n = document.getElementById('kb-delete-name').value; if(!n.trim()) return; setLoading('kb-output'); post('/api/kb/delete', {doc_name: n}).then(r => setOutput('kb-output', r.result)); }
 function kbClear() { if(!confirm('确定要清空整个知识库吗？此操作不可撤销。')) return; setLoading('kb-output'); post('/api/kb/clear').then(r => setOutput('kb-output', r.result)); }
 function kbDrop(e) { e.preventDefault(); e.currentTarget.classList.remove('drag-over'); var f = e.dataTransfer.files[0]; if(f) { document.getElementById('kb-file-input').files = e.dataTransfer.files; kbUpload(); } }
-function kbUpload() { var f = document.getElementById('kb-file-input').files[0]; if(!f) return; var fd = new FormData(); fd.append('file', f); document.getElementById('kb-upload-status').textContent = '上传中...'; setLoading('kb-output'); fetch('/api/kb/import', {method:'POST', body:fd}).then(r => r.json()).then(r => { setOutput('kb-output', r.result); document.getElementById('kb-upload-status').textContent = '✓ 上传完成'; document.getElementById('kb-file-input').value = ''; }); }
+function kbUpload() { var f = document.getElementById('kb-file-input').files[0]; if(!f) return; var fd = new FormData(); fd.append('file', f); document.getElementById('kb-upload-status').textContent = '上传中...'; setLoading('kb-output'); post('/api/kb/import', fd).then(function(r) { if (r.error) { document.getElementById('kb-upload-status').textContent = '✗ 上传失败'; return; } setOutput('kb-output', r.result); document.getElementById('kb-upload-status').textContent = '✓ 上传完成'; document.getElementById('kb-file-input').value = ''; }); }
 
 // ============ SSL ============
 function sslCheck() { var d = document.getElementById('ssl-domain').value; if(!d.trim()) return; setLoading('ssl-single-output'); post('/api/ssl/check', {domain: d}).then(r => setOutput('ssl-single-output', r.result)); }
@@ -984,6 +1447,24 @@ function dbCheck(type) {
 
 // ============ Security ============
 function secAudit(type) { setLoading('sec-output'); post('/api/sec/' + type).then(r => setOutput('sec-output', r.result)); }
+
+// ============ Theme ============
+function switchTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('oa-ops-theme', theme);
+  document.getElementById('theme-light-btn').className = theme === 'light' ? 'btn btn-primary' : 'btn btn-secondary';
+  document.getElementById('theme-dark-btn').className = theme === 'dark' ? 'btn btn-primary' : 'btn btn-secondary';
+  document.getElementById('theme-status').textContent = '当前：' + (theme === 'dark' ? '深色模式 🌙' : '浅色模式 ☀️');
+}
+// 读取保存的主题
+(function() {
+  var saved = localStorage.getItem('oa-ops-theme');
+  if (saved === 'dark' || saved === 'light') {
+    switchTheme(saved);
+  } else {
+    document.getElementById('theme-status').textContent = '当前：跟随系统（未设置）';
+  }
+})();
 
 // ============ Settings ============
 var currentMode = 'local';
@@ -1449,6 +1930,7 @@ switchPage = function(page) {
   origSwitchPage(page);
   if (page === 'dashboard') dashboardInit();
   if (page === 'commands') cmdInit();
+  if (page === 'qa') qaInit();
 };
 // 初始加载时如果仪表盘是默认页，自动初始化
 if (document.getElementById('page-dashboard').classList.contains('active')) {
@@ -1461,6 +1943,17 @@ if (document.getElementById('page-dashboard').classList.contains('active')) {
   });
 }
 </script>
+
+<!-- 文档预览弹窗 -->
+<div id="doc-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center;" onclick="if(event.target===this)closeDocModal()">
+  <div style="background:#fff;border-radius:12px;width:85%;max-width:900px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border-color);">
+      <h3 style="margin:0;font-size:16px;" id="doc-modal-title">📄 参考资料来源</h3>
+      <button onclick="closeDocModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-secondary);line-height:1;">✕</button>
+    </div>
+    <div id="doc-modal-body" style="flex:1;overflow-y:auto;padding:20px;"></div>
+  </div>
+</div>
 
 <script>
 // 全局禁用浏览器自动填充 — SPA单页，所有"页面"共享同一DOM，

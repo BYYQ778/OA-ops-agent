@@ -51,3 +51,5 @@ server_out.log
 
 # Internal docs (not for public release)
 OA运维Agent项目全流程文档*.docx
+data/inspection_logs/
+data/knowledge_graph/

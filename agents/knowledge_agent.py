@@ -31,6 +31,7 @@ from langchain_core.documents import Document
 
 from utils.doc_parser import parse_document, split_text
 from utils.logger import get_logger
+from utils.database import db
 
 logger = get_logger(__name__)
 
@@ -58,7 +59,7 @@ RAG_SYSTEM_PROMPT = """你是一名OA运维知识库助手，你的职责是基�
 1. **只能**根据下方【参考资料】中的内容回答问题
 2. 如果【参考资料】中没有相关信息，必须回答："抱歉，知识库中未找到相关信息，请补充相关文档后重试。"
 3. **禁止**使用你的训练数据或外部知识回答问题
-4. 回答时引用具体的文档来源（如"根据《xxx文档》..."）
+4. 回答时**必须**引用具体的完整文档文件名，用《》括起来（如"根据《MySQL8.0数据库安装参考手册Windows.pdf》"）（如"根据《xxx文档》..."）
 5. 如果参考资料中有操作步骤，请按序号列出并标注注意事项
 
 ## 回答格式
@@ -259,6 +260,7 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
         """构建 LangGraph ReAct Agent（支持 Ollama 和 DeepSeek）。"""
         try:
             from langgraph.graph import StateGraph, END
+            from langgraph.types import StreamWriter
             from typing import TypedDict, Annotated, List as ListType
         except ImportError:
             logger.warning("langgraph 未安装，回退到简单 RAG")
@@ -389,7 +391,7 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
             return {"kg_context": (existing + "\n[图谱探索]\n" + "\n".join(parts)).strip(), "_tool_input": ""}
 
         # ---- Answer Node ----
-        def answer_node(state: dict) -> dict:
+        def answer_node(state: dict, writer: StreamWriter) -> dict:
             kb_ctx = state.get("kb_context", "")
             kg_ctx = state.get("kg_context", "")
 
@@ -406,15 +408,29 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 
 请给出完整、准确的回答。引用来源。如果信息不足，请明确说明。"""
 
+            answer = ""
             try:
-                resp = kb.llm.invoke([
+                # 流式生成：writer 把 token 推给 stream_mode="custom" 的消费者
+                for chunk in kb.llm.stream([
                     {"role": "system", "content": "你是一个 OA 运维知识库助手。严格基于提供的检索信息回答，禁止编造。"},
                     {"role": "user", "content": answer_prompt},
-                ])
-                answer = resp.content if hasattr(resp, "content") else str(resp)
+                ]):
+                    token = ""
+                    content = getattr(chunk, "content", chunk)
+                    if isinstance(content, list):
+                        token = "".join(
+                            b.get("text", "") if isinstance(b, dict) else str(b)
+                            for b in content
+                        )
+                    else:
+                        token = str(content or "")
+                    if token:
+                        answer += token
+                        writer({"token": token})
             except Exception as e:
-                logger.warning(f"Answer LLM 调用失败: {e}")
+                logger.warning(f"Answer LLM 流式调用失败: {e}")
                 answer = f"[检索模式] 以下是与您问题相关的内容（LLM 暂不可用）：\n\n{kb_ctx}\n\n{kg_ctx}"
+                writer({"token": answer})
 
             return {
                 "final_answer": answer,
@@ -486,7 +502,7 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
                 source = doc.metadata.get("source", "未知")
                 chunk_idx = doc.metadata.get("chunk_index", "?")
                 context_parts.append(
-                    f"[参考资料{i}] 来源: {source} (片段{chunk_idx})\n{doc.page_content}"
+                    f"[参考资料{i}] 来源:《{source}》(片段{chunk_idx})\n{doc.page_content}"
                 )
 
             return "\n\n".join(context_parts)
@@ -576,24 +592,29 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 
     # ========== 对话 Chatbot ==========
 
-    def chat(self, message: str, conversation_id: str = "default") -> str:
+    def chat(self, message: str, conversation_id: str = "default", stream: bool = False):
         """
-        多轮对话问答（带记忆）。
+        多轮对话问答（带记忆，持久化到 SQLite）。
 
         Args:
             message: 用户当前消息
             conversation_id: 对话 ID（不同 ID 独立记忆）
+            stream: 为 True 时返回生成器，逐 token 产出回答（SSE 流式用）
 
         Returns:
-            基于知识库 + 对话历史的回答
+            stream=False 返回完整回答字符串；stream=True 返回生成器
         """
         if not message.strip():
             return "[提示] 请输入您想咨询的运维问题。"
 
-        # 获取或创建对话历史
+        # 懒加载：内存没有则从数据库恢复该对话
         if conversation_id not in self.conversations:
-            self.conversations[conversation_id] = []
+            self.conversations[conversation_id] = self._load_conversation_from_db(conversation_id)
         history = self.conversations[conversation_id]
+
+        # 新会话自动建号并生成标题（取首条用户消息）
+        if not history:
+            self._ensure_conversation_row(conversation_id, message)
 
         logger.info(f"对话 [{conversation_id}] 第 {len(history)//2 + 1} 轮: {message[:50]}...")
 
@@ -601,30 +622,92 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
         memory_turns = self._get_agentic_config("chat_max_turns", 10)
         chat_context = self._format_chat_history(history, max_turns=memory_turns)
 
+        # 流式模式：返回生成器（由 SSE 端点逐 token 消费）
+        if stream:
+            return self._chat_stream(message, chat_context, conversation_id, history)
+
         # ---- Agentic RAG 路径 ----
         if self.agentic_graph is not None:
             answer = self._query_agentic(message, chat_history=chat_context)
         else:
             answer = self._query_legacy(message, chat_history=chat_context)
 
-        # 保存到历史
+        # 保存到内存历史
         history.append({"role": "user", "content": message})
         history.append({"role": "assistant", "content": answer})
 
-        # 限制历史长度（最多保留 30 轮 = 60 条消息）
+        # 持久化到 SQLite（每条消息落库，重启不丢）
+        try:
+            db.save_message(conversation_id, "user", message)
+            db.save_message(conversation_id, "assistant", answer)
+        except Exception as e:
+            logger.warning(f"对话历史持久化失败: {e}")
+
+        # 限制内存历史长度（最多保留 30 轮 = 60 条消息；数据库保留全量）
         max_messages = self._get_agentic_config("chat_max_history", 30) * 2
         if len(history) > max_messages:
             self.conversations[conversation_id] = history[-max_messages:]
 
         return answer
 
+    def _ensure_conversation_row(self, conversation_id: str, first_message: str):
+        """确保 conversations 表存在该会话；新会话自动生成标题（首条用户消息截断）。"""
+        title = (first_message.strip() or "新对话")[:20]
+        try:
+            db.create_conversation(title, conversation_id=conversation_id)
+        except Exception:
+            pass  # 已存在
+        # 若会话还没有任何消息且标题仍是默认值，则用首条用户消息更新标题
+        try:
+            if not db.get_conversation_messages(conversation_id, limit=1):
+                convs = db.list_conversations(limit=200)
+                cur = next((c for c in convs if c["id"] == conversation_id), None)
+                if cur and cur.get("title", "").strip() in ("", "新对话"):
+                    db.rename_conversation(conversation_id, title)
+        except Exception:
+            pass
+
+    def _load_conversation_from_db(self, conversation_id: str) -> List[Dict]:
+        """从数据库恢复对话历史（按内存上限截取，供 LLM 上下文使用）。"""
+        rows = db.get_conversation_messages(conversation_id)
+        max_messages = self._get_agentic_config("chat_max_history", 30) * 2
+        recent = rows[-max_messages:]
+        return [{"role": r["role"], "content": r["content"]} for r in recent]
+
     def clear_conversation(self, conversation_id: str = "default"):
-        """清除指定对话的历史记录。"""
+        """清除指定对话（内存 + 数据库）。"""
         self.conversations.pop(conversation_id, None)
+        try:
+            db.delete_conversation(conversation_id)
+        except Exception as e:
+            logger.warning(f"删除对话失败: {e}")
 
     def get_conversation(self, conversation_id: str = "default") -> List[Dict]:
-        """获取对话历史。"""
+        """获取对话历史（优先从数据库读全量，内存仅作缓存）。"""
+        try:
+            rows = db.get_conversation_messages(conversation_id)
+            if rows:
+                return [{"role": r["role"], "content": r["content"]} for r in rows]
+        except Exception:
+            pass
         return self.conversations.get(conversation_id, [])
+
+    def create_conversation(self, title: str = "新对话") -> str:
+        """新建对话，返回对话 ID。"""
+        return db.create_conversation(title)
+
+    def list_conversations(self, limit: int = 50) -> List[Dict]:
+        """对话列表（按最近更新倒序）。"""
+        return db.list_conversations(limit)
+
+    def delete_conversation(self, conversation_id: str) -> bool:
+        """删除指定对话（内存 + 数据库）。"""
+        self.conversations.pop(conversation_id, None)
+        return db.delete_conversation(conversation_id)
+
+    def rename_conversation(self, conversation_id: str, title: str) -> bool:
+        """重命名对话标题。"""
+        return db.rename_conversation(conversation_id, title)
 
     def _format_chat_history(self, history: List[Dict], max_turns: int = 10) -> str:
         """将对话历史格式化为上下文字符串。"""
@@ -726,7 +809,78 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
                 f"[检索模式] 以下是与您问题相关的知识库内容（LLM暂不可用，请自行参考）：\n\n"
                 f"{context}"
             )
+    def _chat_stream(self, message: str, chat_context: str, conversation_id: str, history: List[Dict]):
+        """生成器：流式产出回答，结束时持久化对话（用户消息先落库，生成失败也不丢）。"""
+        # 用户消息先持久化
+        try:
+            db.save_message(conversation_id, "user", message)
+        except Exception as e:
+            logger.warning(f"对话历史持久化失败: {e}")
+        history.append({"role": "user", "content": message})
 
+        if self.agentic_graph is not None:
+            gen = self._stream_agentic(message, chat_history=chat_context)
+        else:
+            gen = self._stream_legacy(message, chat_history=chat_context)
+
+        answer = ""
+        for chunk in gen:
+            answer += chunk
+            yield chunk
+
+        # 助手回答持久化
+        history.append({"role": "assistant", "content": answer})
+        try:
+            db.save_message(conversation_id, "assistant", answer)
+        except Exception as e:
+            logger.warning(f"对话历史持久化失败: {e}")
+
+        # 限制内存历史长度（数据库保留全量）
+        max_messages = self._get_agentic_config("chat_max_history", 30) * 2
+        if len(history) > max_messages:
+            self.conversations[conversation_id] = history[-max_messages:]
+
+    def _stream_agentic(self, question: str, chat_history: str = ""):
+        """生成器：流式产出 Agentic RAG 最终回答的 token（stream_mode='custom'）。"""
+        try:
+            initial_messages = []
+            if chat_history:
+                initial_messages.append({
+                    "role": "user",
+                    "content": f"{chat_history}\n\n## 当前问题\n{question}"
+                })
+            input_state = {
+                "messages": initial_messages,
+                "question": question,
+                "kb_context": "",
+                "kg_context": "",
+                "reasoning_steps": 0,
+                "next_action": "search_kb",
+                "final_answer": "",
+            }
+            full = ""
+            for event in self.agentic_graph.stream(input_state, stream_mode="custom"):
+                token = (event or {}).get("token", "")
+                if token:
+                    full += token
+                    yield token
+            if not full:
+                # 流式未产出（极端情况），退回一次性生成
+                yield self._query_agentic(question, chat_history=chat_history)
+        except Exception as e:
+            logger.warning(f"Agentic RAG 流式异常，降级到检索模式: {e}")
+            context = self._retrieve_context(question)
+            if self.kg_store:
+                try:
+                    kg_ctx = self.kg_store.to_context_string(question)
+                    context = context + "\n\n[知识图谱]\n" + kg_ctx
+                except Exception:
+                    pass
+            yield f"[检索降级模式] 以下是与您问题相关的知识库内容：\n\n{context}"
+
+    def _stream_legacy(self, question: str, chat_history: str = ""):
+        """简单 RAG 问答（一次性产出，兼容非流式后端）。"""
+        yield self._query_legacy(question, chat_history=chat_history)
     def list_documents(self) -> str:
         """
         列出知识库中所有已导入的文档清单。
@@ -808,6 +962,41 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 
         except Exception as e:
             return f"[错误] 删除文档失败: {str(e)}"
+
+    def get_document_text(self, doc_name: str) -> str:
+        """
+        获取指定文档的完整文本内容（所有分块拼接）。
+
+        Args:
+            doc_name: 文档文件名（如 '操作手册.pdf'）
+
+        Returns:
+            文档全文，或错误提示
+        """
+        try:
+            all_data = self.vector_store.get()
+            if not all_data["ids"]:
+                return "[错误] 知识库为空。"
+
+            # 找到该文档的所有分块，按 chunk_index 排序
+            chunks = []
+            for i, meta in enumerate(all_data["metadatas"]):
+                if meta.get("source", "") == doc_name:
+                    chunks.append((
+                        meta.get("chunk_index", 0),
+                        all_data["documents"][i] if all_data["documents"] else ""
+                    ))
+
+            if not chunks:
+                return f"[错误] 未找到文档 '{doc_name}'。"
+
+            # 按分块序号排序后拼接
+            chunks.sort(key=lambda x: x[0])
+            full_text = "\n\n".join(c[1] for c in chunks)
+            return full_text
+
+        except Exception as e:
+            return f"[错误] 获取文档内容失败: {str(e)}"
 
     def get_stats(self) -> str:
         """

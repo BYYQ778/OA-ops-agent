@@ -167,7 +167,7 @@ def parse_document_v2(file_path: str, use_mineru: bool = None) -> str:
     elif ext in (".htm", ".html"):
         return clean_text(_parse_html_native(file_path))
 
-    elif ext == ".txt":
+    elif ext in (".txt", ".md", ".markdown"):
         return clean_text(parse_txt(file_path))
 
     elif ext in (".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp"):
@@ -176,5 +176,5 @@ def parse_document_v2(file_path: str, use_mineru: bool = None) -> str:
     else:
         raise ValueError(
             f"不支持的文件格式: {ext}"
-            f"（支持 .pdf / .docx / .pptx / .html / .txt / 图片格式）"
+            f"（支持 .pdf / .docx / .pptx / .html / .txt / .md / 图片格式）"
         )

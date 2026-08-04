@@ -30,7 +30,7 @@ from utils.dashboard import dashboard_manager
 logger = get_logger(__name__)
 
 # ---- FastAPI App ----
-app = FastAPI(title="OA 运维助手", version="2.3")
+app = FastAPI(title="OA 运维助手", version="2.5.0")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
@@ -49,7 +49,7 @@ async def index(request: Request):
     import time
     template = templates.get_template("index.html")
     html = template.render(
-        version="2.3",
+        version="2.5.0",
         cache_buster=str(int(time.time())),
         scheduler_status=sched_status,
         is_running=scheduler.is_running,
@@ -407,6 +407,16 @@ async def api_kb_stats():
         return {"result": "知识库引擎未就绪"}
     return {"result": kb.get_stats()}
 
+@app.get("/api/kb/document/{doc_name}")
+async def api_kb_document(doc_name: str):
+    """获取指定文档的完整内容。"""
+    kb = get_kb_agent()
+    if kb is None:
+        return {"result": "知识库引擎未就绪"}
+    # URL 解码
+    from urllib.parse import unquote
+    return {"result": kb.get_document_text(unquote(doc_name))}
+
 @app.post("/api/kb/delete")
 async def api_kb_delete(doc_name: str = Form(...)):
     kb = get_kb_agent()
@@ -442,6 +452,31 @@ async def api_kb_chat(
     answer = kb.chat(message, conversation_id=conversation_id)
     return {"answer": answer, "conversation_id": conversation_id}
 
+@app.post("/api/kb/chat/stream")
+async def api_kb_chat_stream(
+    message: str = Form(...),
+    conversation_id: str = Form("default"),
+):
+    """SSE 流式问答：逐 token 推送最终回答。"""
+    import json as _json
+
+    kb = get_kb_agent()
+
+    async def event_gen():
+        if kb is None:
+            yield f"data: {_json.dumps({'error': '知识库引擎未就绪，请确认嵌入模型已加载且 LLM 配置正确'}, ensure_ascii=False)}\n\n"
+            return
+        try:
+            gen = kb.chat(message, conversation_id=conversation_id, stream=True)
+            for chunk in gen:
+                yield f"data: {_json.dumps({'delta': chunk}, ensure_ascii=False)}\n\n"
+            yield f"data: {_json.dumps({'done': True, 'conversation_id': conversation_id}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            logger.warning(f"流式问答异常: {e}")
+            yield f"data: {_json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
 
 @app.post("/api/kb/chat/clear")
 async def api_kb_chat_clear(conversation_id: str = Form("default")):
@@ -456,10 +491,37 @@ async def api_kb_chat_clear(conversation_id: str = Form("default")):
 @app.get("/api/kb/chat/history")
 async def api_kb_chat_history(conversation_id: str = "default"):
     """获取对话历史。"""
-    kb = get_kb_agent()
-    if kb is None:
-        return {"messages": []}
-    return {"messages": kb.get_conversation(conversation_id)}
+    rows = db.get_conversation_messages(conversation_id)
+    return {"messages": [{"role": r["role"], "content": r["content"]} for r in rows]}
+
+@app.get("/api/kb/conversations")
+async def api_kb_conversations(limit: int = 50):
+    """对话列表（按最近更新倒序）。"""
+    return {"conversations": db.list_conversations(limit)}
+
+
+@app.post("/api/kb/conversation")
+async def api_kb_conversation_create():
+    """新建对话，返回新对话 ID。"""
+    conv_id = db.create_conversation("新对话")
+    return {"ok": True, "conversation_id": conv_id, "title": "新对话"}
+
+
+@app.post("/api/kb/conversation/delete")
+async def api_kb_conversation_delete(conversation_id: str = Form(...)):
+    """删除对话及其全部消息。"""
+    ok = db.delete_conversation(conversation_id)
+    return {"ok": ok, "conversation_id": conversation_id}
+
+
+@app.post("/api/kb/conversation/rename")
+async def api_kb_conversation_rename(
+    conversation_id: str = Form(...),
+    title: str = Form(...),
+):
+    """重命名对话标题。"""
+    ok = db.rename_conversation(conversation_id, title.strip() or "新对话")
+    return {"ok": ok, "conversation_id": conversation_id, "title": title}
 
 
 # ============ 批量问答 API (v2.4) ============
