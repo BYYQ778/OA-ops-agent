@@ -1,10 +1,10 @@
-OA运维多智能Agent巡检问答系统 - 交接文档 v2.4
+OA运维多智能Agent巡检问答系统 - 交接文档 v2.5.0
 =================================================
-创建: 2026-05-07（v1.0）→ 最后更新: 2026-07-10（v2.4 知识图谱 + Agentic RAG + 多格式解析）
-版本: v2.4
+创建: 2026-05-07（v1.0）→ 最后更新: 2026-08-04（v2.5.0 对话历史持久化 + SSE流式输出 + 知识问答UI重构）
+版本: v2.5.0
 状态: GitHub开源已发布、可演示、可部署、本机离线运行
 仓库: https://github.com/BYYQ778/OA-ops-agent
-最后更新: 2026-07-10 — v2.4 知识图谱构建/Agentic RAG(LangGraph ReAct)/多格式解析(PPTX+HTML+MinerU)
+最后更新: 2026-08-04 — v2.5.0 对话历史持久化(SQLite) / SSE流式输出 / 知识问答UI重构 / 前端工程优化
 
 ═══════════════════════════════════════════════════════════
 一、项目概述
@@ -17,7 +17,9 @@ OA运维多智能Agent巡检问答系统，面向运维实习生的智能运维�
   实时监控仪表盘 → SSE推送 + 5状态卡片 + Chart.js趋势图 + 告警时间线 + 日志控制台
   巡检Agent → 端口/Nginx/OA服务/磁盘/内存 五项检测
   日志分析Agent → 10+正则规则自动识别故障
-  知识库Agent → 多轮对话 Chatbot + Agentic RAG + 知识图谱多步推理 + 批量问答(20题)
+  知识库Agent → 多轮对话 Chatbot + Agentic RAG + 知识图谱多步推理 + 批量问答(20题) + SSE流式输出
+  对话历史 → SQLite 持久化 + 会话列表/新建/切换/删除/自动标题
+  SSE流式输出 → 问答逐 token 流式渲染（/api/kb/chat/stream）
   知识图谱 → LLM实体提取(5种类型) + NetworkX图谱存储 + 节点搜索/路径发现/子图探索
   Agentic RAG → LangGraph ReAct Agent，向量检索+图谱推理多步决策
   多格式解析 → PDF/Word/PPT/HTML/TXT/图片 + MinerU多模态(可选) + OCR
@@ -34,11 +36,11 @@ OA运维多智能Agent巡检问答系统，面向运维实习生的智能运维�
 虚拟环境: E:\YunweiAgent\oa-ops-agent\env_new
 Python:    3.11.9
 端口:      7860
-数据库:    SQLite → data/oa_ops.db
+数据库:    SQLite → data/oa_ops.db（5表：巡检/告警/日志分析/对话/对话消息）
 配置:      config.yaml（主配置）+ .env（敏感信息）
 认证:      v2.3 FastAPI 未接入登录认证（旧 Gradio 版 admin/admin123 已随框架移除）
 巡检模式:  local（本机 Windows 真实检测）
-Git:       已初始化，12次提交（master）
+Git:       已初始化，15次提交（master，HEAD=v2.5.0/3af9f42）
 
 ═══════════════════════════════════════════════════════════
 三、v2.0 MVP 全部改造清单（12项）
@@ -103,7 +105,7 @@ Git:       已初始化，12次提交（master）
    - Ollama离线部署指南.md
 
 ═══════════════════════════════════════════════════════════
-四、项目文件结构（v2.4）
+四、项目文件结构（v2.5.0）
 ═══════════════════════════════════════════════════════════
 
 oa-ops-agent/
@@ -125,7 +127,7 @@ oa-ops-agent/
 │   ├── inspection_agent.py      # 巡检Agent（模拟+LLM汇总）
 │   ├── inspection_real.py       # 真实巡检（SSH+本机Local）
 │   ├── log_analysis_agent.py    # 日志分析（10+正则规则）
-│   ├── knowledge_agent.py       # 知识库RAG + Agentic RAG + KG
+│   ├── knowledge_agent.py       # 知识库RAG + Agentic RAG + KG + SSE流式
 │   ├── entity_extractor.py      # [v2.4] LLM 实体提取
 │   ├── kg_builder.py            # [v2.4] 知识图谱构建编排
 │   ├── ai_reporter.py           # AI报告生成（预警+策略）
@@ -135,7 +137,7 @@ oa-ops-agent/
 │   └── security_audit.py        # [v2.1] 安全基线检查
 │
 ├── ui/                          # [v2.3] FastAPI + 纯HTML/CSS/JS
-│   ├── server.py                # FastAPI服务端（44个API端点）
+│   ├── server.py                # FastAPI服务端（53个API端点，含对话管理+流式）
 │   ├── templates/index.html     # 纯HTML前端（8页面侧边栏）
 │   └── static/
 │       ├── style.css            # 企业级CSS设计系统
@@ -143,7 +145,7 @@ oa-ops-agent/
 │
 ├── utils/                       # 基础设施（11个）
 │   ├── config.py                # 配置加载器
-│   ├── database.py              # SQLite 数据库（3表）
+│   ├── database.py              # SQLite 数据库（5表）
 │   ├── dashboard.py             # [v2.3] 实时仪表盘数据管理
 │   ├── alert.py                 # 告警通知（邮件/钉钉/企微）
 │   ├── scheduler.py             # 定时调度
@@ -203,6 +205,8 @@ oa-ops-agent/
 ✅ 图谱探索 API（v2.4 已完成 — /api/kg/search/explore/path/stats）
 ✅ 批量问答（v2.4 已完成 — /api/kb/batch-ask 最多 20 题并行）
 ✅ 多格式文档解析（v2.4 已完成 — PPTX/HTML + MinerU 可选）
+✅ 对话历史持久化（v2.5.0 已完成 — SQLite 会话表 + 会话列表/切换/删除/自动标题）
+✅ SSE 流式输出（v2.5.0 已完成 — /api/kb/chat/stream + 前端逐 token 渲染）
 ☐ HTTPS 支持
 ☐ Linux 本机巡检支持
 ☐ 前端迁移 React/Vue（当前为 FastAPI + 纯HTML/CSS/JS）
@@ -571,3 +575,34 @@ Phase 6: 全链路 E2E 验证
 - 前端改造为 Chatbot 对话气泡界面，支持多轮追问
 - config 新增 chat_max_turns(10) / chat_max_history(30)
 - API 端点总计: 39 → 47
+
+
+═══════════════════════════════════════════
+【2026-08-04 — v2.5.0 对话历史持久化 + SSE流式输出 + 知识问答UI重构】
+═══════════════════════════════════════════
+
+一、对话历史持久化（SQLite）
+  - utils/database.py 新增 conversations / conversation_messages 两表 + 6 个方法
+    create_conversation / save_message / get_conversation_messages / list_conversations / delete_conversation / rename_conversation
+  - agents/knowledge_agent.py chat() 改造：DB 懒加载 + 每条消息落库 + 首条消息自动标题
+  - 新增 API: GET /api/kb/conversations, POST /api/kb/conversation(/delete/rename)
+  - 前端: 知识问答页两栏布局（会话列表可折叠 + 响应式降级），支持新建/切换/删除
+
+二、SSE 流式输出
+  - answer_node 改 llm.stream() + LangGraph StreamWriter（stream_mode=custom 消费）
+  - 新增 POST /api/kb/chat/stream（text/event-stream，delta/done/error 事件）
+  - 前端 chatSend 改 fetch + ReadableStream 逐 token 渲染
+  - 降级: LLM 不可用自动回退检索模式
+
+三、前端工程优化
+  - 统一 API 请求封装（30s 超时 + 错误归一化 + Toast 提示）
+  - 深色主题对比度修复（硬编码颜色 → CSS 变量，!important 16→10）
+  - 聊天气泡/会话项/折叠动画样式重做，两栏等高
+
+四、安全
+  - 移除 config.yaml 硬编码 DeepSeek API Key → ${OA_LLM_API_KEY:} .env 注入
+  - 重写 Git 历史清除已提交的密钥（未推送到远程）
+
+五、版本号
+  - 统一为 v2.5.0（main.py / server.py / README）
+  - 提交: 3af9f42，标签: v2.5.0，API 端点 47 → 53
