@@ -25,7 +25,8 @@ class RobustTimedRotatingFileHandler(TimedRotatingFileHandler):
 
 
 # ========== 全局配置 ==========
-LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "inspection_logs")
+from utils.config import get_app_root
+LOG_DIR = os.path.join(get_app_root(), "data", "inspection_logs")
 os.makedirs(LOG_DIR, exist_ok=True)  # 确保日志目录存在
 
 # 日志格式：时间 | 级别 | 模块名 | 消息内容

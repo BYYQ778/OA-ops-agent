@@ -4,15 +4,22 @@ OA运维智能Agent — 桌面版启动器 (PyWebView)
 ==========================================
 双击桌面图标 -> 弹出原生应用窗口（Edge WebView2 内核），无浏览器、无控制台黑框。
 
-用法:
-    pythonw desktop_app.py     # 正式使用（无控制台）
-    python   desktop_app.py    # 调试（带控制台日志）
+支持两种运行方式：
+  源码运行:   python desktop_app.py / pythonw desktop_app.py
+  PyInstaller: 打包后的 OA运维Agent.exe（数据/配置/日志在 exe 同目录）
+
+架构（进程隔离，避免 GUI 与 torch/onnxruntime 原生库冲突）：
+  - 主进程：只跑 PyWebView 窗口（轻量）
+  - 后端进程：自我派生（--backend 参数），运行 uvicorn + 全部 AI 依赖
+  源码模式下后端子进程 = pythonw desktop_app.py --backend
+  打包模式下后端子进程 = OA运维Agent.exe --backend
 
 特性:
-    - 自动启动 FastAPI 后端 (main.py)，端口复用（已运行则直接开窗）
+    - 端口复用（服务已运行则直接开窗，不重复启动后端）
     - 启动画面轮询 /api/health，就绪后载入主界面
-    - 关闭窗口 = 退出服务（仅退出本进程启动的后端）
-    - 所有日志写入 data/desktop.log
+    - 关闭窗口 = 优雅退出（终止后端子进程、释放端口）
+    - 首次运行自动从内置资源生成 config.yaml / .env.example
+    - 日志: data/desktop.log（桌面壳）、data/backend.log（后端/控制台输出）
 """
 
 import os
@@ -23,12 +30,38 @@ import logging
 import subprocess
 import urllib.request
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-os.chdir(ROOT)
-sys.path.insert(0, ROOT)
+# ========== 路径与冻结环境 ==========
+FROZEN = getattr(sys, "frozen", False)
+if FROZEN:
+    APP_DIR = os.path.dirname(sys.executable)          # exe 所在目录（可写：数据/配置/日志）
+    BUNDLE_DIR = getattr(sys, "_MEIPASS", APP_DIR)     # 解包资源目录（模板/静态/默认配置/图标/离线模型）
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+    BUNDLE_DIR = APP_DIR
 
-os.makedirs(os.path.join(ROOT, "data"), exist_ok=True)
-LOG_FILE = os.path.join(ROOT, "data", "desktop.log")
+os.chdir(APP_DIR)  # 统一工作目录，保证相对路径数据落在 APP_DIR 下
+
+# pythonw / windowed exe 无控制台时，把 stdout/stderr 重定向到 backend.log
+if sys.stdout is None or sys.stderr is None:
+    os.makedirs(os.path.join(APP_DIR, "data"), exist_ok=True)
+    _stdio = open(os.path.join(APP_DIR, "data", "backend.log"), "a", encoding="utf-8", buffering=1)
+    if sys.stdout is None:
+        sys.stdout = _stdio
+    if sys.stderr is None:
+        sys.stderr = _stdio
+
+# 离线模型目录：优先使用打包内置的 models/hf（HF_HOME），找不到则用系统缓存
+_models_dir = os.path.join(BUNDLE_DIR, "models", "hf")
+if os.path.isdir(os.path.join(_models_dir, "hub")):
+    os.environ["HF_HOME"] = _models_dir
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
+sys.path.insert(0, BUNDLE_DIR)
+
+# ========== 日志 ==========
+os.makedirs(os.path.join(APP_DIR, "data"), exist_ok=True)
+LOG_FILE = os.path.join(APP_DIR, "data", "desktop.log")
 logging.basicConfig(
     filename=LOG_FILE,
     level=logging.INFO,
@@ -37,9 +70,24 @@ logging.basicConfig(
 )
 log = logging.getLogger("desktop")
 
+
+def _ensure_config():
+    """首次运行：把打包内置的 config.yaml / .env.example 复制到 APP_DIR。"""
+    import shutil
+    for name in ("config.yaml", ".env.example"):
+        target = os.path.join(APP_DIR, name)
+        bundled = os.path.join(BUNDLE_DIR, name)
+        if not os.path.exists(target) and os.path.exists(bundled):
+            try:
+                shutil.copy2(bundled, target)
+                log.info("已生成 %s（来自内置默认配置）", target)
+            except Exception as e:  # noqa: BLE001
+                log.warning("生成 %s 失败: %s", target, e)
+
+
 def _read_port():
     """从 config.yaml 读取 server.port（yaml 失败时正则兜底）。"""
-    cfg_path = os.path.join(ROOT, "config.yaml")
+    cfg_path = os.path.join(APP_DIR, "config.yaml")
     try:
         import yaml
         with open(cfg_path, "r", encoding="utf-8") as _f:
@@ -60,14 +108,16 @@ def _read_port():
     return 7860
 
 
+_ensure_config()
 PORT = _read_port()
-
 BASE_URL = "http://127.0.0.1:%d" % PORT
 HEALTH_URL = BASE_URL + "/api/health"
 START_TIMEOUT = 180          # 后端就绪最长等待（秒）
 
+# 本地健康检查强制绕过系统代理（避免代理干扰 localhost 探测）
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 _backend_proc = None
-_spawned = False
 _closed = False
 
 
@@ -77,7 +127,7 @@ def log_tail(n=30):
         with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
         return "".join(lines[-n:])
-    except Exception:
+    except Exception:  # noqa: BLE001
         return ""
 
 
@@ -86,27 +136,29 @@ def port_in_use(port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(0.5)
             return s.connect_ex(("127.0.0.1", port)) == 0
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
-
-
-# 本地健康检查强制绕过系统代理（避免代理干扰 localhost 探测）
-_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def health_ok():
     try:
         with _OPENER.open(HEALTH_URL, timeout=2) as r:
             return r.status == 200
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 
+def _backend_cmd():
+    """后端子进程命令：打包=exe --backend；源码=python desktop_app.py --backend。"""
+    if FROZEN:
+        return [sys.executable, "--backend"]
+    return [sys.executable, os.path.abspath(__file__), "--backend"]
+
+
 def start_backend():
-    """启动后端；若服务已在运行（含正在启动中）则等待就绪后复用。"""
-    global _backend_proc, _spawned
+    """启动后端子进程；若服务已在运行（含正在启动中）则等待就绪后复用。"""
+    global _backend_proc
     if port_in_use(PORT):
-        # 端口已被监听：等待最多 20s 确认是本系统服务（/api/health 就绪）后复用
         log.info("端口 %d 已有进程监听，等待服务就绪以便复用...", PORT)
         for _ in range(40):
             if health_ok():
@@ -114,22 +166,22 @@ def start_backend():
                 return
             time.sleep(0.5)
         raise RuntimeError("端口 %d 已被其他程序占用，无法启动本系统服务" % PORT)
-    log.info("启动后端: %s main.py --host 127.0.0.1 --port %d", sys.executable, PORT)
-    _backend_log = open(os.path.join(ROOT, "data", "backend.log"), "ab", buffering=0)
+    log.info("启动后端子进程: %s", _backend_cmd())
+    _backend_log = open(os.path.join(APP_DIR, "data", "backend.log"), "ab", buffering=0)
     _backend_env = dict(os.environ)
     _backend_env["PYTHONIOENCODING"] = "utf-8"
     _backend_proc = subprocess.Popen(
-        [sys.executable, "main.py", "--host", "127.0.0.1", "--port", str(PORT)],
-        cwd=ROOT,
+        _backend_cmd(),
+        cwd=APP_DIR,
         env=_backend_env,
         stdout=_backend_log,
         stderr=subprocess.STDOUT,
     )
-    _spawned = True
+    log.info("后端子进程已启动 (PID=%s)", _backend_proc.pid)
 
 
 def stop_backend():
-    """仅终止本进程启动的后端（复用场景下不动作）。"""
+    """终止本进程启动的后端子进程（复用场景下不动作）。"""
     global _backend_proc
     if _backend_proc is not None:
         log.info("正在停止后端...")
@@ -145,11 +197,7 @@ def stop_backend():
 
 
 def _patch_window_icon():
-    """在 WinForms 窗口创建时即设置 Form.Icon（任务栏按钮生成前生效）。
-
-    WM_SETICON 在窗口显示后才设置，任务栏按钮可能已使用默认图标；
-    改在 BrowserForm.__init__ 里设置 Icon，这是 WinForms 标准做法。
-    """
+    """在 WinForms 窗口创建时即设置 Form.Icon（任务栏按钮生成前生效）。"""
     try:
         from webview.platforms import winforms
         orig_init = winforms.BrowserView.BrowserForm.__init__
@@ -157,7 +205,7 @@ def _patch_window_icon():
         def patched_init(self, window, cache_dir):
             orig_init(self, window, cache_dir)
             try:
-                ico_path = os.path.join(ROOT, "oa_agent.ico")
+                ico_path = os.path.join(BUNDLE_DIR, "oa_agent.ico")
                 if os.path.exists(ico_path):
                     import clr
                     clr.AddReference("System.Drawing")
@@ -172,19 +220,16 @@ def _patch_window_icon():
     except Exception as e:  # noqa: BLE001
         log.warning("窗口图标补丁安装失败: %s", e)
 
-def _set_window_icon(window):
-    """设置窗口标题栏与任务栏图标（Win32 WM_SETICON，线程安全）。
 
-    pywebview 默认不设置窗口图标，任务栏会显示 pythonw 的默认图标。
-    这里用 LoadImage + WM_SETICON 把 oa_agent.ico 设为窗口大小图标。
-    """
+def _set_window_icon(window):
+    """设置窗口标题栏与任务栏图标（Win32 WM_SETICON，双保险）。"""
     try:
         import ctypes
         native = getattr(window, "native", None)
         if native is None:
             log.warning("窗口原生对象不可用，跳过图标设置")
             return
-        ico_path = os.path.join(ROOT, "oa_agent.ico")
+        ico_path = os.path.join(BUNDLE_DIR, "oa_agent.ico")
         if not os.path.exists(ico_path):
             log.warning("图标文件不存在: %s", ico_path)
             return
@@ -205,6 +250,7 @@ def _set_window_icon(window):
         log.info("窗口图标已设置 (hwnd=%s)", hwnd)
     except Exception as e:  # noqa: BLE001
         log.warning("设置窗口图标失败: %s", e)
+
 
 def splash_html():
     return """<!doctype html>
@@ -348,7 +394,7 @@ def main():
             args=(window,),
             debug=False,
             private_mode=False,
-            storage_path=os.path.join(ROOT, "data", "webview_profile"),
+            storage_path=os.path.join(APP_DIR, "data", "webview_profile"),
         )
     except Exception as e:  # noqa: BLE001
         log.error("webview 启动异常: %s", e)
@@ -359,14 +405,29 @@ def main():
         log.info("桌面版已退出")
 
 
+def run_backend_server():
+    """后端子进程模式：仅运行 uvicorn 服务（无 GUI）。"""
+    log.info("后端模式启动 (port=%d)...", PORT)
+    import uvicorn
+    from ui.server import app as fastapi_app
+    uvicorn.run(fastapi_app, host="127.0.0.1", port=PORT, log_level="info")
+
+
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:  # noqa: BLE001
-        log.error("桌面版异常退出: %s", e)
+    if "--backend" in sys.argv:
         try:
-            import webbrowser
-            webbrowser.open(BASE_URL + "/")
-        except Exception:  # noqa: BLE001
-            pass
-        raise
+            run_backend_server()
+        except Exception as e:  # noqa: BLE001
+            log.error("后端进程异常退出: %s", e)
+            raise
+    else:
+        try:
+            main()
+        except Exception as e:  # noqa: BLE001
+            log.error("桌面版异常退出: %s", e)
+            try:
+                import webbrowser
+                webbrowser.open(BASE_URL + "/")
+            except Exception:  # noqa: BLE001
+                pass
+            raise

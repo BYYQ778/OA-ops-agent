@@ -634,3 +634,32 @@ Phase 6: 全链路 E2E 验证
   - 启动→就绪→页面渲染（HTML/CSS/JS + SSE 实时推送全部加载）✅
   - 关闭窗口→优雅退出→端口释放→无残留进程 ✅
   - 二次双击复用→仅 1 个后端进程、2 个窗口正常 ✅
+═══════════════════════════════════════════
+【2026-08-05 晚 — 绿色版打包（PyInstaller）】
+═══════════════════════════════════════════
+
+一、交付物
+  - dist\OA运维Agent\ 绿色版（OA运维Agent.exe + _internal，约 1.7GB）
+    · 免装 Python/依赖/Ollama，双击即开，内置离线模型，可整体拷贝分发
+    · 桌面快捷方式已指向绿色版 exe
+  - 重新打包: scripts\打包绿色版.bat（或 python -m PyInstaller oa_agent.spec）
+
+二、关键技术点
+  - 进程隔离：GUI 主进程 + 后端 --backend 子进程（避免 WebView2 与 torch/onnxruntime 原生库冲突）
+  - 冻结路径兼容：utils/config.py get_app_root()，logger/database/knowledge_agent/inspection_agent 统一数据目录到 exe 同目录
+  - 前端离线化：Chart.js / vis-network 下载到 ui/static/vendor/，移除 Google Fonts
+  - 离线模型：嵌入模型 + OCR 模型打进 _internal/models/hf（HF_HOME 指向），知识库/OCR 完全离线可用
+  - spec 坑位记录：
+    · excludes 不可含 unittest（torch/sklearn/numpy 顶层依赖，排除会导致 0xc0000409 原生崩溃）
+    · chromadb 必须 collect_all（动态导入 telemetry 等，否则 No module named chromadb.telemetry.product.posthog）
+    · cnocr/cnstd/rapidocr 需 collect_data（yaml/onnx/字典）+ collect_submodules
+    · 中文路径/exe 名不影响打包（已验证），subsystem 也不影响
+
+三、首次运行说明（分发必读）
+  - 把 .env.example 复制为 .env 填 OA_LLM_API_KEY（DeepSeek）或改 config.yaml provider=ollama
+  - 数据目录 exe 同目录 data/，日志 desktop.log / backend.log
+
+四、验证（自测全通过）
+  - 启动→就绪→页面渲染（本地 vendor JS）→仪表盘 SSE ✅
+  - 知识库：导入样例文档（12块+148实体进图谱）→ 问答（DeepSeek 引用文档回答）✅
+  - 关闭窗口→优雅退出→端口释放→无残留 ✅

@@ -30,6 +30,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
 
 from utils.doc_parser import parse_document, split_text
+from utils.config import get_app_root
 from utils.logger import get_logger
 from utils.database import db
 
@@ -40,7 +41,7 @@ if "HF_ENDPOINT" not in os.environ:
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 # ========== 路径配置 ==========
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+BASE_DIR = get_app_root()
 CHROMA_DB_DIR = os.path.join(BASE_DIR, "data", "chroma_db")
 os.makedirs(CHROMA_DB_DIR, exist_ok=True)
 
@@ -184,6 +185,8 @@ class KnowledgeBaseAgent:
             from utils.config import config as app_config
 
             storage_dir = app_config.get("knowledge_base.kg.storage_dir", "data/knowledge_graph")
+            if storage_dir and not os.path.isabs(storage_dir):
+                storage_dir = os.path.join(BASE_DIR, storage_dir)
             provider = app_config.get("llm.provider", "ollama")
 
             self.kg_store = KGStore(storage_dir)

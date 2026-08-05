@@ -370,6 +370,7 @@ def get_kb_agent():
             from agents.knowledge_agent import KnowledgeBaseAgent
             _kb_agent = KnowledgeBaseAgent(llm_api_key=api_key, llm_base_url=base_url, llm_model=model)
         except Exception as e:
+            logger.error("知识库Agent初始化失败: %s", e)
             return None
     return _kb_agent
 

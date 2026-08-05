@@ -10,11 +10,21 @@
 
 import os
 import re
+import sys
 import yaml
 from typing import Any, Optional
 
+def get_app_root():
+    """应用根目录：源码运行=项目目录；PyInstaller 冻结=exe 所在目录（可写）。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+
+
 # 项目根目录
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = get_app_root()
 
 
 def _load_dotenv():

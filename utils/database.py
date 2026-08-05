@@ -24,7 +24,7 @@ import threading
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
-from utils.config import config
+from utils.config import config, get_app_root
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -49,7 +49,7 @@ class Database:
 
         db_path = config.get("database.sqlite_path", "data/oa_ops.db")
         if not os.path.isabs(db_path):
-            base = os.path.dirname(os.path.dirname(__file__))
+            base = get_app_root()
             db_path = os.path.join(base, db_path)
 
         os.makedirs(os.path.dirname(db_path), exist_ok=True)

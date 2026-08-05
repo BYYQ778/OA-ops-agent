@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OA 运维助手 v{{ version }}</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- 字体使用系统默认（Segoe UI/微软雅黑），去除在线字体以支持离线运行 -->
 <link rel="stylesheet" href="/static/style.css?v={{ cache_buster }}">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/vis-network@9.1.6/dist/vis-network.min.js"></script>
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/vendor/vis-network.min.js"></script>
 <script src="/static/commands.js?v={{ cache_buster }}"></script>
 </head>
 <body>

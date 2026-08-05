@@ -1,4 +1,4 @@
-# OA Ops Agent v2.5.0
+﻿# OA Ops Agent v2.5.0
 
 基于 LangChain + RAG + Chroma 的 OA 系统智能运维助手，支持自动巡检、日志分析、知识库问答和 AI 报告生成。
 
@@ -32,6 +32,16 @@
 - 日志：`data/desktop.log`（桌面壳）、`data/backend.log`（后端）
 
 > 换机器/重新生成快捷方式：运行 `scripts/生成图标.py` 生成图标，然后右键 `scripts/启动桌面版.bat` → 发送到 → 桌面快捷方式。
+
+### 绿色版（免装 Python，可分发给同事）
+
+运行 `scripts/打包绿色版.bat`（或 `python -m PyInstaller oa_agent.spec --noconfirm --clean`）生成 `dist\OA运维Agent\` 绿色版：
+
+- `OA运维Agent.exe` 双击即开，**无需安装 Python / 依赖 / Ollama**
+- 内置离线嵌入模型与 OCR 模型（完全离线可用）
+- 首次运行自动生成 `config.yaml` / `.env.example`：把 `.env.example` 复制为 `.env` 填入 `OA_LLM_API_KEY` 即可启用知识库/LLM（或改 `config.yaml` 用 Ollama）
+- 数据（知识库/对话/巡检/日志）在 exe 同目录 `data/`，整个文件夹可整体拷贝分发
+- 桌面快捷方式已指向绿色版 exe
 ### 方式一：Windows 一键启动（推荐）
 
 双击项目根目录 `scripts/启动.bat`，脚本会自动：

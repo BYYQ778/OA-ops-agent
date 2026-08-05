@@ -23,6 +23,7 @@ import random
 import time
 from datetime import datetime
 from typing import Optional
+from utils.config import get_app_root
 
 from langchain.agents import create_agent
 from langchain.tools import tool
@@ -357,7 +358,7 @@ class InspectionAgent:
             timestamp: 巡检时间戳
             report: 巡检报告内容
         """
-        log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "inspection_logs")
+        log_dir = os.path.join(get_app_root(), "data", "inspection_logs")
         os.makedirs(log_dir, exist_ok=True)
 
         log_file = os.path.join(log_dir, f"inspection_{datetime.now().strftime('%Y%m%d')}.log")
