@@ -57,6 +57,13 @@ async def index(request: Request):
     return HTMLResponse(html)
 
 
+
+# ============ 健康检查（桌面版启动画面轮询用） ============
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "version": "2.5.0"}
+
 # ============ 巡检 API ============
 
 def _inspect_with_dashboard():

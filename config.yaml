@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # OA运维多智能Agent巡检问答系统 - 主配置文件
 # ============================================================
 # 支持环境变量替换: ${VAR_NAME} 或 ${VAR_NAME:默认值}
@@ -7,7 +7,7 @@
 
 # ---- LLM 大模型配置 ----
 llm:
-  provider: ollama  # deepseek / qwen / openai / ollama
+  provider: deepseek  # deepseek / qwen / openai / ollama
   api_key: ${OA_LLM_API_KEY:}  # ollama 模式可留空
   base_url: https://api.deepseek.com/v1
   model: deepseek-chat
