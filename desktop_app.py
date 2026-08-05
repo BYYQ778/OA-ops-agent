@@ -144,6 +144,34 @@ def stop_backend():
         _backend_proc = None
 
 
+def _patch_window_icon():
+    """在 WinForms 窗口创建时即设置 Form.Icon（任务栏按钮生成前生效）。
+
+    WM_SETICON 在窗口显示后才设置，任务栏按钮可能已使用默认图标；
+    改在 BrowserForm.__init__ 里设置 Icon，这是 WinForms 标准做法。
+    """
+    try:
+        from webview.platforms import winforms
+        orig_init = winforms.BrowserView.BrowserForm.__init__
+
+        def patched_init(self, window, cache_dir):
+            orig_init(self, window, cache_dir)
+            try:
+                ico_path = os.path.join(ROOT, "oa_agent.ico")
+                if os.path.exists(ico_path):
+                    import clr
+                    clr.AddReference("System.Drawing")
+                    from System.Drawing import Icon
+                    self.Icon = Icon(ico_path)
+                    log.info("窗口创建时已设置图标: %s", ico_path)
+            except Exception as e:  # noqa: BLE001
+                log.warning("窗口创建时设置图标失败: %s", e)
+
+        winforms.BrowserView.BrowserForm.__init__ = patched_init
+        log.info("窗口图标补丁已安装")
+    except Exception as e:  # noqa: BLE001
+        log.warning("窗口图标补丁安装失败: %s", e)
+
 def _set_window_icon(window):
     """设置窗口标题栏与任务栏图标（Win32 WM_SETICON，线程安全）。
 
@@ -298,6 +326,8 @@ def on_closed():
 
 def main():
     import webview
+
+    _patch_window_icon()  # 窗口创建时即设置任务栏图标
 
     window = webview.create_window(
         "OA运维智能Agent",
