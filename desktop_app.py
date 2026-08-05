@@ -144,6 +144,40 @@ def stop_backend():
         _backend_proc = None
 
 
+def _set_window_icon(window):
+    """设置窗口标题栏与任务栏图标（Win32 WM_SETICON，线程安全）。
+
+    pywebview 默认不设置窗口图标，任务栏会显示 pythonw 的默认图标。
+    这里用 LoadImage + WM_SETICON 把 oa_agent.ico 设为窗口大小图标。
+    """
+    try:
+        import ctypes
+        native = getattr(window, "native", None)
+        if native is None:
+            log.warning("窗口原生对象不可用，跳过图标设置")
+            return
+        ico_path = os.path.join(ROOT, "oa_agent.ico")
+        if not os.path.exists(ico_path):
+            log.warning("图标文件不存在: %s", ico_path)
+            return
+        hwnd = native.Handle.ToInt32()
+        IMAGE_ICON = 1
+        LR_LOADFROMFILE = 0x00000010
+        hicon = ctypes.windll.user32.LoadImageW(
+            None, ico_path, IMAGE_ICON, 0, 0, LR_LOADFROMFILE
+        )
+        if not hicon:
+            log.warning("加载图标失败: %s", ico_path)
+            return
+        WM_SETICON = 0x0080
+        ICON_SMALL = 0
+        ICON_BIG = 1
+        ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon)    # 任务栏/Alt+Tab
+        ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon)  # 标题栏
+        log.info("窗口图标已设置 (hwnd=%s)", hwnd)
+    except Exception as e:  # noqa: BLE001
+        log.warning("设置窗口图标失败: %s", e)
+
 def splash_html():
     return """<!doctype html>
 <html lang="zh">
@@ -212,8 +246,18 @@ def error_html(msg):
 </html>""" % body
 
 
+def _wait_set_window_icon(window):
+    """等待窗口原生对象就绪后设置图标（最多 20s）。"""
+    for _ in range(40):
+        if getattr(window, "native", None) is not None:
+            break
+        time.sleep(0.5)
+    _set_window_icon(window)
+
+
 def bootstrap(window):
     """webview.start 启动后在线程中运行：拉起后端并等待就绪。"""
+    _wait_set_window_icon(window)
     t0 = time.time()
     try:
         start_backend()
