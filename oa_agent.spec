@@ -22,6 +22,7 @@ datas += [
     ("config.yaml", "."),
     ("oa_agent.ico", "."),
     (".env.example", "."),
+    ("使用说明.txt", "."),
 ]
 
 # ---- OCR 相关包的数据文件（yaml/onnx/字典）与动态库、子模块 ----
@@ -30,6 +31,18 @@ for _pkg in ("cnocr", "cnstd", "rapidocr"):
     datas += collect_dynamic_libs(_pkg)
     hiddenimports += collect_submodules(_pkg)
 
+# ---- OCR 内置中文字体（rapidocr 可视化需要，离线可用）----
+_FONT_SRC = r"C:\Windows\Fonts\msyh.ttc"
+if os.path.isfile(_FONT_SRC):
+    datas.append((_FONT_SRC, os.path.join("models", "fonts", "msyh.ttc")))
+else:
+    print("[spec] 警告: 系统字体不存在，OCR 将回退系统字体:", _FONT_SRC)
+# ---- matplotlib（cnstd.yolov7.plots 模块级依赖，OCR 必需；不能排除）----
+_mpl_datas, _mpl_binaries, _mpl_hidden = collect_all("matplotlib")
+datas += _mpl_datas
+binaries += _mpl_binaries
+hiddenimports += _mpl_hidden
+hiddenimports += ["matplotlib.backends.backend_agg", "contourpy", "cycler", "kiwisolver", "pyparsing"]
 # ---- chromadb 动态导入（telemetry 等），必须全量收集 ----
 _chroma_datas, _chroma_binaries, _chroma_hidden = collect_all("chromadb")
 datas += _chroma_datas
@@ -59,8 +72,9 @@ hiddenimports += [
 ]
 hiddenimports = list(dict.fromkeys(hiddenimports))
 
-excludes = [
-    "tkinter", "matplotlib", "IPython", "jupyter", "jupyter_client",
+excludes = [# matplotlib 必须保留: cnstd.yolov7.plots 模块级 import matplotlib, 排除会导致冻结版 OCR 报 No module named 'matplotlib'
+    
+    "tkinter", "IPython", "jupyter", "jupyter_client",
     "pytest", "PyQt5", "PySide2", "magic_pdf", "gradio", "notebook",
     "streamlit", "modelscope",
 ]

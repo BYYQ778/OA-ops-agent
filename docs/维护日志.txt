@@ -675,3 +675,43 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
   · 进程隔离架构（GUI + --backend 子进程）
 - 知识库离线可用（内置模型 + DeepSeek/Ollama），端到端问答验证通过
 - 遗留：OCR 深层导入在冻结版未单独验证（懒加载，不影响启动；后续如需可专项测试）
+
+═══════════════════════════════════════════
+【2026-08-07 — 绿色版 OCR 专项验证与修复】
+═══════════════════════════════════════════
+
+一、专项验证结果（修复前）
+  - 绿色版 exe 启动后端后调用 POST /api/log/ocr 上传报错截图
+  - 修复前报错: No module named 'matplotlib'
+  - 根因: oa_agent.spec 的 excludes 排除了 matplotlib，而 cnstd.yolov7.plots
+    模块级 import matplotlib（cnstd/__init__ → yolov7.layout_analyzer → plots）
+  - 二次报错: [WinError 183] 无法创建 ...\AppData\Roaming\cnocr\2.3
+  - 根因: cnocr 默认识别模型 densenet_lite_136-gru-onnx 未内置，运行期需从
+    HF/OSS 下载到 APPDATA，冻结+离线环境失败（目录残留/竞态导致 183）
+  - 三次报错: type <class 'bytes'> is not supported now
+  - 根因: RapidOCR v4 后端 ocr() 不接受 bytes 输入
+
+二、修复内容
+  1. oa_agent.spec:
+     · excludes 移除 matplotlib + collect_all("matplotlib")（OCR 必需）
+     · 内置中文字体 msyh.ttc → _internal/models/fonts/
+     · datas 增加 使用说明.txt（避免重打包丢失）
+  2. utils/ocr.py（绿色版离线策略重写）:
+     · CnOcr 显式指定 rapidocr 包内置 ch_PP-OCRv4_rec/det_infer.onnx
+     · 显式 font_path（打包字体优先，回退系统字体）
+     · extract_text_from_bytes: bytes → PIL → ndarray 再识别
+     · 不再依赖 APPDATA 下载目录，完全离线可用
+
+三、验证结果（修复后）
+  - 绿色版 exe 端到端: /api/log/ocr 上传测试截图 ✅
+  - OCR 识别: 2026-08-0710:30:12 / 502 Bad Gateway / upstream timed out /
+    OA运维智能AgentOCR专项验证绿色版2026-08-07（中英文均识别）
+  - 日志分析: 自动识别 502 Bad Gateway（高），输出 5 条排查建议 ✅
+  - 源码模式回归: extract_text / extract_text_from_bytes 均通过 ✅
+  - 注意: /api/kb/import 需知识库引擎就绪（LLM 配置），与 OCR 无关
+
+四、体积
+  - 绿色版 1.69GB → 1.72GB（+matplotlib ~30MB + 字体 ~19MB）
+
+五、遗留
+  - 无（OCR 冻结版已专项验证通过）

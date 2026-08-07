@@ -4,7 +4,7 @@ OA运维多智能Agent巡检问答系统 - 交接文档 v2.5.0
 版本: v2.5.0
 状态: GitHub开源已发布、可演示、可部署、本机离线运行
 仓库: https://github.com/BYYQ778/OA-ops-agent
-最后更新: 2026-08-04 — v2.5.0 对话历史持久化(SQLite) / SSE流式输出 / 知识问答UI重构 / 前端工程优化
+最后更新: 2026-08-07 — 绿色版 OCR 专项验证修复（matplotlib/离线模型/bytes 输入）
 
 ═══════════════════════════════════════════════════════════
 一、项目概述
@@ -663,3 +663,33 @@ Phase 6: 全链路 E2E 验证
   - 启动→就绪→页面渲染（本地 vendor JS）→仪表盘 SSE ✅
   - 知识库：导入样例文档（12块+148实体进图谱）→ 问答（DeepSeek 引用文档回答）✅
   - 关闭窗口→优雅退出→端口释放→无残留 ✅
+
+═══════════════════════════════════════════════════════════
+【2026-08-07 — 绿色版 OCR 专项验证与修复】
+═══════════════════════════════════════════════════════════
+
+一、验证方式
+  绿色版 exe --backend 启动 → POST /api/log/ocr 上传中英文测试截图。
+
+二、修复前问题（3 个）
+  1. No module named 'matplotlib'
+     · cnstd.yolov7.plots 模块级 import matplotlib，spec excludes 不能排除
+  2. [WinError 183] ...AppData\Roaming\cnocr\2.3
+     · cnocr 默认识别模型未内置，运行期下载到 APPDATA 离线失败
+  3. type <class 'bytes'> is not supported now
+     · RapidOCR v4 后端 ocr() 不支持 bytes（/api/log/ocr 上传场景）
+
+三、修复内容
+  · oa_agent.spec: excludes 移除 matplotlib + collect_all；内置 msyh.ttc 字体；
+    使用说明.txt 入 datas
+  · utils/ocr.py: 显式指定 rapidocr 内置 ch_PP-OCRv4 检测/识别 ONNX；
+    显式 font_path；extract_text_from_bytes 转 ndarray
+
+四、验证结果
+  · 绿色版 /api/log/ocr ✅ 识别 502 Bad Gateway / upstream timed out / 中文行，
+    日志分析自动输出 502 排查建议
+  · 源码模式 extract_text / extract_text_from_bytes 回归 ✅
+  · 体积 1.69GB → 1.72GB
+
+五、遗留
+  · 无（OCR 冻结版已专项验证通过；知识库导入需 LLM 配置，与 OCR 无关）
