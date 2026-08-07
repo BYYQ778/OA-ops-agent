@@ -301,6 +301,32 @@ async def api_dashboard_history(minutes: int = 60):
     return {"timeline": timeline}
 
 
+def _save_api_key_to_env(api_key: str) -> bool:
+    """把 API Key 写入 .env 文件（不回写 config.yaml 明文），并注入当前进程环境。"""
+    try:
+        from utils.config import PROJECT_ROOT
+        env_file = os.path.join(PROJECT_ROOT, ".env")
+        lines = []
+        if os.path.exists(env_file):
+            with open(env_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        found = False
+        for i, line in enumerate(lines):
+            if line.strip().startswith("OA_LLM_API_KEY="):
+                lines[i] = f"OA_LLM_API_KEY={api_key}\n"
+                found = True
+                break
+        if not found:
+            lines.append(f"OA_LLM_API_KEY={api_key}\n")
+        with open(env_file, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+        os.environ["OA_LLM_API_KEY"] = api_key  # 热切换立即生效
+        logger.info("API Key 已写入 .env（config.yaml 保持占位符）")
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("API Key 写入 .env 失败: %s", e)
+        return False
+
 # ============ 系统配置 API ============
 
 @app.post("/api/config/save")
@@ -329,7 +355,9 @@ async def api_config_save(
         updates["llm.model"] = model or "deepseek-chat"
         updates["llm.base_url"] = base_url or "https://api.deepseek.com/v1"
         if api_key:
-            updates["llm.api_key"] = api_key
+            # 安全：明文 Key 只写 .env，config.yaml 保持 ${OA_LLM_API_KEY:} 占位符
+            if not _save_api_key_to_env(api_key):
+                return {"ok": False, "error": "API Key 写入 .env 失败，未保存配置"}
 
     # 持久化到 config.yaml
     if not app_config.update_file(updates):
@@ -386,9 +414,10 @@ async def api_kb_import(file: UploadFile = File(...)):
     kb = get_kb_agent()
     if kb is None:
         return {"result": "知识库引擎未就绪，请确认嵌入模型已下载且 LLM 配置正确"}
-    # 保存上传文件到临时目录
+    # 保存上传文件到临时目录（文件名净化，防止路径穿越）
     os.makedirs("data/uploads", exist_ok=True)
-    file_path = os.path.join("data/uploads", file.filename)
+    safe_name = os.path.basename(file.filename or "upload.bin")
+    file_path = os.path.join("data/uploads", safe_name)
     with open(file_path, "wb") as f:
         content = await file.read()
         f.write(content)

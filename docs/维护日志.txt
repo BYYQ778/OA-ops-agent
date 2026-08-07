@@ -715,3 +715,32 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
 
 五、遗留
   - 无（OCR 冻结版已专项验证通过）
+
+═══════════════════════════════════════════
+【2026-08-07 — 安全加固：提示词注入防护 + 命令注入修复】
+═══════════════════════════════════════════
+
+一、安全评估发现（修复前）
+  1. 提示词注入（多处）：知识库文档/日志/上传文本直接拼入 LLM prompt
+     - knowledge_agent（RAG answer/chat 历史）、log_analysis_agent（日志）
+     - entity_extractor（文档文本）、ai_reporter/inspection/db/network/security/ssl
+  2. 命令注入 RCE（高危）：network_diag.py 用 shell=True + f-string 拼接
+     ping/tracert/nslookup 的 host/domain 参数
+  3. 上传路径穿越：api_kb_import 用 file.filename 直接拼接保存路径
+  4. API Key 明文写回：/api/config/save 把 key 写进 config.yaml
+  5. 无认证 API（既有问题，已列入后续建议）
+
+二、修复内容
+  1. 新增 utils/prompt_safety.py：UNTRUSTED_DATA_GUARD（统一防注入指令）
+     + wrap_untrusted()（把不可信内容包为数据块）
+  2. 10 个 system prompt 全部接入防护段；RAG answer/对话历史用 wrap_untrusted
+  3. network_diag.py：_run_command 改参数数组 + shell=False；
+     新增 _is_safe_host()（IP/域名白名单校验，拒绝 shell 元字符）
+  4. server.py：上传文件名 basename 净化；API Key 改写入 .env（config.yaml 保持占位符）
+  5. 验证：恶意 ping 输入被拦截 / 正常 ping 可用 / 10 个 prompt 防护全部生效
+
+三、遗留建议（未实施，供后续）
+  - API 认证（auth.enabled 配置已存在但未实现中间件）
+  - /api/net/http SSRF 与 /api/db/* 内网探测（127.0.0.1 绑定已缓解）
+  - log_analysis scan_log_file 工具应限制可读目录
+  - HTTPS 支持

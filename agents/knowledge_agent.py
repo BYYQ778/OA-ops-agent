@@ -32,6 +32,7 @@ from langchain_core.documents import Document
 from utils.doc_parser import parse_document, split_text
 from utils.config import get_app_root
 from utils.logger import get_logger
+from utils.prompt_safety import UNTRUSTED_DATA_GUARD, wrap_untrusted
 from utils.database import db
 
 logger = get_logger(__name__)
@@ -67,7 +68,7 @@ RAG_SYSTEM_PROMPT = """你是一名OA运维知识库助手，你的职责是基�
 - 先给出直接答案
 - 然后列出依据（引用的文档片段）
 - 如果涉及操作，给出具体步骤和命令
-"""
+""" + UNTRUSTED_DATA_GUARD
 
 # ========== 文档分块配置 ==========
 CHUNK_SIZE = 500        # 每块最多500字
@@ -257,7 +258,7 @@ class KnowledgeBaseAgent:
 NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 
 如果是 answer，之后的内容就是给用户的最终回答。
-如果是其他 action，之后的内容是传给该工具的查询关键词（纯文本，不含引号）。"""
+如果是其他 action，之后的内容是传给该工具的查询关键词（纯文本，不含引号）。""" + UNTRUSTED_DATA_GUARD
 
     def _setup_agentic_rag(self):
         """构建 LangGraph ReAct Agent（支持 Ollama 和 DeepSeek）。"""
@@ -401,10 +402,10 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
             answer_prompt = f"""基于以下检索到的信息回答用户问题。
 
 ## 知识库检索结果
-{kb_ctx if kb_ctx else '（无结果）'}
+{wrap_untrusted(kb_ctx, '知识库检索结果')}
 
 ## 知识图谱信息
-{kg_ctx if kg_ctx else '（无图谱数据）'}
+{wrap_untrusted(kg_ctx, '知识图谱信息')}
 
 ## 用户问题
 {state['question']}
@@ -752,7 +753,7 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
             if chat_history:
                 initial_messages.append({
                     "role": "user",
-                    "content": f"{chat_history}\n\n## 当前问题\n{question}"
+                    "content": f"{wrap_untrusted(chat_history, '对话历史')}\n\n## 当前问题\n{question}"
                 })
                 # 把历史当上下文给 router，但把原始问题保留给检索
                 effective_question = question
@@ -795,7 +796,7 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
         """简单 RAG 问答（v2.x 兼容）。"""
         prompt = question
         if chat_history:
-            prompt = f"{chat_history}\n\n## 当前问题\n{question}"
+            prompt = f"{wrap_untrusted(chat_history, '对话历史')}\n\n## 当前问题\n{question}"
 
         try:
             result = self.agent.invoke({
@@ -850,7 +851,7 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
             if chat_history:
                 initial_messages.append({
                     "role": "user",
-                    "content": f"{chat_history}\n\n## 当前问题\n{question}"
+                    "content": f"{wrap_untrusted(chat_history, '对话历史')}\n\n## 当前问题\n{question}"
                 })
             input_state = {
                 "messages": initial_messages,

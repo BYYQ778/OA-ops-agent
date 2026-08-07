@@ -23,6 +23,7 @@ from typing import Optional  # noqa: F401 保留供类型标注使用
 from langchain.tools import tool
 
 from utils.logger import get_logger
+from utils.prompt_safety import UNTRUSTED_DATA_GUARD
 from utils.config import config
 
 logger = get_logger(__name__)
@@ -902,7 +903,7 @@ DB_SYSTEM_PROMPT = """你是一名资深DBA，负责数据库健康巡检和故�
 4. Oracle 表空间使用率 > 90% 需立即扩容，归档日志模式必须开启
 5. Redis 缓存命中率应 > 95%，持久化必须正常配置
 
-请根据用户输入，调用合适的工具，生成数据库健康报告和改进建议。"""
+请根据用户输入，调用合适的工具，生成数据库健康报告和改进建议。""" + UNTRUSTED_DATA_GUARD
 
 
 class DBCheckAgent:

@@ -29,6 +29,7 @@ from datetime import datetime
 from langchain.tools import tool
 
 from utils.logger import get_logger
+from utils.prompt_safety import UNTRUSTED_DATA_GUARD
 from utils.config import config
 
 logger = get_logger(__name__)
@@ -526,7 +527,7 @@ SECURITY_SYSTEM_PROMPT = """你是一名安全审计专家，负责对服务器�
 3. 网络安全：防火墙策略、不必要的开放端口
 4. 任务安全：crontab 后门检测
 
-对发现的风险按严重程度分类（严重/高/中/低），给出具体的修复命令。"""
+对发现的风险按严重程度分类（严重/高/中/低），给出具体的修复命令。""" + UNTRUSTED_DATA_GUARD
 
 
 class SecurityAuditor:

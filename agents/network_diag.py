@@ -22,6 +22,7 @@
 import sys
 import socket
 import subprocess
+import ipaddress
 import re
 import time
 import urllib.request
@@ -30,6 +31,7 @@ from datetime import datetime
 from langchain.tools import tool
 
 from utils.logger import get_logger
+from utils.prompt_safety import UNTRUSTED_DATA_GUARD
 from utils.config import config
 
 logger = get_logger(__name__)
@@ -38,12 +40,29 @@ IS_WINDOWS = sys.platform == "win32"
 DEFAULT_TIMEOUT = config.get("network_diag.ping_timeout", 5)
 
 
-def _run_command(command: str, timeout: int = 15, shell: bool = True) -> str:
-    """执行系统命令并返回输出（跨平台）"""
+def _is_safe_host(host: str) -> bool:
+    """校验主机名/域名/IP 格式，拒绝 shell 元字符与参数注入。"""
+    if not host or len(host) > 253:
+        return False
+    # 禁止 shell 元字符与空白（防御注入；shell=False 双保险）
+    if any(c in host for c in "&|;`$<>(){}[]'\"\\ \t\n"):
+        return False
+    # IPv4 / IPv6
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        pass
+    # 域名/主机名：字母数字、点、连字符、下划线
+    return bool(re.fullmatch(r"[A-Za-z0-9._\-]+", host))
+
+
+def _run_command(args, timeout: int = 15) -> str:
+    """执行系统命令并返回输出（跨平台，参数数组 + shell=False 防注入）"""
     try:
         result = subprocess.run(
-            command,
-            shell=shell,
+            args,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -75,13 +94,16 @@ def ping_host(host: str) -> str:
 
     host = host.strip()
 
-    # 构建平台适配的 ping 命令
-    if IS_WINDOWS:
-        cmd = f'ping -n 4 -w 3000 {host}'
-    else:
-        cmd = f'ping -c 4 -W 3 {host}'
+    if not _is_safe_host(host):
+        return "[错误] 目标主机格式非法（仅支持 IP 或域名）"
 
-    output = _run_command(cmd, timeout=15)
+    # 构建平台适配的 ping 命令（参数数组，防命令注入）
+    if IS_WINDOWS:
+        args = ["ping", "-n", "4", "-w", "3000", host]
+    else:
+        args = ["ping", "-c", "4", "-W", "3", host]
+
+    output = _run_command(args, timeout=15)
 
     if not output or "命令执行" in output:
         return f"[错误] Ping 执行失败: {output}"
@@ -270,10 +292,10 @@ def dns_resolve(domain: str) -> str:
         pass  # 无 IPv6 不报错
 
     # --- CNAME 记录 ---
-    if IS_WINDOWS:
-        output = _run_command(f'nslookup -type=CNAME {domain} 2>&1', timeout=10)
-    else:
-        output = _run_command(f'dig +short CNAME {domain} 2>/dev/null || nslookup -type=CNAME {domain}', timeout=10)
+    if not _is_safe_host(domain):
+        return "[错误] 域名格式非法"
+
+    output = _run_command(["nslookup", "-type=CNAME", domain], timeout=10)
 
     if output and "canonical" in output.lower():
         cname_match = re.search(r'canonical name\s*=\s*(\S+)', output, re.IGNORECASE)
@@ -285,10 +307,7 @@ def dns_resolve(domain: str) -> str:
             lines.append(f"📌 CNAME 记录: {cname_val}")
 
     # --- MX 记录 ---
-    if IS_WINDOWS:
-        output = _run_command(f'nslookup -type=MX {domain} 2>&1', timeout=10)
-    else:
-        output = _run_command(f'dig +short MX {domain} 2>/dev/null || nslookup -type=MX {domain}', timeout=10)
+    output = _run_command(["nslookup", "-type=MX", domain], timeout=10)
 
     if output and "mail exchanger" in output.lower():
         mx_records = re.findall(r'MX preference\s*=\s*(\d+).*?mail exchanger\s*=\s*(\S+)', output, re.IGNORECASE)
@@ -334,12 +353,15 @@ def traceroute_host(host: str) -> str:
         "",
     ]
 
-    if IS_WINDOWS:
-        cmd = f'tracert -d -h 15 -w 2000 {host}'
-    else:
-        cmd = f'traceroute -n -m 15 -w 2 {host} 2>/dev/null || traceroute {host}'
+    if not _is_safe_host(host):
+        return "[错误] 目标主机格式非法（仅支持 IP 或域名）"
 
-    output = _run_command(cmd, timeout=35)
+    if IS_WINDOWS:
+        args = ["tracert", "-d", "-h", "15", "-w", "2000", host]
+    else:
+        args = ["traceroute", "-n", "-m", "15", "-w", "2", host]
+
+    output = _run_command(args, timeout=35)
     if output:
         lines.append(output)
     else:
@@ -476,7 +498,7 @@ NETWORK_DIAG_SYSTEM_PROMPT = """你是一名网络诊断专家，帮助运维工
 4. 如果是 HTTP 服务，做健康检查获取状态码
 5. 排查跨网段问题，使用路由追踪
 
-请根据用户描述的问题，选择合适的工具进行诊断，并给出明确的排查结论。"""
+请根据用户描述的问题，选择合适的工具进行诊断，并给出明确的排查结论。""" + UNTRUSTED_DATA_GUARD
 
 
 class NetworkDiagAgent:

@@ -20,6 +20,7 @@ from typing import List, Dict, Optional
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
+from utils.prompt_safety import UNTRUSTED_DATA_GUARD, wrap_untrusted
 
 logger = logging.getLogger("entity_extractor")
 
@@ -53,7 +54,7 @@ ENTITY_EXTRACTION_SYSTEM = """你是一个命名实体识别专家。从给定�
   {"entity_type": "TECHNOLOGY", "entity_name": "Nginx", "description": "反向代理服务器，用于OA系统入口"},
   {"entity_type": "CONCEPT", "entity_name": "负载均衡", "description": "将流量分发到多台后端服务器"}
 ]
-```"""
+```""" + UNTRUSTED_DATA_GUARD
 
 
 class EntityExtractor:
@@ -164,7 +165,7 @@ class EntityExtractor:
         llm_with_tools = self.llm.bind_tools([schema], tool_choice={"type": "function", "function": {"name": "extract_entities"}})
         response = llm_with_tools.invoke([
             SystemMessage(content=ENTITY_EXTRACTION_SYSTEM),
-            HumanMessage(content=f"从以下文本中提取实体：\n\n{text}"),
+            HumanMessage(content="从以下文本中提取实体：\n\n" + wrap_untrusted(text, '文档文本')),
         ])
 
         # 解析 tool_calls
@@ -184,7 +185,7 @@ class EntityExtractor:
         """使用 prompt 工程 + JSON 解析提取实体。"""
         response = self.llm.invoke([
             SystemMessage(content=ENTITY_EXTRACTION_SYSTEM),
-            HumanMessage(content=f"从以下文本中提取实体：\n\n{text}"),
+            HumanMessage(content="从以下文本中提取实体：\n\n" + wrap_untrusted(text, '文档文本')),
         ])
 
         content = response.content if hasattr(response, "content") else str(response)

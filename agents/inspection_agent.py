@@ -30,6 +30,7 @@ from langchain.tools import tool
 from langchain_openai import ChatOpenAI
 
 from utils.logger import get_logger
+from utils.prompt_safety import UNTRUSTED_DATA_GUARD
 from utils.database import db
 
 logger = get_logger(__name__)
@@ -243,7 +244,7 @@ INSPECTION_SYSTEM_PROMPT = """你是一名资深OA系统运维工程师，负责
    ========================================
    总结: [简要总结，如存在异常则给出优先级建议]
 
-请务必调用全部5个工具后再生成报告。"""
+请务必调用全部5个工具后再生成报告。""" + UNTRUSTED_DATA_GUARD
 
 
 class InspectionAgent:
