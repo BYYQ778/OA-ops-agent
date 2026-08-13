@@ -39,6 +39,7 @@
 
 - `OA运维Agent.exe` 双击即开，**无需安装 Python / 依赖 / Ollama**
 - 内置离线嵌入模型与 OCR 模型（完全离线可用）
+- 业务代码外置在 exe 同目录 `app/`：以后更新代码只需跑 `scripts/更新绿色版代码.bat` 覆盖 `app/` 后重启，无需重新打包（`app/` 误删时自动回退内置副本）
 - 首次运行自动生成 `config.yaml` / `.env.example`：把 `.env.example` 复制为 `.env` 填入 `OA_LLM_API_KEY` 即可启用知识库/LLM（或改 `config.yaml` 用 Ollama）
 - 数据（知识库/对话/巡检/日志）在 exe 同目录 `data/`，整个文件夹可整体拷贝分发
 - 桌面快捷方式已指向绿色版 exe

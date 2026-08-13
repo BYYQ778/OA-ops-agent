@@ -1,0 +1,29 @@
+OA运维智能Agent 绿色版
+============================================
+
+【使用方法】
+  1. 双击 OA运维Agent.exe 启动（无需安装 Python / 依赖 / Ollama）
+  2. 首次运行会在本目录生成 config.yaml 和 .env.example
+  3. 配置大模型（二选一）：
+     a) DeepSeek 云端：把 .env.example 复制为 .env，填入你的 OA_LLM_API_KEY
+     b) 本地 Ollama：编辑 config.yaml，把 llm.provider 改为 ollama
+  4. 关闭窗口即退出服务（端口自动释放）
+
+【目录说明（重要）】
+  - app/ 文件夹：业务代码（ui / agents / utils / main.py）。
+    以后更新功能时只需替换此文件夹内的文件，无需重新打包 exe
+  - 请保持整个文件夹结构完整，不要只拷贝 OA运维Agent.exe 单个文件
+    （缺少 app/ 时程序会提示并无法启动）
+
+【说明】
+  - 内置离线嵌入模型与 OCR 模型（RapidOCR v4），知识库/OCR 完全离线可用
+  - OCR 支持：日志分析页上传报错截图自动识别，知识库导入图片/扫描件
+  - 数据（知识库/对话/巡检记录/日志）保存在本目录 data/ 下
+  - 整个文件夹可整体拷贝到其他电脑使用（保持文件夹完整）
+  - 如无法启动，查看 data/desktop.log 与 data/backend.log
+
+【更新记录】
+  - 2026-08-13: 业务代码外置到 app/（以后更新代码无需重新打包）；
+    启动体验修复（启动画面等待模型就绪 + 跳过按钮）；tokenizers 依赖修复
+  - 2026-08-07: 修复绿色版 OCR 无法使用问题（matplotlib 缺失 / 离线模型依赖）；
+    OCR 改为内置 RapidOCR v4 模型 + 内置中文字体，完全离线可用

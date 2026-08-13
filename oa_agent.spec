@@ -15,7 +15,7 @@ datas = []
 binaries = []
 hiddenimports = []
 
-# ---- 前端资源 / 默认配置 / 图标 ----
+# ---- 前端资源（冻结兜底副本）/ 默认配置 / 图标 ----
 datas += [
     ("ui/templates", "ui/templates"),
     ("ui/static", "ui/static"),
@@ -77,6 +77,8 @@ excludes = [# matplotlib 必须保留: cnstd.yolov7.plots 模块级 import matpl
     "tkinter", "IPython", "jupyter", "jupyter_client",
     "pytest", "PyQt5", "PySide2", "magic_pdf", "gradio", "notebook",
     "streamlit", "modelscope",
+    # 注意：ui/agents/utils 必须留在 PYZ 中（依赖分析 + app/ 被误删时的兜底）。
+    # 运行时外置 app\ 目录通过 sys.path 顺序压过冻结副本，见 desktop_app.py EXTERNAL_APP_DIR。
 ]
 
 a = Analysis(

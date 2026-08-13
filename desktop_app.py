@@ -57,7 +57,15 @@ if os.path.isdir(os.path.join(_models_dir, "hub")):
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
+# 方案A（外置业务代码）：优先从 exe 同目录 app/ 加载 ui/agents/utils/main，
+# 更新这些模块无需重新打包（源码模式无 app/ 目录，走原有项目根路径）。
+# 注意：必须在 BUNDLE_DIR 之后插入，确保 app 目录位于 sys.path 最前，
+# 压过冻结在 PYZ 中的兜底副本（否则 PyiFrozenFinder 会优先命中 PYZ）。
 sys.path.insert(0, BUNDLE_DIR)
+
+EXTERNAL_APP_DIR = os.path.join(APP_DIR, "app")
+if os.path.isdir(EXTERNAL_APP_DIR):
+    sys.path.insert(0, EXTERNAL_APP_DIR)
 
 # ========== 日志 ==========
 os.makedirs(os.path.join(APP_DIR, "data"), exist_ok=True)
@@ -349,6 +357,13 @@ def _wait_set_window_icon(window):
 def bootstrap(window):
     """webview.start 启动后在线程中运行：拉起后端并等待就绪。"""
     _wait_set_window_icon(window)
+    if FROZEN and not os.path.isdir(EXTERNAL_APP_DIR):
+        log.error("缺少外置代码目录 app/（应位于 exe 同目录）")
+        window.load_html(error_html(
+            "缺少外置代码目录 app/（应位于 exe 同目录）。\n\n"
+            "请重新解压/安装完整的 OA运维Agent 目录（不要只拷贝单个 exe 文件）。"
+        ))
+        return
     t0 = time.time()
     try:
         start_backend()
@@ -439,6 +454,9 @@ def main():
 def run_backend_server():
     """后端子进程模式：仅运行 uvicorn 服务（无 GUI）。"""
     log.info("后端模式启动 (port=%d)...", PORT)
+    if FROZEN and not os.path.isdir(EXTERNAL_APP_DIR):
+        log.error("缺少外置代码目录 app/（应位于 exe 同目录），请勿删除或移动该文件夹")
+        sys.exit(1)
     import uvicorn
     from ui.server import app as fastapi_app
     uvicorn.run(fastapi_app, host="127.0.0.1", port=PORT, log_level="info")

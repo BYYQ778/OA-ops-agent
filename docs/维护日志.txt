@@ -802,3 +802,51 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
   · 绿色版 exe 未重新打包（仍为旧代码，需 scripts/打包绿色版.bat）
   · agents/security_audit.py 有 8-07 遗留的未提交改动（shell=False 细化），
     本次未包含在提交中
+
+
+═══════════════════════════════════════════
+【2026-08-13 — 方案A：绿色版业务代码外置（免重打包更新）】
+═══════════════════════════════════════════
+
+背景: 绿色版 exe 把全部代码冻结在 PYZ 内，每次改代码都要重打包
+      （PyInstaller 全量 4~6 分钟）。用户希望像游戏更新一样免重打包。
+
+方案A 设计:
+  · exe 同目录 app/ 存放业务代码（main.py + ui/ + agents/ + utils/）
+  · desktop_app.py 启动时把 app/ 插到 sys.path 最前，压过 PYZ 冻结副本
+  · PYZ 保留冻结副本作兜底：app/ 被误删时自动回退（优雅降级）
+  · 更新代码 = 覆盖 app/ 文件 + 重启，秒级生效
+
+关键实现:
+  1. desktop_app.py:
+     · sys.path.insert(0, BUNDLE_DIR) 之后才插入 EXTERNAL_APP_DIR，
+       确保 app/ 位于 sys.path 最前（顺序反了会被 PyiFrozenFinder 命中 PYZ）
+     · app/ 缺失时（冻结版）：GUI 显示错误页 / 后端日志明确报错退出
+  2. oa_agent.spec: 保持不变（ui/agents/utils 留在 PYZ 做依赖分析+兜底）
+  3. scripts/更新绿色版代码.bat: 新脚本，robocopy 源码 → dist\OA运维Agent\app\
+  4. scripts/打包绿色版.bat: 增加运行时数据备份/恢复（data/.env/config.yaml），
+     打包后自动调用更新脚本
+  5. 使用说明.txt: 补回项目根目录（spec datas 引用），更新 app/ 目录说明
+
+踩坑记录（重要）:
+  · bat 脚本必须 CRLF + GBK 编码：LF 换行的 GBK 中文 bat 会被 cmd 错位解析
+    （注释被当命令执行、路径错乱）
+  · cmd //c 在 git-bash 下会退化为交互式 cmd（打包脚本后台运行失败一次）；
+    验证 bat 用 python subprocess(["cmd","/c",bat]) 可靠
+  · PyInstaller excludes 掉业务包会导致其第三方依赖不被分析
+    （fastapi.staticfiles 缺失）→ 放弃 excludes，改用 sys.path 遮蔽方案
+  · PyiFrozenFinder 挂载在 _MEIPASS 路径上，sys.path 顺序决定 PYZ/外置优先级
+
+验证（全部通过）:
+  · 决定性验证: 仅修改 app/ui/server.py 加 marker → 重启 exe →
+    /api/health 返回 marker ✅（未重新打包）
+  · 更新脚本还原: marker 消失 ✅
+  · 冻结版启动: loading→ready 4.3s ✅
+  · 全端点回归 8 项 200 ✅
+  · OCR: 冻结版识别"视觉测试/Answer: 42" ✅
+  · 绿色版整体流程: 备份→打包→恢复→同步 手动复刻通过
+    （打包 bat 本身留待用户双击场景实测）
+
+遗留:
+  · desktop_app.py 本身仍在 exe 内（启动器级改动仍需重打包；业务代码已外置）
+  · 打包 bat 的 cmd 交互路径未在本会话实测（pause/stdin 场景）

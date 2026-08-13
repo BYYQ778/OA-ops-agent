@@ -1,16 +1,40 @@
 @echo off
 rem ============================================
-rem  OAè¿ç»´æ™ºèƒ½Agent - æ‰“åŒ…ç»¿è‰²ç‰ˆ exe
-rem  äº§ç‰©: dist\OAè¿ç»´Agent\OAè¿ç»´Agent.exe
+rem  OAÔËÎ¬ÖÇÄÜAgent - ´ò°üÂÌÉ«°æ exe
+rem  ²úÎï: dist\OAÔËÎ¬Agent\OAÔËÎ¬Agent.exe
+rem         £¨ÒµÎñ´úÂëÍâÖÃÔÚ app\ Ä¿Â¼£¬ÒÔºó¸üĞÂ´úÂëÎŞĞèÖØĞÂ´ò°ü£©
 rem ============================================
 cd /d "%~dp0.."
+
+set "DISTDIR=dist\OAÔËÎ¬Agent"
+set "BAKDIR=dist\_oa_backup"
+
+rem ---- ±¸·İÔËĞĞÊ±Êı¾İ£¨´ò°ü»áÖØ½¨ DISTDIR£¬±ÜÃâ¶ªÊ§ data/ ÓëÅäÖÃ£© ----
+if exist "%DISTDIR%" (
+    if exist "%BAKDIR%" rmdir /s /q "%BAKDIR%"
+    mkdir "%BAKDIR%"
+    if exist "%DISTDIR%\data"       xcopy "%DISTDIR%\data" "%BAKDIR%\data\" /E /I /Q /Y >nul
+    if exist "%DISTDIR%\.env"       copy /Y "%DISTDIR%\.env" "%BAKDIR%\.env" >nul
+    if exist "%DISTDIR%\config.yaml" copy /Y "%DISTDIR%\config.yaml" "%BAKDIR%\config.yaml" >nul
+)
+
 env_new\Scripts\python.exe -m PyInstaller oa_agent.spec --noconfirm --clean --distpath dist --workpath build
 if %errorlevel% neq 0 (
-    echo [é”™è¯¯] æ‰“åŒ…å¤±è´¥ï¼Œè¯·æ£€æŸ¥æ§åˆ¶å°è¾“å‡º
+    echo [´íÎó] ´ò°üÊ§°Ü£¬Çë¼ì²é¿ØÖÆÌ¨Êä³ö
     pause
     exit /b 1
 )
+
+rem ---- »Ö¸´ÔËĞĞÊ±Êı¾İ ----
+if exist "%BAKDIR%\data"       xcopy "%BAKDIR%\data" "%DISTDIR%\data\" /E /I /Q /Y >nul
+if exist "%BAKDIR%\.env"       copy /Y "%BAKDIR%\.env" "%DISTDIR%\.env" >nul
+if exist "%BAKDIR%\config.yaml" copy /Y "%BAKDIR%\config.yaml" "%DISTDIR%\config.yaml" >nul
+rmdir /s /q "%BAKDIR%"
+
+rem ---- Í¬²½ÍâÖÃÒµÎñ´úÂëµ½ app\ ----
+call scripts\¸üĞÂÂÌÉ«°æ´úÂë.bat /nopause
+
 echo.
-echo [å®Œæˆ] ç»¿è‰²ç‰ˆå·²ç”Ÿæˆ: dist\OAè¿ç»´Agent\OAè¿ç»´Agent.exe
-echo        æ•´ä¸ª OAè¿ç»´Agent æ–‡ä»¶å¤¹å¯æ‹·è´åˆ°ä»»æ„ç”µè„‘ç›´æ¥è¿è¡Œï¼ˆå…è£… Pythonï¼‰
+echo [Íê³É] ÂÌÉ«°æÒÑÉú³É: dist\OAÔËÎ¬Agent\OAÔËÎ¬Agent.exe
+echo        Õû¸ö OAÔËÎ¬Agent ÎÄ¼ş¼Ğ¿É¿½±´µ½ÈÎÒâµçÄÔÖ±½ÓÔËĞĞ£¨Ãâ×° Python£©
 pause
