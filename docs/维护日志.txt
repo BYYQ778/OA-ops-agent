@@ -850,3 +850,32 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
 遗留:
   · desktop_app.py 本身仍在 exe 内（启动器级改动仍需重打包；业务代码已外置）
   · 打包 bat 的 cmd 交互路径未在本会话实测（pause/stdin 场景）
+
+
+═══════════════════════════════════════════
+【2026-08-13 — provider=ollama 时自动拉起 Ollama 服务】
+═══════════════════════════════════════════
+
+问题: 桌面版/绿色版启动后若 Ollama 未运行，知识库问答报
+      "Router LLM 调用失败: Connection error" 并降级为纯检索。
+      启动.bat 有检测拉起逻辑，但桌面版/绿色版不走该脚本。
+
+修复:
+  · ui/server.py 新增 _ensure_ollama_running()：
+    provider=ollama 时后台线程检测 11434/api/version →
+    未响应则按 PATH / E:\Ollama / %LOCALAPPDATA%\Programs\Ollama
+    找 ollama.exe → DETACHED_PROCESS 无窗口拉起 → 轮询最多 20s
+  · 失败只告警不崩溃（未装 Ollama 的机器优雅降级）
+  · localhost 探测强制绕过系统代理（沿用 desktop_app 的代理坑教训）
+  · 通过方案A 外置代码分发到绿色版，无需重新打包
+
+自检（2026-08-13 实测通过）:
+  · 绿色版 exe --backend：日志"Ollama 未运行，自动启动"→
+    7 秒后"Ollama 已就绪（自动启动成功）" ✅
+  · 真实问答：qwen3:8b 返回 LLM 生成回答（35s 含首次模型加载）✅
+  · 源码模式(provider=deepseek)不受影响 ✅
+
+教训:
+  · 杀源码模式测试服务器必须 taskkill /T 并 netstat 复核 7860，
+    venv stub 的子进程是真实监听者，杀不掉会导致"假 ready"
+    （本次测试被僵尸进程误导一次）

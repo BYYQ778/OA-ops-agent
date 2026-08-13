@@ -33,9 +33,80 @@ logger = get_logger(__name__)
 from contextlib import asynccontextmanager
 
 
+def _ensure_ollama_running() -> bool:
+    """provider=ollama 时检测本地 Ollama，未运行则自动拉起（与 scripts/启动.bat 第3步一致）。
+
+    返回是否就绪；任何失败只告警不抛出（无 Ollama 的机器优雅降级，
+    问答走既有 Connection error 回退逻辑）。
+    """
+    import time
+    import shutil as _shutil
+    import subprocess as _subprocess
+    import urllib.request as _urlreq
+
+    base = app_config.get("llm.ollama.base_url", "http://localhost:11434/v1")
+    version_url = base.rstrip("/v1").rstrip("/") + "/api/version"
+    # 强制绕过系统代理（历史坑：代理会干扰 localhost 探测）
+    _opener = _urlreq.build_opener(_urlreq.ProxyHandler({}))
+
+    def _reachable() -> bool:
+        try:
+            with _opener.open(version_url, timeout=2) as r:
+                return r.status == 200
+        except Exception:  # noqa: BLE001
+            return False
+
+    if _reachable():
+        logger.info("Ollama 服务已在运行 (%s)", base)
+        return True
+
+    exe = _shutil.which("ollama")
+    if exe is None:
+        for _p in (
+            r"E:\Ollama\ollama.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe"),
+            r"C:\Program Files\Ollama\ollama.exe",
+        ):
+            if os.path.isfile(_p):
+                exe = _p
+                break
+    if exe is None:
+        logger.warning(
+            "provider=ollama 但 Ollama 未运行且找不到 ollama.exe（11434 无响应），"
+            "本地 LLM 不可用；如需使用请安装并启动 Ollama"
+        )
+        return False
+
+    logger.info("Ollama 未运行，自动启动: %s serve", exe)
+    try:
+        flags = 0
+        if sys.platform == "win32":
+            flags = _subprocess.DETACHED_PROCESS | _subprocess.CREATE_NO_WINDOW
+        _subprocess.Popen(
+            [exe, "serve"],
+            stdout=_subprocess.DEVNULL,
+            stderr=_subprocess.DEVNULL,
+            creationflags=flags,
+            close_fds=True,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Ollama 自动启动失败: %s", e)
+        return False
+
+    for _ in range(40):  # 最多等 20 秒
+        time.sleep(0.5)
+        if _reachable():
+            logger.info("Ollama 已就绪（自动启动成功）")
+            return True
+    logger.warning("Ollama 启动超时（20s），如持续失败请手动运行 ollama serve")
+    return False
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    """服务启动时后台预热知识库引擎（嵌入模型加载不阻塞启动）。"""
+    """服务启动时：后台拉起 Ollama（如配置）+ 预热知识库引擎（均不阻塞启动）。"""
+    if app_config.get("llm.provider", "ollama") == "ollama":
+        _threading.Thread(target=_ensure_ollama_running, daemon=True, name="ollama-ensure").start()
     _prewarm_kb()
     yield
 
