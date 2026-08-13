@@ -30,7 +30,17 @@ from utils.dashboard import dashboard_manager
 logger = get_logger(__name__)
 
 # ---- FastAPI App ----
-app = FastAPI(title="OA 运维助手", version="2.5.0")
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """服务启动时后台预热知识库引擎（嵌入模型加载不阻塞启动）。"""
+    _prewarm_kb()
+    yield
+
+
+app = FastAPI(title="OA 运维助手", version="2.5.0", lifespan=_lifespan)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
@@ -62,7 +72,12 @@ async def index(request: Request):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "2.5.0"}
+    return {
+        "status": "ok",
+        "version": "2.5.0",
+        "kb_state": _kb_state.get("state", "loading"),
+        "kb_error": _kb_state.get("error"),
+    }
 
 # ============ 巡检 API ============
 
@@ -363,9 +378,14 @@ async def api_config_save(
     if not app_config.update_file(updates):
         return {"ok": False, "error": "配置文件写入失败，请检查 config.yaml 是否被占用"}
 
-    # 热切换：重置知识库 agent，下次问答自动用新配置重建
-    global _kb_agent
-    _kb_agent = None
+    # 热切换：重置知识库引擎状态，后台按新配置重新预热
+    global _kb_agent, _kb_generation, _kb_init_generation
+    with _kb_lock:
+        _kb_agent = None
+        _kb_generation += 1              # 使进行中的旧预热线程结果作废
+        _kb_init_generation = None
+        _kb_state.update(state="loading", error=None)
+    _prewarm_kb()
 
     logger.info(f"LLM 配置已热切换: provider={provider}, model={model or updates.get('llm.model', updates.get('llm.ollama.model', ''))}")
     return {
@@ -377,43 +397,116 @@ async def api_config_save(
 
 # ============ 知识库 API（需 LLM 初始化后可用）============
 
-# 知识库 Agent 需要嵌入模型，延迟初始化
+# 知识库 Agent 需要嵌入模型（首次加载约 20~40 秒）。
+# 启动时后台预热 + 线程安全懒加载 + 就绪状态机。
+import threading as _threading
+
 _kb_agent = None
+_kb_lock = _threading.Lock()
+_kb_generation = 0            # 热切换代数：用于丢弃按旧配置构建的过期实例
+_kb_init_generation = None    # 正在初始化的代数；None = 空闲
+_kb_state = {"state": "loading", "error": None}   # loading | ready | unavailable
+
+
+def _build_kb_agent():
+    """按 provider 路由构建 KnowledgeBaseAgent；未配置时返回 (None, 原因)。"""
+    provider = app_config.get("llm.provider", "ollama")
+    if provider == "ollama":
+        api_key = "ollama"
+        base_url = app_config.get("llm.ollama.base_url", "http://localhost:11434/v1")
+        model = app_config.get("llm.ollama.model", "qwen3:8b")
+    else:
+        api_key = app_config.get("llm.api_key", "")
+        base_url = app_config.get("llm.base_url", "")
+        model = app_config.get("llm.model", "")
+        if not api_key:
+            return None, "未配置 LLM API Key（请在 .env 中设置 OA_LLM_API_KEY）"
+    kb = KnowledgeBaseAgent(llm_api_key=api_key, llm_base_url=base_url, llm_model=model)
+    return kb, None
+
 
 def get_kb_agent():
-    global _kb_agent
-    if _kb_agent is None:
-        try:
-            provider = app_config.get("llm.provider", "ollama")
-            if provider == "ollama":
-                api_key = "ollama"
-                base_url = app_config.get("llm.ollama.base_url", "http://localhost:11434/v1")
-                model = app_config.get("llm.ollama.model", "qwen3:8b")
-            else:
-                api_key = app_config.get("llm.api_key", "")
-                base_url = app_config.get("llm.base_url", "")
-                model = app_config.get("llm.model", "")
-                if not api_key:
-                    return None
-            from agents.knowledge_agent import KnowledgeBaseAgent
-            _kb_agent = KnowledgeBaseAgent(llm_api_key=api_key, llm_base_url=base_url, llm_model=model)
-        except Exception as e:
-            logger.error("知识库Agent初始化失败: %s", e)
+    """线程安全获取 KB Agent（多线程同时请求只会初始化一次）。
+
+    返回 None 的三种情形：
+      - 另一线程正在初始化（state=loading，端点应返回"初始化中"提示）
+      - 初始化失败 / 模型不可用（state=unavailable）
+      - LLM 未配置（state=unavailable）
+    """
+    global _kb_agent, _kb_init_generation
+    if _kb_agent is not None:
+        return _kb_agent
+    with _kb_lock:
+        if _kb_agent is not None:            # double-check
+            return _kb_agent
+        if _kb_state.get("state") == "unavailable":
+            # 粘性不可用：初始化失败后不再随请求重试（避免每次请求都阻塞 20~40s），
+            # 仅通过配置热切换或重启应用恢复
             return None
-    return _kb_agent
+        if _kb_init_generation is not None:  # 已有线程在初始化（20~40s）
+            return None
+        _kb_init_generation = _kb_generation
+        _kb_state.update(state="loading", error=None)
+        gen = _kb_generation
+    kb = None
+    try:
+        kb, err = _build_kb_agent()
+        with _kb_lock:
+            if gen == _kb_generation:
+                if kb is None:
+                    _kb_state.update(state="unavailable", error=err or "知识库引擎初始化失败")
+                else:
+                    _kb_agent = kb
+                    _kb_state.update(state="ready", error=None)
+            else:
+                # 热切换已重置：丢弃按旧配置构建的实例，释放资源
+                if kb is not None:
+                    try:
+                        kb.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                kb = None
+    except Exception as e:
+        logger.error("知识库Agent初始化失败: %s", e)
+        with _kb_lock:
+            if gen == _kb_generation:
+                _kb_state.update(state="unavailable", error=str(e))
+        return None
+    finally:
+        with _kb_lock:
+            if _kb_init_generation == gen:
+                _kb_init_generation = None
+    if kb is None or gen != _kb_generation:
+        return None
+    logger.info("知识库引擎初始化完成（ready）")
+    return kb
+
+
+def _prewarm_kb():
+    """后台线程预热 KB Agent（不阻塞服务启动）。"""
+    _threading.Thread(target=get_kb_agent, daemon=True, name="kb-prewarm").start()
+
+
+def _kb_not_ready():
+    """KB 未就绪时的统一状态与提示文案。返回 (state, msg)。"""
+    if _kb_state.get("state") == "unavailable":
+        return "unavailable", "知识库引擎不可用：" + (_kb_state.get("error") or "请检查 LLM 配置")
+    return "loading", "知识库引擎正在初始化（首次加载嵌入模型约 20~40 秒），请稍候…"
 
 @app.post("/api/kb/ask")
 async def api_kb_ask(question: str = Form(...)):
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪，请确认嵌入模型已下载且 LLM 配置正确"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     return {"result": kb.query(question)}
 
 @app.post("/api/kb/import")
 async def api_kb_import(file: UploadFile = File(...)):
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪，请确认嵌入模型已下载且 LLM 配置正确"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     # 保存上传文件到临时目录（文件名净化，防止路径穿越）
     os.makedirs("data/uploads", exist_ok=True)
     safe_name = os.path.basename(file.filename or "upload.bin")
@@ -434,14 +527,16 @@ async def api_kb_import(file: UploadFile = File(...)):
 async def api_kb_list():
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     return {"result": kb.list_documents()}
 
 @app.get("/api/kb/stats")
 async def api_kb_stats():
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     return {"result": kb.get_stats()}
 
 @app.get("/api/kb/document/{doc_name}")
@@ -449,7 +544,8 @@ async def api_kb_document(doc_name: str):
     """获取指定文档的完整内容。"""
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     # URL 解码
     from urllib.parse import unquote
     return {"result": kb.get_document_text(unquote(doc_name))}
@@ -458,14 +554,16 @@ async def api_kb_document(doc_name: str):
 async def api_kb_delete(doc_name: str = Form(...)):
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     return {"result": kb.delete_document(doc_name)}
 
 @app.post("/api/kb/clear")
 async def api_kb_clear():
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     return {"result": kb.clear_knowledge_base()}
 
 
@@ -485,7 +583,8 @@ async def api_kb_chat(
     """
     kb = get_kb_agent()
     if kb is None:
-        return {"answer": "知识库引擎未就绪，请确认嵌入模型已加载且 LLM 配置正确"}
+        state, msg = _kb_not_ready()
+        return {"answer": msg, "state": state, "conversation_id": conversation_id}
     answer = kb.chat(message, conversation_id=conversation_id)
     return {"answer": answer, "conversation_id": conversation_id}
 
@@ -501,7 +600,8 @@ async def api_kb_chat_stream(
 
     async def event_gen():
         if kb is None:
-            yield f"data: {_json.dumps({'error': '知识库引擎未就绪，请确认嵌入模型已加载且 LLM 配置正确'}, ensure_ascii=False)}\n\n"
+            state, msg = _kb_not_ready()
+            yield f"data: {_json.dumps({'error': msg, 'state': state}, ensure_ascii=False)}\n\n"
             return
         try:
             gen = kb.chat(message, conversation_id=conversation_id, stream=True)
@@ -573,7 +673,8 @@ async def api_kb_batch_ask(questions: str = Form("")):
     """
     kb = get_kb_agent()
     if kb is None:
-        return {"results": [], "error": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"results": [], "error": msg, "state": state}
 
     question_list = [q.strip() for q in questions.split("\n") if q.strip()]
     if not question_list:

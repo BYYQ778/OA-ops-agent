@@ -744,3 +744,61 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
   - /api/net/http SSRF 与 /api/db/* 内网探测（127.0.0.1 绑定已缓解）
   - log_analysis scan_log_file 工具应限制可读目录
   - HTTPS 支持
+
+
+═══════════════════════════════════════════
+【2026-08-13 — 启动体验修复：界面与模型就绪同步】
+═══════════════════════════════════════════
+
+问题: 桌面版启动画面在服务 HTTP 就绪（uvicorn 监听）后即载入主界面，
+      而知识库引擎（嵌入模型）首次加载需 20~40 秒。用户进入界面后
+      首次问答阻塞或报"知识库引擎未就绪"，体验差。
+
+根因:
+  1. /api/health 静态返回 {"status":"ok"}，不反映组件就绪情况
+  2. get_kb_agent() 首次请求才懒加载 KnowledgeBaseAgent（20~40s）
+  3. 懒加载无锁，并发请求会重复初始化（双倍内存/竞争）
+
+修复（3 层配合）:
+  1. ui/server.py — KB 就绪状态机 + 启动预热
+     · 新增 _kb_state(loading/ready/unavailable) + _kb_lock + 代数计数
+     · FastAPI lifespan 启动时后台线程预热（不阻塞 uvicorn）
+     · get_kb_agent() 线程安全：并发只初始化一次，初始化中返回 None
+     · unavailable 粘性：失败后不随请求重试（避免每次请求阻塞 20~40s），
+       仅热切换/重启恢复
+     · /api/health 上报 kb_state/kb_error
+     · 全部 KB/KG 端点未就绪时返回 {"state":..., "result":友好提示}
+     · /api/config/save 热切换重置状态+代数+重新预热（丢弃旧配置实例）
+  2. ui/templates/index.html — 就绪轮询 + 加载态
+     · 每 2s 轮询 /api/health（原生 fetch 静默，避免 toast 刷屏）
+     · 知识问答页工具条状态文本 + 知识库页横幅
+     · chatSend/batchAsk 未就绪拦截提示
+  3. desktop_app.py — 启动画面等待真实就绪
+     · 新增 health_status() 解析 JSON；bootstrap 等待 kb_state∈{ready,unavailable}
+     · 启动画面实时显示"正在加载本地嵌入模型… 已等待 N 秒"
+     · 8 秒后出现"跳过等待，直接进入"按钮（evaluate_js 轮询 _skipWait）
+
+环境修复:
+  · env_new tokenizers 0.23.1 → 0.22.2：transformers 5.8.0 约束
+    tokenizers<=0.23.0，而 0.23.0 在 PyPI 无稳定版；0.23.1 导致
+    sentence_transformers 导入失败，知识库完全不可用（重启前遗留的依赖冲突）
+
+自检（2026-08-13，全部通过）:
+  · py_compile 全通过；前端 JS node --check 通过
+  · 实测启动: /api/health loading(9.7s) → ready(20.4s) ✅
+  · /api/kb/stats 真实数据（6 文档/94 块/290 实体/2197 边）✅
+  · 并发 6 线程仅 1 次初始化 ✅
+  · 粘性 unavailable 0ms 快速返回 ✅
+  · 巡检/日志/仪表盘/对话/KG/历史 全 200 ✅
+  · 桌面壳 health_status 解析 + 进入判定 ✅
+
+涉及文件:
+  ui/server.py, ui/templates/index.html, desktop_app.py
+  （env_new tokenizers 版本调整，非代码文件）
+
+遗留:
+  · /api/commands 端点 JSON 提取报错 "Extra data: line 654"——既有问题，
+    前端用静态 commands.js 加载不受影响，建议后续修复
+  · 绿色版 exe 未重新打包（仍为旧代码，需 scripts/打包绿色版.bat）
+  · agents/security_audit.py 有 8-07 遗留的未提交改动（shell=False 细化），
+    本次未包含在提交中

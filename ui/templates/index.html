@@ -174,7 +174,7 @@
     <!-- 工具栏 -->
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
       <button class="btn btn-secondary btn-sm" onclick="chatNew()" title="新建对话">🔄 新对话</button>
-      <span style="font-size:12px;color:#8b8fa3;" id="chat-info">就绪</span>
+      <span style="font-size:12px;color:#8b8fa3;" id="chat-info">检测中…</span>
       <span style="flex:1;"></span>
       <button class="btn btn-secondary btn-sm" onclick="qaTogglePanel()" title="收起/展开会话列表">☰ 会话</button>
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('batch-panel').style.display = document.getElementById('batch-panel').style.display==='none'?'block':'none'">📋 批量问答</button>
@@ -228,6 +228,7 @@
   <section class="page" id="page-kb">
     <h1 class="page-title">📚 知识库</h1>
     <p class="page-subtitle">多格式文档上传 · 自动分块向量化 · 知识图谱探索</p>
+    <div id="kb-ready-banner" style="display:none;padding:8px 12px;border-radius:6px;background:rgba(99,102,241,.12);color:#6366f1;font-size:13px;margin-bottom:10px;"></div>
 
     <!-- Sub-tabs -->
     <div class="sub-tabs">
@@ -538,7 +539,7 @@ function kgSearch() {
     }
     var h = '<div style="font-size:12px;color:#8b8fa3;margin-bottom:8px;">找到 ' + r.total + ' 个实体</div>';
     r.results.forEach(function(node) {
-      h += '<div class="kg-node-item" style="display:flex;align-items:center;gap:10px;padding:8px 12px;margin:4px 0;background:var(--bg-secondary);border-radius:6px;cursor:pointer;" onclick="kgExplore(\'' + node.id + '\')" title="点击探索邻居">';
+      h += '<div class="kg-node-item" style="display:flex;align-items:center;gap:10px;padding:8px 12px;margin:4px 0;background:var(--bg-secondary);border-radius:6px;cursor:pointer;" onclick="kgExplore(\'' + jsQuoteAttr(node.id) + '\')" title="点击探索邻居">';
       h += '<span class="kg-type-badge" style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--blue-100);color:var(--blue-700);white-space:nowrap;">' + escapeHtml(node.type) + '</span>';
       h += '<strong style="flex:1;">' + escapeHtml(node.name) + '</strong>';
       h += '<span style="font-size:11px;color:#8b8fa3;">' + (node.frequency || 1) + '次</span>';
@@ -659,7 +660,7 @@ function renderGraph(subgraph, pushHistory) {
   if (orphans.length > 0) {
     var oh = '';
     orphans.forEach(function(n) {
-      oh += '<span style="display:inline-block;padding:2px 8px;margin:2px;background:var(--bg-secondary);border-radius:10px;font-size:11px;cursor:pointer;" onclick="kgExplore(\'' + n.id + '\')" title="点击探索">' +
+      oh += '<span style="display:inline-block;padding:2px 8px;margin:2px;background:var(--bg-secondary);border-radius:10px;font-size:11px;cursor:pointer;" onclick="kgExplore(\'' + jsQuoteAttr(n.id) + '\')" title="点击探索">' +
             '<span class="kg-type-badge" style="font-size:9px;padding:1px 5px;border-radius:6px;background:var(--blue-100);color:var(--blue-700);margin-right:3px;">' + escapeHtml(n.type) + '</span>' +
             escapeHtml(n.name) + '</span>';
     });
@@ -791,7 +792,7 @@ function showNodeDetail(nodeId) {
       '<div>🔢 频次: ' + freq + '</div>' +
       '<div>🔗 关联: ' + (_kgConnectedCount[nodeId] || 0) + ' 条边</div>' +
     '</div>' +
-    '<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%;" onclick="kgExplore(\'' + nodeId + '\')">🔍 展开此节点</button>';
+    '<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%;" onclick="kgExplore(\'' + jsQuoteAttr(nodeId) + '\')">🔍 展开此节点</button>';
 }
 
 function kgToggleFullscreen() {
@@ -836,7 +837,7 @@ function renderSubgraphCards(sg) {
   var h = '<div style="font-size:13px;font-weight:600;margin-bottom:8px;">子图 (' + sg.nodes.length + ' 节点, ' + sg.edges.length + ' 边)</div>';
   h += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
   sg.nodes.forEach(function(n) {
-    h += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;font-size:13px;cursor:pointer;" onclick="kgExplore(\'' + n.id + '\')">';
+    h += '<div style="padding:6px 10px;background:var(--bg-secondary);border-radius:6px;font-size:13px;cursor:pointer;" onclick="kgExplore(\'' + jsQuoteAttr(n.id) + '\')">';
     h += '<span class="kg-type-badge" style="font-size:10px;padding:1px 6px;border-radius:8px;background:var(--blue-100);color:var(--blue-700);margin-right:4px;">' + escapeHtml(n.type) + '</span>';
     h += '<strong>' + escapeHtml(n.name) + '</strong>';
     if (n.relation) h += '<br><small style="color:#8b8fa3;">' + escapeHtml(n.relation) + ' (权重' + (n.weight||1) + ')</small>';
@@ -980,6 +981,49 @@ async function get(url) {
 function setOutput(id, text) { var el = document.getElementById(id); if (el) el.textContent = (text == null) ? '' : text; }
 function setLoading(id) { var el = document.getElementById(id); if (el) el.textContent = '处理中...'; }
 
+// ============ 知识库引擎就绪轮询 ============
+// 后端启动时后台预热嵌入模型，本轮询把就绪状态同步到 UI：
+//   - 知识问答页工具条状态文本（#chat-info）
+//   - 知识库页顶部横幅（#kb-ready-banner）
+//   - chatSend/batchAsk 在未就绪时拦截并提示
+var KB_READY = false;
+var KB_STATE = 'loading';   // loading | ready | unavailable
+var KB_ERROR = '';
+function kbSetStatus(state, error) {
+  KB_STATE = state;
+  KB_ERROR = error || '';
+  KB_READY = (state === 'ready');
+  var info = document.getElementById('chat-info');
+  var banner = document.getElementById('kb-ready-banner');
+  var msg;
+  if (state === 'ready') {
+    msg = '就绪';
+    if (info) info.textContent = msg;
+    if (banner) banner.style.display = 'none';
+    return;
+  }
+  msg = (state === 'unavailable')
+    ? '知识库引擎不可用：' + (KB_ERROR || '请检查 LLM 配置')
+    : '知识库引擎初始化中（首次加载嵌入模型约 20~40 秒），请稍候…';
+  if (info) info.textContent = msg;
+  if (banner) { banner.textContent = msg; banner.style.display = 'block'; }
+}
+function kbNotReadyMsg() {
+  return KB_STATE === 'unavailable'
+    ? '知识库引擎不可用：' + (KB_ERROR || '请检查 LLM 配置')
+    : '知识库引擎正在初始化，请稍候片刻再试';
+}
+function kbPollHealth() {
+  // 用原生 fetch 静默轮询：不走 request() 封装，避免后端暂不可达时 toast 刷屏
+  fetch('/api/health').then(function(r) {
+    return r.ok ? r.json() : null;
+  }).then(function(h) {
+    if (h && typeof h.kb_state === 'string') kbSetStatus(h.kb_state, h.kb_error);
+  }).catch(function() { /* 后端暂不可达，下轮再试 */ });
+}
+setInterval(kbPollHealth, 2000);
+kbPollHealth();
+
 // ============ Inspection ============
 function inspectRun() { setLoading('inspect-output'); post('/api/inspect/run').then(r => setOutput('inspect-output', r.result)); }
 function inspectStart() { var iv = document.getElementById('inspect-interval').value; setLoading('inspect-output'); post('/api/inspect/start', {interval: iv}).then(r => { setOutput('inspect-output', r.msg); updateStatus(); }); }
@@ -1002,6 +1046,9 @@ function chatSend() {
   var input = document.getElementById('chat-input');
   var msg = input.value.trim();
   if (!msg) return;
+
+  // 引擎未就绪时拦截（后端预热中/不可用）
+  if (!KB_READY) { showToast(kbNotReadyMsg(), 'error'); return; }
 
   // 确保有活动对话（首次进入/删除后可能为空）
   if (!chatConversationId) {
@@ -1154,8 +1201,10 @@ function formatChatContent(text) {
   escaped = escaped.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre style="background:rgba(0,0,0,0.06);padding:8px;border-radius:4px;overflow-x:auto;font-size:13px;"><code>$2</code></pre>');
   // 行内代码 `
   escaped = escaped.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.08);padding:1px 4px;border-radius:3px;font-size:13px;">$1</code>');
-  // 《文档名》→ 可点击链接
-  escaped = escaped.replace(/《([^》]+)》/g, '<a href="javascript:void(0)" onclick="showDocModal(\'$1\')" style="color:#4f46e5;text-decoration:underline;cursor:pointer;" title="点击查看文档全文">📄《$1》</a>');
+  // 《文档名》→ 可点击链接（onclick 参数经 jsQuoteAttr 转义防注入）
+  escaped = escaped.replace(/《([^》]+)》/g, function(m, docName) {
+    return '<a href="javascript:void(0)" onclick="showDocModal(\'' + jsQuoteAttr(docName) + '\')" style="color:#4f46e5;text-decoration:underline;cursor:pointer;" title="点击查看文档全文">📄《' + docName + '》</a>';
+  });
   // 换行
   escaped = escaped.replace(/\n/g, '<br>');
   return escaped;
@@ -1380,6 +1429,9 @@ function batchAsk() {
   var text = document.getElementById('batch-questions').value;
   var lines = text.split('\n').filter(function(l) { return l.trim(); });
   if (lines.length === 0) return;
+
+  // 引擎未就绪时拦截（后端预热中/不可用）
+  if (!KB_READY) { showToast(kbNotReadyMsg(), 'error'); return; }
 
   var maxBatch = 20;
   if (lines.length > maxBatch) {
@@ -1918,6 +1970,10 @@ function updateLiveLog(metrics) {
   while (log.children.length > 100) log.removeChild(log.firstChild);
 }
 
+// 属性/JS 字符串安全转义（防 onclick 单引号逃逸 XSS）
+function jsQuoteAttr(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\x27").replace(/"/g, "\\x22").replace(/</g, "\\x3C").replace(/>/g, "\\x3E");
+}
 function escapeHtml(str) {
   var div = document.createElement('div');
   div.appendChild(document.createTextNode(str));

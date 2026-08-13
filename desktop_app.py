@@ -140,6 +140,18 @@ def port_in_use(port):
         return False
 
 
+def health_status():
+    """返回 /api/health 的 JSON 解析结果；失败返回 None。"""
+    try:
+        import json
+        with _OPENER.open(HEALTH_URL, timeout=2) as r:
+            if r.status == 200:
+                return json.loads(r.read().decode("utf-8", errors="replace"))
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def health_ok():
     try:
         with _OPENER.open(HEALTH_URL, timeout=2) as r:
@@ -286,6 +298,11 @@ def splash_html():
   <div class="spinner"></div>
   <div id="status">正在启动服务...</div>
   <div id="detail">首次启动需加载本地嵌入模型，约 20~40 秒，请稍候</div>
+  <button id="skip" style="margin-top:26px;padding:8px 22px;border:1px solid #3b4156;border-radius:8px;background:transparent;color:#a5a9bd;font-size:13px;cursor:pointer;display:none;">跳过等待，直接进入</button>
+  <script>
+  setTimeout(function(){ document.getElementById('skip').style.display='block'; }, 8000);
+  document.getElementById('skip').addEventListener('click', function(){ window._skipWait = true; });
+  </script>
 </body>
 </html>"""
 
@@ -341,13 +358,27 @@ def bootstrap(window):
         return
 
     while not _closed and time.time() - t0 < START_TIMEOUT:
-        if health_ok():
-            log.info("服务就绪 (%.1fs)，载入主界面", time.time() - t0)
+        try:
+            if window.evaluate_js("window._skipWait === true"):
+                log.info("用户选择跳过等待，载入主界面（引擎后台继续预热）")
+                window.load_url(BASE_URL + "/")
+                return
+        except Exception:  # noqa: BLE001
+            pass
+        st = health_status()
+        if st and st.get("kb_state") in ("ready", "unavailable"):
+            log.info("服务就绪 (kb_state=%s, %.1fs)，载入主界面", st.get("kb_state"), time.time() - t0)
             window.load_url(BASE_URL + "/")
             return
         waited = int(time.time() - t0)
+        # 启动画面实时状态：模型加载中 / 等待服务启动
+        if st and st.get("kb_state") == "loading":
+            detail = "正在加载本地嵌入模型…（首次启动约 20~40 秒）"
+        else:
+            detail = "正在等待后端服务启动…"
         try:
-            js = "document.getElementById('status').textContent = '正在启动服务… 已等待 %d 秒';" % waited
+            js = ("document.getElementById('status').textContent = '正在启动服务… 已等待 %d 秒';"
+                  "document.getElementById('detail').textContent = '%s';" % (waited, detail))
             window.evaluate_js(js)
         except Exception:  # noqa: BLE001
             pass
