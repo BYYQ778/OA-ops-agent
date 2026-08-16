@@ -37,12 +37,13 @@ logger = get_logger(__name__)
 IS_WINDOWS = sys.platform == "win32"
 
 
-def _local_cmd(command: str, timeout: int = 10) -> str:
-    """执行本地命令"""
+def _local_cmd(command, timeout: int = 10) -> str:
+    """执行本地命令。list=参数数组(shell=False 防注入)；str 仅限固定命令使用。"""
     try:
+        use_shell = isinstance(command, str)
         result = subprocess.run(
             command,
-            shell=True,
+            shell=use_shell,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -173,7 +174,11 @@ def check_failed_logins() -> str:
         "",
     ]
 
-    max_entries = config.get("security.max_failed_logins", 20)
+    try:
+        max_entries = int(config.get("security.max_failed_logins", 20))
+        max_entries = min(max(max_entries, 1), 100)
+    except (TypeError, ValueError):
+        max_entries = 20
 
     if IS_WINDOWS:
         # Windows: 检查安全日志
@@ -194,7 +199,7 @@ def check_failed_logins() -> str:
             lines.append("✅ 无最近失败登录记录（或安全日志不可读取）")
     else:
         # Linux: 检查 lastb 和安全日志
-        lastb_output = _local_cmd(f"lastb -n {max_entries} 2>/dev/null")
+        lastb_output = _local_cmd(["lastb", "-n", str(max_entries)])
         if lastb_output:
             login_lines = lastb_output.strip().split("\n")
             lines.append(f"📋 最近 {min(len(login_lines), max_entries)} 次失败登录 (lastb):")
@@ -270,7 +275,7 @@ def audit_firewall_rules() -> str:
 
         # 尝试 iptables
         for chain in tables:
-            output = _local_cmd(f"iptables -L {chain} -n --line-numbers 2>/dev/null", timeout=10)
+            output = _local_cmd(["iptables", "-L", chain, "-n", "--line-numbers"], timeout=10)
             if output:
                 lines.append(f"📋 iptables {chain} 链:")
                 rule_lines = output.strip().split("\n")
