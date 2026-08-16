@@ -41,6 +41,30 @@
   <symbol id="icon-settings" viewBox="0 0 24 24">
     <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>
   </symbol>
+  <symbol id="icon-lock" viewBox="0 0 24 24">
+    <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </symbol>
+  <symbol id="icon-globe" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>
+  </symbol>
+  <symbol id="icon-database" viewBox="0 0 24 24">
+    <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/>
+  </symbol>
+  <symbol id="icon-shield-check" viewBox="0 0 24 24">
+    <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>
+  </symbol>
+  <symbol id="icon-activity" viewBox="0 0 24 24">
+    <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>
+  </symbol>
+  <symbol id="icon-plug" viewBox="0 0 24 24">
+    <path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>
+  </symbol>
+  <symbol id="icon-route" viewBox="0 0 24 24">
+    <circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>
+  </symbol>
+  <symbol id="icon-server" viewBox="0 0 24 24">
+    <rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
+  </symbol>
 </svg>
 
 <!-- ===== Sidebar ===== -->
@@ -374,10 +398,10 @@
 
     <!-- Sub-tabs -->
     <div class="sub-tabs">
-      <button class="sub-tab active" onclick="switchSubTab('ssl', this)">🔒 SSL证书</button>
-      <button class="sub-tab" onclick="switchSubTab('net', this)">🌐 网络诊断</button>
-      <button class="sub-tab" onclick="switchSubTab('db', this)">🗄️ 数据库</button>
-      <button class="sub-tab" onclick="switchSubTab('sec', this)">🔐 安全基线</button>
+      <button class="sub-tab active" onclick="switchSubTab('ssl', this)"><svg class="nav-icon"><use href="#icon-lock"></use></svg>SSL证书</button>
+      <button class="sub-tab" onclick="switchSubTab('net', this)"><svg class="nav-icon"><use href="#icon-globe"></use></svg>网络诊断</button>
+      <button class="sub-tab" onclick="switchSubTab('db', this)"><svg class="nav-icon"><use href="#icon-database"></use></svg>数据库</button>
+      <button class="sub-tab" onclick="switchSubTab('sec', this)"><svg class="nav-icon"><use href="#icon-shield-check"></use></svg>安全基线</button>
     </div>
 
     <!-- SSL Sub-page -->
@@ -385,7 +409,7 @@
       <div class="ops-card">
         <div class="input-row">
           <input type="text" id="ssl-domain" placeholder="oa.example.com 或 oa.example.com:8443" style="flex:1;">
-          <button class="btn btn-primary" onclick="sslCheck()">检测证书</button>
+          <button class="btn btn-primary" onclick="sslCheck()"><svg class="btn-icon"><use href="#icon-lock"></use></svg>检测证书</button>
         </div>
         <pre class="output-box" id="ssl-single-output">输入域名后点击检测...</pre>
         <hr>
@@ -400,11 +424,11 @@
       <div class="ops-card">
         <div class="input-row">
           <input type="text" id="net-target" placeholder="IP、域名 或 host:port" style="flex:1;">
-          <button class="btn btn-primary" onclick="netDiag('ping')">Ping</button>
-          <button class="btn btn-primary" onclick="netDiag('port')">端口</button>
-          <button class="btn btn-primary" onclick="netDiag('dns')">DNS</button>
-          <button class="btn btn-secondary" onclick="netDiag('trace')">路由</button>
-          <button class="btn btn-secondary" onclick="netDiag('http')">HTTP</button>
+          <button class="btn btn-primary" onclick="netDiag('ping')"><svg class="btn-icon"><use href="#icon-activity"></use></svg>Ping</button>
+          <button class="btn btn-primary" onclick="netDiag('port')"><svg class="btn-icon"><use href="#icon-plug"></use></svg>端口</button>
+          <button class="btn btn-primary" onclick="netDiag('dns')"><svg class="btn-icon"><use href="#icon-globe"></use></svg>DNS</button>
+          <button class="btn btn-secondary" onclick="netDiag('trace')"><svg class="btn-icon"><use href="#icon-route"></use></svg>路由</button>
+          <button class="btn btn-secondary" onclick="netDiag('http')"><svg class="btn-icon"><use href="#icon-server"></use></svg>HTTP</button>
         </div>
         <pre class="output-box" id="net-output" style="margin-top:12px;">选择诊断方式后结果将显示在此处...</pre>
       </div>
@@ -412,50 +436,52 @@
 
     <!-- Database Sub-page -->
     <div class="sub-page" id="sub-db">
-      <div class="ops-card">
-        <h4>MySQL</h4>
-        <div class="input-row">
-          <input type="text" id="mysql-host" value="127.0.0.1" placeholder="主机" style="width:140px;">
-          <input type="number" id="mysql-port" value="3306" placeholder="端口" style="width:80px;">
-          <input type="text" id="mysql-user" value="root" placeholder="用户" style="width:100px;">
-          <input type="password" id="mysql-pass" autocomplete="off" placeholder="密码" style="width:120px;">
-          <button class="btn btn-primary" onclick="dbCheck('mysql')">健康检查</button>
-          <button class="btn btn-secondary" onclick="dbCheck('mysql_slow')">慢查询</button>
+      <div class="db-grid">
+        <div class="ops-card">
+          <h4 class="db-title"><span class="db-badge db-mysql">M</span>MySQL</h4>
+          <div class="input-row">
+            <input type="text" id="mysql-host" value="127.0.0.1" placeholder="主机" style="width:110px;">
+            <input type="number" id="mysql-port" value="3306" placeholder="端口" style="width:64px;">
+            <input type="text" id="mysql-user" value="root" placeholder="用户" style="width:84px;">
+            <input type="password" id="mysql-pass" autocomplete="off" placeholder="密码" style="width:100px;">
+            <button class="btn btn-primary" onclick="dbCheck('mysql')"><svg class="btn-icon"><use href="#icon-activity"></use></svg>健康检查</button>
+            <button class="btn btn-secondary" onclick="dbCheck('mysql_slow')">慢查询</button>
+          </div>
+          <pre class="output-box" id="mysql-output"></pre>
         </div>
-        <pre class="output-box" id="mysql-output"></pre>
-      </div>
-      <div class="ops-card">
-        <h4>Redis</h4>
-        <div class="input-row">
-          <input type="text" id="redis-host" value="127.0.0.1" style="width:140px;">
-          <input type="number" id="redis-port" value="6379" style="width:80px;">
-          <input type="password" id="redis-pass" autocomplete="off" placeholder="密码" style="width:120px;">
-          <button class="btn btn-primary" onclick="dbCheck('redis')">健康检查</button>
+        <div class="ops-card">
+          <h4 class="db-title"><span class="db-badge db-redis">R</span>Redis</h4>
+          <div class="input-row">
+            <input type="text" id="redis-host" value="127.0.0.1" style="width:110px;">
+            <input type="number" id="redis-port" value="6379" style="width:64px;">
+            <input type="password" id="redis-pass" autocomplete="off" placeholder="密码" style="width:100px;">
+            <button class="btn btn-primary" onclick="dbCheck('redis')"><svg class="btn-icon"><use href="#icon-activity"></use></svg>健康检查</button>
+          </div>
+          <pre class="output-box" id="redis-output"></pre>
         </div>
-        <pre class="output-box" id="redis-output"></pre>
-      </div>
-      <div class="ops-card">
-        <h4>SQL Server</h4>
-        <div class="input-row">
-          <input type="text" id="ms-host" value="127.0.0.1" style="width:140px;">
-          <input type="number" id="ms-port" value="1433" style="width:80px;">
-          <input type="text" id="ms-user" value="sa" style="width:100px;">
-          <input type="password" id="ms-pass" autocomplete="off" placeholder="密码" style="width:120px;">
-          <button class="btn btn-primary" onclick="dbCheck('mssql')">健康检查</button>
+        <div class="ops-card">
+          <h4 class="db-title"><span class="db-badge db-mssql">S</span>SQL Server</h4>
+          <div class="input-row">
+            <input type="text" id="ms-host" value="127.0.0.1" style="width:110px;">
+            <input type="number" id="ms-port" value="1433" style="width:64px;">
+            <input type="text" id="ms-user" value="sa" style="width:84px;">
+            <input type="password" id="ms-pass" autocomplete="off" placeholder="密码" style="width:100px;">
+            <button class="btn btn-primary" onclick="dbCheck('mssql')"><svg class="btn-icon"><use href="#icon-activity"></use></svg>健康检查</button>
+          </div>
+          <pre class="output-box" id="ms-output"></pre>
         </div>
-        <pre class="output-box" id="ms-output"></pre>
-      </div>
-      <div class="ops-card">
-        <h4>Oracle</h4>
-        <div class="input-row">
-          <input type="text" id="ora-host" value="127.0.0.1" style="width:140px;">
-          <input type="number" id="ora-port" value="1521" style="width:80px;">
-          <input type="text" id="ora-user" value="system" style="width:100px;">
-          <input type="password" id="ora-pass" autocomplete="off" placeholder="密码" style="width:100px;">
-          <input type="text" id="ora-svc" value="orcl" placeholder="服务名" style="width:80px;">
-          <button class="btn btn-primary" onclick="dbCheck('oracle')">健康检查</button>
+        <div class="ops-card">
+          <h4 class="db-title"><span class="db-badge db-oracle">O</span>Oracle</h4>
+          <div class="input-row">
+            <input type="text" id="ora-host" value="127.0.0.1" style="width:110px;">
+            <input type="number" id="ora-port" value="1521" style="width:64px;">
+            <input type="text" id="ora-user" value="system" style="width:84px;">
+            <input type="password" id="ora-pass" autocomplete="off" placeholder="密码" style="width:100px;">
+            <input type="text" id="ora-svc" value="orcl" placeholder="服务名" style="width:70px;">
+            <button class="btn btn-primary" onclick="dbCheck('oracle')"><svg class="btn-icon"><use href="#icon-activity"></use></svg>健康检查</button>
+          </div>
+          <pre class="output-box" id="ora-output"></pre>
         </div>
-        <pre class="output-box" id="ora-output"></pre>
       </div>
     </div>
 

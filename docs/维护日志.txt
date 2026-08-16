@@ -909,3 +909,33 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
     --user-data-dir + background 进程；playwright 更稳
   · vision_analyze 不支持 deepseek-v4-pro 图片输入 → 目检走本机
     GLM-4V 脚本（E:\YunweiAgent\.hermes\tmp\glm_ask.py，ZHIPU key）
+
+═══════════════════════════════════════════
+
+问题: 诊断工具箱页面图标风格与新版 SVG 导航不统一（sub-tab 仍为
+      emoji），数据库子页 4 张卡片纵向堆叠松散冗长。
+
+修复:
+  · sub-tab 4 项 emoji → 线性 SVG（锁/地球/数据库/盾牌勾），
+    选中态颜色跟随（下划线风格保留）
+  · 数据库子页改 2×2 网格（.db-grid），卡片标题加品牌色字母徽标
+    （M=#4479A1 / R=#DC382D / S=#CC2927 / O=#C74634），
+    输入框宽度压缩适配双列；@media 1180px 以下自动回单列
+    （桌面版小窗防挤压）
+  · 网络诊断 5 按钮 + SSL 检测按钮加 14px 线性小图标
+    （信号/插头/地球/路线/服务器）；.btn 改 inline-flex 支持图标
+  · 新增 8 个 symbol（lock/globe/database/shield-check/activity/
+    plug/route/server），符号库统一管理
+
+自检（2026-08-16 实测通过）:
+  · node --check 全部 script 块 ✅
+  · playwright DOM 验证：4 徽标 / 10 按钮图标 / 4 tab 图标 /
+    网格 1fr 1fr；卡片坐标实测 2×2 无重叠 ✅
+  · GLM-4V 目检：浅色数据库页 / 浅色网络页 / 深色数据库页
+    全部协调无缺陷 ✅
+  · 7 个关键 GET 端点回归全 200 + hermes verify ok ✅
+
+回退说明:
+  · 改动前已打 tag ui-before-diag-20260816-1601，不满意可
+    git checkout 该 tag -- ui/templates/index.html ui/static/style.css
+    一键还原
