@@ -12,21 +12,55 @@
 </head>
 <body>
 
+<!-- ===== SVG 图标符号库（Lucide 风格线性图标，stroke 由 .nav-icon 统一控制） ===== -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="icon-gauge" viewBox="0 0 24 24">
+    <path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>
+  </symbol>
+  <symbol id="icon-clipboard-check" viewBox="0 0 24 24">
+    <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>
+  </symbol>
+  <symbol id="icon-file-text" viewBox="0 0 24 24">
+    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>
+  </symbol>
+  <symbol id="icon-message-circle" viewBox="0 0 24 24">
+    <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>
+  </symbol>
+  <symbol id="icon-book-open" viewBox="0 0 24 24">
+    <path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>
+  </symbol>
+  <symbol id="icon-wrench" viewBox="0 0 24 24">
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+  </symbol>
+  <symbol id="icon-terminal" viewBox="0 0 24 24">
+    <polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>
+  </symbol>
+  <symbol id="icon-shield" viewBox="0 0 24 24">
+    <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+  </symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24">
+    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>
+  </symbol>
+</svg>
+
 <!-- ===== Sidebar ===== -->
 <nav id="sidebar">
   <div class="sidebar-logo">
-    <h2>OA 运维助手</h2>
-    <span>Ops Platform v{{ version }}</span>
+    <div class="logo-mark"><svg class="nav-icon"><use href="#icon-shield"></use></svg></div>
+    <div>
+      <h2>OA 运维助手</h2>
+      <span>Ops Platform v{{ version }}</span>
+    </div>
   </div>
   <div id="nav-items">
-    <a class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">📊 实时监控</a>
-    <a class="nav-item" data-page="inspect" onclick="switchPage('inspect')">📋 经典巡检</a>
-    <a class="nav-item" data-page="log" onclick="switchPage('log')">📝 日志分析</a>
-    <a class="nav-item" data-page="qa" onclick="switchPage('qa')">💬 知识问答</a>
-    <a class="nav-item" data-page="kb" onclick="switchPage('kb')">📚 知识库</a>
-    <a class="nav-item" data-page="diag" onclick="switchPage('diag')">🛠 诊断工具箱</a>
-    <a class="nav-item" data-page="commands" onclick="switchPage('commands')">📋 命令大全</a>
-    <a class="nav-item" data-page="settings" onclick="switchPage('settings')">⚙️ 系统设置</a>
+    <a class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')"><svg class="nav-icon"><use href="#icon-gauge"></use></svg>实时监控</a>
+    <a class="nav-item" data-page="inspect" onclick="switchPage('inspect')"><svg class="nav-icon"><use href="#icon-clipboard-check"></use></svg>经典巡检</a>
+    <a class="nav-item" data-page="log" onclick="switchPage('log')"><svg class="nav-icon"><use href="#icon-file-text"></use></svg>日志分析</a>
+    <a class="nav-item" data-page="qa" onclick="switchPage('qa')"><svg class="nav-icon"><use href="#icon-message-circle"></use></svg>知识问答</a>
+    <a class="nav-item" data-page="kb" onclick="switchPage('kb')"><svg class="nav-icon"><use href="#icon-book-open"></use></svg>知识库</a>
+    <a class="nav-item" data-page="diag" onclick="switchPage('diag')"><svg class="nav-icon"><use href="#icon-wrench"></use></svg>诊断工具箱</a>
+    <a class="nav-item" data-page="commands" onclick="switchPage('commands')"><svg class="nav-icon"><use href="#icon-terminal"></use></svg>命令大全</a>
+    <a class="nav-item" data-page="settings" onclick="switchPage('settings')"><svg class="nav-icon"><use href="#icon-settings"></use></svg>系统设置</a>
   </div>
   <div class="sidebar-status">
     <span class="dot {{ 'dot-online' if is_running else 'dot-offline' }}"></span>
@@ -500,6 +534,21 @@
 </main>
 
 <script>
+// ============ Dev Hot-Reload（仅 URL 带 ?dev=1 时启用，生产零影响） ============
+(function () {
+  if (!/[\?&]dev=1(&|$)/.test(location.search)) return;
+  var last = null;
+  setInterval(function () {
+    fetch('/api/dev/version', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (last === null) { last = d.ts; return; }
+        if (d.ts !== last) location.reload();
+      })
+      .catch(function () { /* 后端未就绪时静默重试 */ });
+  }, 2000);
+})();
+
 // ============ Page Switching ============
 function switchPage(page) {
   document.querySelectorAll('#nav-items .nav-item').forEach(el => el.classList.remove('active'));

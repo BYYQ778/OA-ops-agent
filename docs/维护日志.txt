@@ -879,3 +879,33 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
   · 杀源码模式测试服务器必须 taskkill /T 并 netstat 复核 7860，
     venv stub 的子进程是真实监听者，杀不掉会导致"假 ready"
     （本次测试被僵尸进程误导一次）
+
+═══════════════════════════════════════════
+
+问题: 1) 导航栏用 emoji 图标，跨平台渲染不一致、偏"聊天软件感"；
+      2) 开发期改前端（HTML/CSS/JS）后需手动刷新/重启才能看效果。
+
+修复:
+  · 导航 8 项 emoji → 内联线性 SVG 图标（Lucide 风格 symbol 库
+    + <use> 引用；stroke=currentColor 跟随文字/主题变色；离线可用，
+    绿色版无需额外资源文件；ISC 许可）
+  · 侧边栏质感：logo 渐变紫色徽标（白色盾牌）、选中态左侧色条
+    （scaleY 滑入动画）、hover 右移 2px 微反馈
+  · 开发热刷新：ui/server.py 新增 GET /api/dev/version（返回
+    ui/templates+static 最新文件 mtime）；浏览器以 ?dev=1 打开首页
+    后前端每 2s 轮询，时间戳变化自动 location.reload()
+    —— 改前端零手动刷新、零重启。不带 ?dev=1 完全无感知，
+    生产/桌面版/绿色版零影响。
+
+自检（2026-08-16 实测通过）:
+  · curl /api/dev/version 返回 ts；touch 前端文件后 ts 变化 ✅
+  · py_compile server.py + node --check 全部 script 块 ✅
+  · playwright(channel=chrome) 浅/深主题截图 + GLM-4V 目检：
+    logo 徽标 / 8 个线性图标 / 选中色条，浅深主题均正常 ✅
+  · 8 个关键 GET 端点（dashboard/kb/kg/commands/db/inspect）回归 200 ✅
+
+教训:
+  · chrome --headless 截图在 git-bash 下易挂死：需独立
+    --user-data-dir + background 进程；playwright 更稳
+  · vision_analyze 不支持 deepseek-v4-pro 图片输入 → 目检走本机
+    GLM-4V 脚本（E:\YunweiAgent\.hermes\tmp\glm_ask.py，ZHIPU key）

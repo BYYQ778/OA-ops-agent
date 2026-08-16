@@ -150,6 +150,29 @@ async def health():
         "kb_error": _kb_state.get("error"),
     }
 
+
+# ============ 开发热刷新（仅 ?dev=1 打开的页面会轮询，生产零影响） ============
+
+@app.get("/api/dev/version")
+async def dev_version():
+    """返回 ui/ 前端文件（templates/static）最新修改时间戳。
+
+    开发模式：浏览器以 ?dev=1 打开首页后，前端每 2s 轮询此端点，
+    时间戳变化即自动刷新页面，改 HTML/CSS/JS 无需手动刷新或重启服务。
+    """
+    latest = 0.0
+    for sub in ("templates", "static"):
+        root = os.path.join(BASE_DIR, sub)
+        if not os.path.isdir(root):
+            continue
+        for dirpath, _dirnames, filenames in os.walk(root):
+            for fn in filenames:
+                try:
+                    latest = max(latest, os.path.getmtime(os.path.join(dirpath, fn)))
+                except OSError:
+                    pass
+    return {"version": f"{latest:.3f}", "ts": latest}
+
 # ============ 巡检 API ============
 
 def _inspect_with_dashboard():

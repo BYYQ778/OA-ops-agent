@@ -85,9 +85,36 @@ body {
 .sidebar-logo {
   padding: 22px 20px 18px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+.logo-mark {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+}
+.logo-mark .nav-icon { width: 19px; height: 19px; stroke: #fff; }
 .sidebar-logo h2 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
 .sidebar-logo span { font-size: 11px; color: var(--text-secondary); }
+
+/* ---- 导航图标（SVG 线性图标，颜色跟随文字） ---- */
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 #nav-items {
   flex: 1;
@@ -97,6 +124,7 @@ body {
   gap: 1px;
 }
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -110,8 +138,22 @@ body {
   transition: all 0.12s;
   user-select: none;
 }
-.nav-item:hover { background: var(--bg-secondary); color: var(--text); }
+.nav-item:hover { background: var(--bg-secondary); color: var(--text); transform: translateX(2px); }
 .nav-item.active { background: var(--primary-bg); color: var(--primary); }
+/* 选中态左侧色条（滑入动画） */
+.nav-item::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--primary);
+  transform: translateY(-50%) scaleY(0);
+  transition: transform 0.15s ease;
+}
+.nav-item.active::before { transform: translateY(-50%) scaleY(1); }
 
 .sidebar-status {
   padding: 14px 20px;
