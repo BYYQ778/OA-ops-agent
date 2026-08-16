@@ -65,6 +65,12 @@
   <symbol id="icon-server" viewBox="0 0 24 24">
     <rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>
   </symbol>
+  <symbol id="icon-help-circle" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>
+  </symbol>
+  <symbol id="icon-x" viewBox="0 0 24 24">
+    <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+  </symbol>
 </svg>
 
 <!-- ===== Sidebar ===== -->
@@ -559,6 +565,17 @@
 
 </main>
 
+<!-- ===== 使用小贴士浮窗（JS 注入按钮打开，可拖拽） ===== -->
+<div class="tip-window" id="tip-window" style="display:none;">
+  <div class="tip-bar" id="tip-bar">
+    <svg class="nav-icon"><use href="#icon-help-circle"></use></svg>
+    <span class="tip-title" id="tip-title">使用小贴士</span>
+    <button class="tip-close" id="tip-close" title="关闭"><svg class="btn-icon"><use href="#icon-x"></use></svg></button>
+  </div>
+  <div class="tip-body" id="tip-body"></div>
+  <div class="tip-foot">提示：拖住标题栏可移动窗口 · Esc 关闭</div>
+</div>
+
 <script>
 // ============ Dev Hot-Reload（仅 URL 带 ?dev=1 时启用，生产零影响） ============
 (function () {
@@ -573,6 +590,143 @@
       })
       .catch(function () { /* 后端未就绪时静默重试 */ });
   }, 2000);
+})();
+
+// ============ 使用小贴士（各页面右上角按钮 + 可拖拽浮窗） ============
+var PAGE_TIPS = {
+  dashboard: {
+    title: "实时监控仪表盘",
+    items: [
+      "页面通过 SSE 与后端保持长连接，五项状态卡实时自动更新，无需手动刷新",
+      "趋势图展示最近 60 分钟的 CPU / 内存 / 磁盘走势，鼠标悬停可查看具体数值",
+      "告警时间线按严重程度着色（红色=高危，黄色=警告），实时巡检日志同步滚动",
+      "点击「刷新」按钮可立即拉取一次最新数据（长连接中断时自动重连）",
+      "巡检由调度器自动执行时，结果会实时推送到本页"
+    ]
+  },
+  inspect: {
+    title: "经典巡检",
+    items: [
+      "点击「开始巡检」自动执行端口 / Nginx / OA服务 / 磁盘 / 内存 五项检测",
+      "巡检模式在「系统设置」页切换：本机 / SSH远程 / 模拟，SSH 模式可填远程主机凭据",
+      "巡检完成后自动生成 AI 预警分析报告（风险等级 + 改进策略）",
+      "历史记录按时间倒序排列，点击任一次记录可回看完整巡检详情",
+      "调度器支持定时自动巡检，运行状态见侧边栏底部指示灯"
+    ]
+  },
+  log: {
+    title: "日志分析",
+    items: [
+      "粘贴运维日志到输入框，点击分析后自动匹配 10+ 常见故障模式",
+      "点击「识别截图」上传报错截图，OCR 自动提取日志文本再分析",
+      "分析结果输出：故障原因定位 + 严重程度评估 + 分步排查建议",
+      "适合场景：Nginx 502/504、服务崩溃、端口冲突、连接超时等"
+    ]
+  },
+  qa: {
+    title: "知识问答",
+    items: [
+      "基于知识库的 Agentic RAG 多步推理问答，回答严格依据已导入文档",
+      "回答以流式输出，并在末尾标注引用来源（点击可查看原始文档）",
+      "「新对话」开启全新上下文；左侧会话列表可切换历史对话或删除",
+      "批量问答：每行一个问题（最多 20 题），适合批量验证文档知识覆盖",
+      "知识库引擎未就绪时（侧边栏状态），问答会自动拦截并提示等待"
+    ]
+  },
+  kb: {
+    title: "知识库",
+    items: [
+      "支持拖拽或点击上传 PDF / Word / PPT / HTML / TXT / 图片，自动分块向量化",
+      "图谱探索：按实体类型搜索（服务/主机/文档/人员等），关系图谱可视化",
+      "单击图谱节点查看详情，双击展开邻居节点，支持路径发现（实体 A→B 的关联链）",
+      "「全图」加载完整图谱，「全屏」进入沉浸式浏览，Esc 退出",
+      "问答效果取决于文档质量与分块策略，建议上传结构化文档"
+    ]
+  },
+  diag: {
+    title: "诊断工具箱",
+    items: [
+      "SSL 证书：输入域名单检，或批量检测（每行一个域名）查看到期时间与链完整性",
+      "网络诊断：Ping / 端口连通性 / DNS 解析 / 路由追踪 / HTTP 状态",
+      "数据库：MySQL / Redis / SQL Server / Oracle 健康检查，支持慢查询分析",
+      "安全基线：SSH配置 / 失败登录 / 防火墙 / 监听端口 单项审计，或一键全量审计",
+      "所有结果输出到当前页面的输出框，可直接复制"
+    ]
+  },
+  commands: {
+    title: "运维命令大全",
+    items: [
+      "支持按命令名称或功能关键词双向搜索，实时过滤结果",
+      "左侧分类标签筛选（系统信息 / 网络 / 进程 / 磁盘 / 日志等）",
+      "点击命令卡片展开查看语法、参数说明与使用示例",
+      "搜索关键词会在结果卡片中高亮显示"
+    ]
+  },
+  settings: {
+    title: "系统设置",
+    items: [
+      "运行模式：本机离线（Ollama，数据不出本机）或云端在线（DeepSeek，效果更强）",
+      "切换模型与参数后点击保存，无需重启即时生效",
+      "外观主题：浅色 / 深色一键切换，自动记住选择",
+      "API Key 等敏感信息保存在本地 .env，不会写入配置文件"
+    ]
+  }
+};
+
+(function () {
+  // 为每个功能页右上角注入小贴士按钮
+  document.querySelectorAll('.page').forEach(function (p) {
+    var key = p.id.replace('page-', '');
+    if (!PAGE_TIPS[key]) return;
+    var btn = document.createElement('button');
+    btn.className = 'tip-btn';
+    btn.title = '使用小贴士';
+    btn.innerHTML = '<svg class="btn-icon"><use href="#icon-help-circle"></use></svg>使用小贴士';
+    btn.addEventListener('click', function () { openTip(key); });
+    p.appendChild(btn);
+  });
+
+  var win = document.getElementById('tip-window');
+  var bar = document.getElementById('tip-bar');
+  var titleEl = document.getElementById('tip-title');
+  var bodyEl = document.getElementById('tip-body');
+  var drag = null;
+
+  function openTip(key) {
+    var tip = PAGE_TIPS[key];
+    if (!tip) return;
+    titleEl.textContent = tip.title;
+    bodyEl.innerHTML = '<ol>' + tip.items.map(function (t) {
+      return '<li>' + t + '</li>';
+    }).join('') + '</ol>';
+    // 初始定位：视口居中
+    win.style.display = 'block';
+    var w = win.offsetWidth, h = win.offsetHeight;
+    win.style.left = Math.max(8, Math.round((window.innerWidth - w) / 2)) + 'px';
+    win.style.top = Math.max(8, Math.round((window.innerHeight - h) / 2)) + 'px';
+  }
+  function closeTip() { win.style.display = 'none'; }
+
+  document.getElementById('tip-close').addEventListener('click', closeTip);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && win.style.display !== 'none') closeTip();
+  });
+
+  // 拖拽（标题栏抓手，pointer capture 保证拖出窗口仍跟手）
+  bar.addEventListener('pointerdown', function (e) {
+    if (e.target.closest('.tip-close')) return;
+    drag = { dx: e.clientX - win.offsetLeft, dy: e.clientY - win.offsetTop };
+    try { bar.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  bar.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    var x = Math.min(Math.max(0, e.clientX - drag.dx), window.innerWidth - win.offsetWidth);
+    var y = Math.min(Math.max(0, e.clientY - drag.dy), window.innerHeight - 40);
+    win.style.left = x + 'px';
+    win.style.top = y + 'px';
+  });
+  bar.addEventListener('pointerup', function () { drag = null; });
+  bar.addEventListener('pointercancel', function () { drag = null; });
 })();
 
 // ============ Page Switching ============

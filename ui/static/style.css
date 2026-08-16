@@ -337,6 +337,84 @@ hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
   .db-grid { grid-template-columns: 1fr; }
 }
 
+/* ===== 使用小贴士（页面右上角按钮 + 可拖拽浮窗） ===== */
+.page { position: relative; }
+.tip-btn {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.tip-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-bg);
+}
+
+.tip-window {
+  position: fixed;
+  z-index: 1000;
+  width: 360px;
+  max-width: 92vw;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+.tip-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  cursor: grab;
+  user-select: none;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.tip-bar:active { cursor: grabbing; }
+.tip-bar .nav-icon { width: 16px; height: 16px; color: var(--primary); }
+.tip-title { font-size: 13px; font-weight: 600; flex: 1; }
+.tip-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 3px;
+  display: inline-flex;
+  color: var(--text-secondary);
+  transition: color 0.12s;
+}
+.tip-close:hover { color: var(--text); }
+.tip-body {
+  padding: 12px 16px 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.tip-body ol { margin: 0; padding-left: 18px; }
+.tip-body li { margin-bottom: 7px; }
+.tip-foot {
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 /* ---- 知识库拖拽上传 ---- */
 .drop-zone {
   border: 2px dashed var(--border);
