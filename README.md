@@ -4,6 +4,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Quality](https://github.com/BYYQ778/OA-ops-agent/actions/workflows/quality.yml/badge.svg)](https://github.com/BYYQ778/OA-ops-agent/actions/workflows/quality.yml)
 
 ## 功能
 
@@ -71,6 +72,30 @@ python main.py
 ```
 
 启动后访问 **http://127.0.0.1:7860**。
+
+### 本地开发与验证
+
+项目使用 `uv.lock` 固定开发和 CI 依赖。默认安装为完整 core 服务，但不会安装体积较大的 RAG、OCR 或桌面依赖：
+
+```bash
+# core + 开发工具（CI 默认）
+uv sync --locked --dev
+
+# 完整源码运行环境（RAG + OCR + 桌面）
+uv sync --locked --all-extras --dev
+
+# 质量检查
+uv run ruff check .
+uv run ruff check --select E,F,I,W ui/routers tests
+uv run pyright
+uv run pytest --cov --cov-report=term-missing
+uv run python -m compileall -q agents ui utils main.py desktop_app.py
+uv run pre-commit run --all-files
+```
+
+测试和轻量容器可设置 `OA_ENABLE_BACKGROUND_STARTUP=0`，防止应用启动时探测 Ollama 或预热嵌入模型。设置 `OA_DATA_DIR` 可将默认 SQLite 数据文件隔离到指定目录。测试禁止外部网络连接，不下载模型；API 测试允许事件循环所需的本机回环通信。
+
+工程基线仍在建设中：全库 Ruff 目前检查语法级错误，新 Router 和测试启用 E/F/I/W；Pyright 目前仅检查新 Router 和测试。覆盖率如实统计 agents/ui/utils，尚未达到全库 60% / 核心 80% 的目标。Docker 与绿色版须单独验收，测试通过不等于已发布 v3.0。详见 [阶段验收记录](docs/superpowers/plans/phase-1-acceptance.md)。
 
 ### 方式三：Docker
 

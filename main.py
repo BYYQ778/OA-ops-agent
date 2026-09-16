@@ -158,7 +158,7 @@ def run_demo_mode():
     print("可用功能: 离线巡检 / 正则日志分析 / 诊断工具箱")
     print("限制: 无LLM智能汇总 / 无知识库问答\n")
     from ui.server import run_server
-    run_server(host="127.0.0.1", port=7860)
+    run_server(host="127.0.0.1", port=7860, enable_background_services=False)
 
 
 def main():

@@ -42,7 +42,7 @@ DEFAULT_TIMEOUT = config.get("network_diag.ping_timeout", 5)
 
 def _is_safe_host(host: str) -> bool:
     """校验主机名/域名/IP 格式，拒绝 shell 元字符与参数注入。"""
-    if not host or len(host) > 253:
+    if not host or len(host) > 253 or host.startswith("-"):
         return False
     # 禁止 shell 元字符与空白（防御注入；shell=False 双保险）
     if any(c in host for c in "&|;`$<>(){}[]'\"\\ \t\n"):
@@ -53,8 +53,12 @@ def _is_safe_host(host: str) -> bool:
         return True
     except ValueError:
         pass
-    # 域名/主机名：字母数字、点、连字符、下划线
-    return bool(re.fullmatch(r"[A-Za-z0-9._\-]+", host))
+    # 按 DNS 标签校验，保留内网下划线主机名和完整域名末尾的点。
+    name = host[:-1] if host.endswith(".") else host
+    return all(
+        re.fullmatch(r"[A-Za-z0-9_](?:[A-Za-z0-9_\-]{0,61}[A-Za-z0-9_])?", label)
+        for label in name.split(".")
+    )
 
 
 def _run_command(args, timeout: int = 15) -> str:
@@ -194,6 +198,11 @@ def check_tcp_port(host_port: str) -> str:
     except ValueError:
         return f"[错误] 端口号无效: {port_str}"
 
+    if not _is_safe_host(host):
+        return "[错误] 目标主机格式非法（仅支持 IP 或域名）"
+    if not 1 <= port <= 65535:
+        return "[错误] 端口号必须在 1 到 65535 之间"
+
     start_time = time.time()
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(5)
@@ -261,6 +270,9 @@ def dns_resolve(domain: str) -> str:
         return "[错误] 请输入域名"
 
     domain = domain.strip()
+    if not _is_safe_host(domain):
+        return "[错误] 域名格式非法"
+
     lines = [
         "=" * 50,
         f"  DNS 解析结果: {domain}",
@@ -292,9 +304,6 @@ def dns_resolve(domain: str) -> str:
         pass  # 无 IPv6 不报错
 
     # --- CNAME 记录 ---
-    if not _is_safe_host(domain):
-        return "[错误] 域名格式非法"
-
     output = _run_command(["nslookup", "-type=CNAME", domain], timeout=10)
 
     if output and "canonical" in output.lower():

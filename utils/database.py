@@ -21,6 +21,7 @@ import atexit
 import sqlite3
 import json
 import threading
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
@@ -36,31 +37,43 @@ class Database:
     _instance = None
     _lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls, db_path: os.PathLike[str] | str | None = None):
+        if db_path is not None:
+            instance = super().__new__(cls)
+            instance._initialized = False
+            return instance
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, db_path: os.PathLike[str] | str | None = None):
         if self._initialized:
             return
         self._initialized = True
+        manages_process_lifecycle = db_path is None
 
-        db_path = config.get("database.sqlite_path", "data/oa_ops.db")
-        if not os.path.isabs(db_path):
-            base = get_app_root()
-            db_path = os.path.join(base, db_path)
+        if db_path is None:
+            configured_path = Path(config.get("database.sqlite_path", "data/oa_ops.db"))
+            data_dir = os.environ.get("OA_DATA_DIR")
+            if data_dir:
+                db_path = Path(data_dir) / configured_path.name
+            elif configured_path.is_absolute():
+                db_path = configured_path
+            else:
+                db_path = Path(get_app_root()) / configured_path
+        db_path = Path(db_path).resolve()
 
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self._db_path = db_path
+        self._db_path = str(db_path)
         self._conn_local = threading.local()
         logger.info(f"数据库初始化: {db_path}")
         self._init_tables()
 
-        # 注册退出时自动清理
-        atexit.register(self.close_all)
+        # 默认全局数据库随进程退出清理；显式路径实例由调用方管理生命周期。
+        if manages_process_lifecycle:
+            atexit.register(self.close_all)
 
     @property
     def _conn(self) -> sqlite3.Connection:
@@ -520,14 +533,14 @@ class Database:
 
     def close_all(self):
         """强制关闭所有连接并 checkpoint WAL（进程退出时调用）"""
-        if hasattr(self._conn_local, "conn") and self._conn_local.conn:
+        had_connection = hasattr(self._conn_local, "conn") and self._conn_local.conn is not None
+        if had_connection:
             try:
                 self._conn_local.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 self._conn_local.conn.close()
             except Exception:
                 pass
             self._conn_local.conn = None
-        logger.info("数据库资源已释放")
 
 
 # 全局单例

@@ -6,22 +6,22 @@
 # 查看日志: docker-compose logs -f
 # ============================================================
 
-version: "3.8"
-
 services:
   oa-ops-agent:
     build: .
     image: oa-ops-agent:latest
     container_name: oa-ops-agent
     ports:
-      - "7860:7860"
+      - "127.0.0.1:7860:7860"
     volumes:
       # 持久化数据（数据库、巡检日志、向量库）
       - ./data:/app/data
       # 配置文件（修改后重启容器生效）
       - ./config.yaml:/app/config.yaml:ro
-      # 环境变量（敏感信息）
-      - ./.env:/app/.env:ro
+    # .env 可省略；存在时注入环境变量，而非挂载缺失文件生成空目录。
+    env_file:
+      - path: ./.env
+        required: false
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
@@ -33,7 +33,7 @@ services:
           cpus: "2"
     # 健康检查
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/api/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -5,10 +5,13 @@ OA运维助手 — FastAPI Web 服务端
 所有 agent 模块代码完全不动，通过 API 端点调用。
 """
 
-import sys, os
+import os
+import sys
+from pathlib import Path
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, Request, Form, UploadFile, File
+from fastapi import APIRouter, FastAPI, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -16,7 +19,6 @@ import uvicorn
 
 from agents.inspection_agent import InspectionAgent, run_unified_inspection
 from agents.log_analysis_agent import LogAnalysisAgent, analyze_log_content
-from agents.knowledge_agent import KnowledgeBaseAgent
 from agents.ssl_monitor import check_cert_expiry, batch_check_certs
 from agents.network_diag import ping_host, check_tcp_port, dns_resolve, traceroute_host, http_health_check
 from agents.db_inspector import check_mysql_status, check_redis_status, show_mysql_slow_queries, check_mssql_status, check_oracle_status
@@ -26,6 +28,7 @@ from utils.config import config as app_config
 from utils.database import db
 from utils.scheduler import InspectionScheduler
 from utils.dashboard import dashboard_manager
+from ui.routers.system import create_system_router
 
 logger = get_logger(__name__)
 
@@ -105,16 +108,32 @@ def _ensure_ollama_running() -> bool:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """服务启动时：后台拉起 Ollama（如配置）+ 预热知识库引擎（均不阻塞启动）。"""
+    if not app.state.enable_background_services:
+        yield
+        return
     if app_config.get("llm.provider", "ollama") == "ollama":
         _threading.Thread(target=_ensure_ollama_running, daemon=True, name="ollama-ensure").start()
     _prewarm_kb()
     yield
 
 
-app = FastAPI(title="OA 运维助手", version="2.5.0", lifespan=_lifespan)
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+legacy_router = APIRouter()
+
+
+def create_app(enable_background_services: bool | None = None) -> FastAPI:
+    """Create an application while allowing tests/demo mode to disable model startup."""
+    if enable_background_services is None:
+        enable_background_services = os.environ.get("OA_ENABLE_BACKGROUND_STARTUP", "1") != "0"
+    application = FastAPI(title="OA 运维助手", version="2.5.0", lifespan=_lifespan)
+    application.state.enable_background_services = enable_background_services
+
+    application.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+    application.include_router(create_system_router(Path(BASE_DIR), lambda: _kb_state))
+    application.include_router(legacy_router)
+    return application
+
+
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 # ---- 全局状态 ----
@@ -122,7 +141,7 @@ scheduler = InspectionScheduler()
 
 # ============ 页面路由 ============
 
-@app.get("/", response_class=HTMLResponse)
+@legacy_router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     mode = app_config.get("inspection.mode", "simulated")
     mode_label = {"ssh": "SSH远程", "local": "本机", "auto": "SSH优先", "simulated": "模拟"}.get(mode, mode)
@@ -139,40 +158,6 @@ async def index(request: Request):
 
 
 
-# ============ 健康检查（桌面版启动画面轮询用） ============
-
-@app.get("/api/health")
-async def health():
-    return {
-        "status": "ok",
-        "version": "2.5.0",
-        "kb_state": _kb_state.get("state", "loading"),
-        "kb_error": _kb_state.get("error"),
-    }
-
-
-# ============ 开发热刷新（仅 ?dev=1 打开的页面会轮询，生产零影响） ============
-
-@app.get("/api/dev/version")
-async def dev_version():
-    """返回 ui/ 前端文件（templates/static）最新修改时间戳。
-
-    开发模式：浏览器以 ?dev=1 打开首页后，前端每 2s 轮询此端点，
-    时间戳变化即自动刷新页面，改 HTML/CSS/JS 无需手动刷新或重启服务。
-    """
-    latest = 0.0
-    for sub in ("templates", "static"):
-        root = os.path.join(BASE_DIR, sub)
-        if not os.path.isdir(root):
-            continue
-        for dirpath, _dirnames, filenames in os.walk(root):
-            for fn in filenames:
-                try:
-                    latest = max(latest, os.path.getmtime(os.path.join(dirpath, fn)))
-                except OSError:
-                    pass
-    return {"version": f"{latest:.3f}", "ts": latest}
-
 # ============ 巡检 API ============
 
 def _inspect_with_dashboard():
@@ -182,18 +167,18 @@ def _inspect_with_dashboard():
     return result
 
 
-@app.post("/api/inspect/run")
+@legacy_router.post("/api/inspect/run")
 async def api_inspect():
     result = _inspect_with_dashboard()
     return {"result": result}
 
 
-@app.post("/api/inspect/start")
+@legacy_router.post("/api/inspect/start")
 async def api_inspect_start(interval: int = Form(...)):
     ok = scheduler.start(task_func=_inspect_with_dashboard, interval=interval)
     return {"ok": ok, "msg": "已启动" if ok else "已在运行中"}
 
-@app.post("/api/inspect/stop")
+@legacy_router.post("/api/inspect/stop")
 async def api_inspect_stop():
     ok = scheduler.stop()
     mode = app_config.get("inspection.mode", "simulated")
@@ -203,12 +188,12 @@ async def api_inspect_stop():
         "status": f"调度器: {'运行中' if scheduler.is_running else '已停止'} | 模式: {mode_label} | 间隔: {scheduler.interval}秒"
     }
 
-@app.post("/api/inspect/adjust")
+@legacy_router.post("/api/inspect/adjust")
 async def api_inspect_adjust(interval: int = Form(...)):
     ok = scheduler.adjust_interval(interval)
     return {"ok": ok, "msg": f"间隔已调整: {interval}秒" if ok else "巡检未运行"}
 
-@app.get("/api/inspect/status")
+@legacy_router.get("/api/inspect/status")
 async def api_inspect_status():
     mode = app_config.get("inspection.mode", "simulated")
     mode_label = {"ssh": "SSH远程", "local": "本机", "auto": "SSH优先", "simulated": "模拟"}.get(mode, mode)
@@ -219,7 +204,7 @@ async def api_inspect_status():
         "status": f"调度器: {'运行中' if scheduler.is_running else '已停止'} | 模式: {mode_label} | 间隔: {scheduler.interval}秒"
     }
 
-@app.get("/api/inspect/history")
+@legacy_router.get("/api/inspect/history")
 async def api_inspect_history(days: int = 7):
     try:
         summary = db.get_inspection_summary(days)
@@ -228,7 +213,7 @@ async def api_inspect_history(days: int = 7):
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/api/db/overview")
+@legacy_router.get("/api/db/overview")
 async def api_db_overview():
     try:
         return db.get_db_stats()
@@ -238,7 +223,7 @@ async def api_db_overview():
 
 # ============ 日志分析 API ============
 
-@app.post("/api/log/analyze")
+@legacy_router.post("/api/log/analyze")
 async def api_log_analyze(log_text: str = Form("")):
     if not log_text.strip():
         return {"result": "请输入需要分析的日志内容"}
@@ -246,7 +231,7 @@ async def api_log_analyze(log_text: str = Form("")):
     return {"result": result}
 
 
-@app.post("/api/log/ocr")
+@legacy_router.post("/api/log/ocr")
 async def api_log_ocr(file: UploadFile = File(...)):
     """上传截图 → OCR 识别 → 自动分析"""
     from utils.ocr import extract_text_from_bytes
@@ -267,12 +252,12 @@ async def api_log_ocr(file: UploadFile = File(...)):
 
 # ============ SSL 证书 API ============
 
-@app.post("/api/ssl/check")
+@legacy_router.post("/api/ssl/check")
 async def api_ssl_check(domain: str = Form(...)):
     result = check_cert_expiry.invoke({"domain": domain})
     return {"result": result}
 
-@app.post("/api/ssl/batch")
+@legacy_router.post("/api/ssl/batch")
 async def api_ssl_batch(domains: str = Form(...)):
     result = batch_check_certs.invoke({"domains_text": domains})
     return {"result": result}
@@ -280,53 +265,53 @@ async def api_ssl_batch(domains: str = Form(...)):
 
 # ============ 网络诊断 API ============
 
-@app.post("/api/net/ping")
+@legacy_router.post("/api/net/ping")
 async def api_ping(host: str = Form(...)):
     return {"result": ping_host.invoke({"host": host})}
 
-@app.post("/api/net/port")
+@legacy_router.post("/api/net/port")
 async def api_port(host_port: str = Form(...)):
     return {"result": check_tcp_port.invoke({"host_port": host_port})}
 
-@app.post("/api/net/dns")
+@legacy_router.post("/api/net/dns")
 async def api_dns(domain: str = Form(...)):
     return {"result": dns_resolve.invoke({"domain": domain})}
 
-@app.post("/api/net/trace")
+@legacy_router.post("/api/net/trace")
 async def api_trace(host: str = Form(...)):
     return {"result": traceroute_host.invoke({"host": host})}
 
-@app.post("/api/net/http")
+@legacy_router.post("/api/net/http")
 async def api_http(url: str = Form(...)):
     return {"result": http_health_check.invoke({"url": url})}
 
 
 # ============ 数据库 API ============
 
-@app.post("/api/db/mysql")
+@legacy_router.post("/api/db/mysql")
 async def api_mysql(host: str = Form("127.0.0.1"), port: int = Form(3306),
                     user: str = Form("root"), password: str = Form("")):
     config_text = f"host={host} port={port} user={user} password={password}"
     return {"result": check_mysql_status.invoke({"config_text": config_text})}
 
-@app.post("/api/db/mysql/slow")
+@legacy_router.post("/api/db/mysql/slow")
 async def api_mysql_slow(host: str = Form("127.0.0.1"), port: int = Form(3306),
                          user: str = Form("root"), password: str = Form("")):
     config_text = f"host={host} port={port} user={user} password={password} limit=20"
     return {"result": show_mysql_slow_queries.invoke({"config_text": config_text})}
 
-@app.post("/api/db/redis")
+@legacy_router.post("/api/db/redis")
 async def api_redis(host: str = Form("127.0.0.1"), port: int = Form(6379), password: str = Form("")):
     config_text = f"host={host} port={port} password={password}"
     return {"result": check_redis_status.invoke({"config_text": config_text})}
 
-@app.post("/api/db/mssql")
+@legacy_router.post("/api/db/mssql")
 async def api_mssql(host: str = Form("127.0.0.1"), port: int = Form(1433),
                     user: str = Form("sa"), password: str = Form("")):
     config_text = f"host={host} port={port} user={user} password={password}"
     return {"result": check_mssql_status.invoke({"config_text": config_text})}
 
-@app.post("/api/db/oracle")
+@legacy_router.post("/api/db/oracle")
 async def api_oracle(host: str = Form("127.0.0.1"), port: int = Form(1521),
                      user: str = Form("system"), password: str = Form(""), service: str = Form("orcl")):
     config_text = f"host={host} port={port} user={user} password={password} service={service}"
@@ -335,17 +320,17 @@ async def api_oracle(host: str = Form("127.0.0.1"), port: int = Form(1521),
 
 # ============ 安全基线 API ============
 
-@app.post("/api/sec/ssh")
+@legacy_router.post("/api/sec/ssh")
 async def api_sec_ssh(): return {"result": audit_ssh_config.invoke({})}
-@app.post("/api/sec/login")
+@legacy_router.post("/api/sec/login")
 async def api_sec_login(): return {"result": check_failed_logins.invoke({})}
-@app.post("/api/sec/firewall")
+@legacy_router.post("/api/sec/firewall")
 async def api_sec_fw(): return {"result": audit_firewall_rules.invoke({})}
-@app.post("/api/sec/ports")
+@legacy_router.post("/api/sec/ports")
 async def api_sec_ports(): return {"result": check_listening_ports.invoke({})}
-@app.post("/api/sec/cron")
+@legacy_router.post("/api/sec/cron")
 async def api_sec_cron(): return {"result": audit_cron_jobs.invoke({})}
-@app.post("/api/sec/all")
+@legacy_router.post("/api/sec/all")
 async def api_sec_all():
     result = (
         "=" * 55 + "\n  全量安全基线审计报告\n" + "=" * 55 + "\n\n" +
@@ -358,7 +343,7 @@ async def api_sec_all():
 
 # ============ 实时监控仪表盘 API ============
 
-@app.get("/api/dashboard/metrics")
+@legacy_router.get("/api/dashboard/metrics")
 async def api_dashboard_metrics():
     """返回最新一次巡检的结构化指标，仪表盘首次加载和手动刷新时调用"""
     metrics = dashboard_manager.get_latest()
@@ -367,7 +352,7 @@ async def api_dashboard_metrics():
     return metrics
 
 
-@app.get("/api/dashboard/stream")
+@legacy_router.get("/api/dashboard/stream")
 async def api_dashboard_stream():
     """
     SSE 实时推送端点。
@@ -403,7 +388,7 @@ async def api_dashboard_stream():
     )
 
 
-@app.get("/api/dashboard/history")
+@legacy_router.get("/api/dashboard/history")
 async def api_dashboard_history(minutes: int = 60):
     """返回最近 N 分钟的时间序列数据，供趋势图表使用"""
     timeline = dashboard_manager.get_history(minutes)
@@ -438,7 +423,7 @@ def _save_api_key_to_env(api_key: str) -> bool:
 
 # ============ 系统配置 API ============
 
-@app.post("/api/config/save")
+@legacy_router.post("/api/config/save")
 async def api_config_save(
     provider: str = Form(...),
     api_key: str = Form(""),
@@ -504,6 +489,8 @@ _kb_state = {"state": "loading", "error": None}   # loading | ready | unavailabl
 
 def _build_kb_agent():
     """按 provider 路由构建 KnowledgeBaseAgent；未配置时返回 (None, 原因)。"""
+    from agents.knowledge_agent import KnowledgeBaseAgent
+
     provider = app_config.get("llm.provider", "ollama")
     if provider == "ollama":
         api_key = "ollama"
@@ -587,7 +574,7 @@ def _kb_not_ready():
         return "unavailable", "知识库引擎不可用：" + (_kb_state.get("error") or "请检查 LLM 配置")
     return "loading", "知识库引擎正在初始化（首次加载嵌入模型约 20~40 秒），请稍候…"
 
-@app.post("/api/kb/ask")
+@legacy_router.post("/api/kb/ask")
 async def api_kb_ask(question: str = Form(...)):
     kb = get_kb_agent()
     if kb is None:
@@ -595,7 +582,7 @@ async def api_kb_ask(question: str = Form(...)):
         return {"state": state, "result": msg}
     return {"result": kb.query(question)}
 
-@app.post("/api/kb/import")
+@legacy_router.post("/api/kb/import")
 async def api_kb_import(file: UploadFile = File(...)):
     kb = get_kb_agent()
     if kb is None:
@@ -617,7 +604,7 @@ async def api_kb_import(file: UploadFile = File(...)):
         pass
     return {"result": result}
 
-@app.get("/api/kb/list")
+@legacy_router.get("/api/kb/list")
 async def api_kb_list():
     kb = get_kb_agent()
     if kb is None:
@@ -625,7 +612,7 @@ async def api_kb_list():
         return {"state": state, "result": msg}
     return {"result": kb.list_documents()}
 
-@app.get("/api/kb/stats")
+@legacy_router.get("/api/kb/stats")
 async def api_kb_stats():
     kb = get_kb_agent()
     if kb is None:
@@ -633,7 +620,7 @@ async def api_kb_stats():
         return {"state": state, "result": msg}
     return {"result": kb.get_stats()}
 
-@app.get("/api/kb/document/{doc_name}")
+@legacy_router.get("/api/kb/document/{doc_name}")
 async def api_kb_document(doc_name: str):
     """获取指定文档的完整内容。"""
     kb = get_kb_agent()
@@ -644,7 +631,7 @@ async def api_kb_document(doc_name: str):
     from urllib.parse import unquote
     return {"result": kb.get_document_text(unquote(doc_name))}
 
-@app.post("/api/kb/delete")
+@legacy_router.post("/api/kb/delete")
 async def api_kb_delete(doc_name: str = Form(...)):
     kb = get_kb_agent()
     if kb is None:
@@ -652,7 +639,7 @@ async def api_kb_delete(doc_name: str = Form(...)):
         return {"state": state, "result": msg}
     return {"result": kb.delete_document(doc_name)}
 
-@app.post("/api/kb/clear")
+@legacy_router.post("/api/kb/clear")
 async def api_kb_clear():
     kb = get_kb_agent()
     if kb is None:
@@ -663,7 +650,7 @@ async def api_kb_clear():
 
 # ============ 对话 Chat API (v2.4) ============
 
-@app.post("/api/kb/chat")
+@legacy_router.post("/api/kb/chat")
 async def api_kb_chat(
     message: str = Form(...),
     conversation_id: str = Form("default"),
@@ -682,7 +669,7 @@ async def api_kb_chat(
     answer = kb.chat(message, conversation_id=conversation_id)
     return {"answer": answer, "conversation_id": conversation_id}
 
-@app.post("/api/kb/chat/stream")
+@legacy_router.post("/api/kb/chat/stream")
 async def api_kb_chat_stream(
     message: str = Form(...),
     conversation_id: str = Form("default"),
@@ -709,7 +696,7 @@ async def api_kb_chat_stream(
     return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
-@app.post("/api/kb/chat/clear")
+@legacy_router.post("/api/kb/chat/clear")
 async def api_kb_chat_clear(conversation_id: str = Form("default")):
     """清除指定对话的历史记录。"""
     kb = get_kb_agent()
@@ -719,33 +706,33 @@ async def api_kb_chat_clear(conversation_id: str = Form("default")):
     return {"ok": True, "conversation_id": conversation_id}
 
 
-@app.get("/api/kb/chat/history")
+@legacy_router.get("/api/kb/chat/history")
 async def api_kb_chat_history(conversation_id: str = "default"):
     """获取对话历史。"""
     rows = db.get_conversation_messages(conversation_id)
     return {"messages": [{"role": r["role"], "content": r["content"]} for r in rows]}
 
-@app.get("/api/kb/conversations")
+@legacy_router.get("/api/kb/conversations")
 async def api_kb_conversations(limit: int = 50):
     """对话列表（按最近更新倒序）。"""
     return {"conversations": db.list_conversations(limit)}
 
 
-@app.post("/api/kb/conversation")
+@legacy_router.post("/api/kb/conversation")
 async def api_kb_conversation_create():
     """新建对话，返回新对话 ID。"""
     conv_id = db.create_conversation("新对话")
     return {"ok": True, "conversation_id": conv_id, "title": "新对话"}
 
 
-@app.post("/api/kb/conversation/delete")
+@legacy_router.post("/api/kb/conversation/delete")
 async def api_kb_conversation_delete(conversation_id: str = Form(...)):
     """删除对话及其全部消息。"""
     ok = db.delete_conversation(conversation_id)
     return {"ok": ok, "conversation_id": conversation_id}
 
 
-@app.post("/api/kb/conversation/rename")
+@legacy_router.post("/api/kb/conversation/rename")
 async def api_kb_conversation_rename(
     conversation_id: str = Form(...),
     title: str = Form(...),
@@ -757,7 +744,7 @@ async def api_kb_conversation_rename(
 
 # ============ 批量问答 API (v2.4) ============
 
-@app.post("/api/kb/batch-ask")
+@legacy_router.post("/api/kb/batch-ask")
 async def api_kb_batch_ask(questions: str = Form("")):
     """
     批量处理多个问题（最多 20 题并行）。
@@ -820,7 +807,7 @@ def _get_kg_store():
     return kb.kg_store
 
 
-@app.post("/api/kg/search")
+@legacy_router.post("/api/kg/search")
 async def api_kg_search(query: str = Form(...), entity_type: str = Form(None)):
     """搜索知识图谱中的实体（按名称/描述）。"""
     store = _get_kg_store()
@@ -838,7 +825,7 @@ async def api_kg_search(query: str = Form(...), entity_type: str = Form(None)):
     }
 
 
-@app.post("/api/kg/explore")
+@legacy_router.post("/api/kg/explore")
 async def api_kg_explore(node_id: str = Form(...), depth: int = Form(2)):
     """提取以指定节点为中心的子图（供可视化）。"""
     store = _get_kg_store()
@@ -851,7 +838,7 @@ async def api_kg_explore(node_id: str = Form(...), depth: int = Form(2)):
     return {"subgraph": subgraph}
 
 
-@app.post("/api/kg/path")
+@legacy_router.post("/api/kg/path")
 async def api_kg_path(source: str = Form(...), target: str = Form(...)):
     """查找两个实体之间的最短路径。"""
     store = _get_kg_store()
@@ -866,7 +853,7 @@ async def api_kg_path(source: str = Form(...), target: str = Form(...)):
     return {"path": result["path"], "length": result["length"], "nodes": result.get("nodes", []), "edges": result.get("edges", [])}
 
 
-@app.get("/api/kg/stats")
+@legacy_router.get("/api/kg/stats")
 async def api_kg_stats():
     """获取知识图谱统计信息。"""
     store = _get_kg_store()
@@ -882,7 +869,7 @@ async def api_kg_stats():
 
 # ============ 运维命令大全 API ============
 
-@app.get("/api/commands")
+@legacy_router.get("/api/commands")
 async def api_commands():
     """
     返回运维常用命令大全数据。
@@ -914,8 +901,10 @@ async def api_commands():
 
 # ============ 启动入口 ============
 
-def run_server(host: str = "127.0.0.1", port: int = 7860):
-    uvicorn.run(app, host=host, port=port, log_level="info")
+app = create_app()
+
+def run_server(host: str = "127.0.0.1", port: int = 7860, enable_background_services: bool | None = None):
+    uvicorn.run(create_app(enable_background_services), host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":

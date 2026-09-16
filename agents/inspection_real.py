@@ -20,6 +20,7 @@ SSH 连接支持：
     result = inspector.run_full_inspection()  # 完整巡检
 """
 
+import math
 import os
 import time
 from datetime import datetime
@@ -65,7 +66,7 @@ INSPECTION_COMMANDS = {
         "check_type": "oa",
         "command": (
             "echo '=== OA_SERVICE ==='; "
-            "TOMCAT_PID=$(ps aux 2>/dev/null | grep -i '[t]omcat\|[j]ava.*oa\|[j]ava.*catalina' | awk '{print $2}' | head -1); "
+            r"TOMCAT_PID=$(ps aux 2>/dev/null | grep -i '[t]omcat\|[j]ava.*oa\|[j]ava.*catalina' | awk '{print $2}' | head -1); "
             "if [ -n \"$TOMCAT_PID\" ]; then "
             "  echo 'OA_RUNNING'; "
             "  echo \"PID:$TOMCAT_PID\"; "
@@ -200,7 +201,7 @@ class RealInspector:
         out, err = self._exec_command(cmd["command"], cmd["timeout"])
 
         if err and not out:
-            return f"[{self.name}] 端口检测失败: {err}"
+            return f"[{self.name}] [异常] 端口检测失败: {err}"
 
         lines = []
         ports_status = {}
@@ -226,8 +227,12 @@ class RealInspector:
                 lines.append(f"  [未知] 端口 {port} ({name}): 无法检测")
 
         alert_ports = [p for p, s in ports_status.items() if s == "error"]
-        status = "异常" if alert_ports else "正常"
+        status = "异常" if alert_ports else (
+            "未知" if any(p not in ports_status for p in SERVICE_NAMES) else "正常"
+        )
         summary = f"[{self.name}] 端口检测完成，状态: {status}"
+        if status == "未知":
+            summary += " [告警] 检测数据不完整"
         if alert_ports:
             summary += f"，异常端口: {', '.join(alert_ports)}"
 
@@ -239,7 +244,7 @@ class RealInspector:
         out, err = self._exec_command(cmd["command"], cmd["timeout"])
 
         if err and not out:
-            return f"[{self.name}] Nginx检测失败: {err}"
+            return f"[{self.name}] [异常] Nginx检测失败: {err}"
 
         lines = [f"[{self.name}] Nginx服务检测:"]
 
@@ -248,6 +253,8 @@ class RealInspector:
         elif "NGINX_STOPPED" in out:
             lines.append("  [异常] Nginx服务已停止！")
             lines.append("  建议: 执行 systemctl start nginx 启动服务")
+        else:
+            lines.append("  [告警] Nginx服务状态未知，未获取有效检测数据")
 
         # 提取配置检查结果
         for line in out.split("\n"):
@@ -270,7 +277,7 @@ class RealInspector:
         out, err = self._exec_command(cmd["command"], cmd["timeout"])
 
         if err and not out:
-            return f"[{self.name}] OA服务检测失败: {err}"
+            return f"[{self.name}] [异常] OA服务检测失败: {err}"
 
         lines = [f"[{self.name}] OA应用服务检测:"]
 
@@ -287,6 +294,8 @@ class RealInspector:
             lines.append("  [严重] OA应用服务未运行！")
             lines.append("  建议: 检查 Tomcat/Java 进程")
             lines.append("  建议: 查看应用日志 catalina.out")
+        else:
+            lines.append("  [告警] OA应用服务状态未知，未获取有效检测数据")
 
         return "\n".join(lines)
 
@@ -297,10 +306,12 @@ class RealInspector:
         out, err = self._exec_command(cmd["command"], cmd["timeout"])
 
         if err and not out:
-            return f"[{self.name}] 磁盘检测失败: {err}"
+            return f"[{self.name}] [异常] 磁盘检测失败: {err}"
 
         lines = [f"[{self.name}] 磁盘使用检测:"]
         has_warning = False
+        valid_readings = 0
+        invalid_readings = False
 
         for line in out.split("\n"):
             line = line.strip()
@@ -321,15 +332,26 @@ class RealInspector:
                 if pct_str:
                     try:
                         usage = int(pct_str)
+                        # df 可因负 available 返回 >100%；仍应保留超额容量告警。
+                        if usage < 0:
+                            raise ValueError("磁盘使用率超出范围")
+                        valid_readings += 1
                         if usage >= threshold:
                             has_warning = True
                             lines.append(f"  [告警] {mount}: {usage}% (阈值 {threshold}%)")
                         else:
                             lines.append(f"  [正常] {mount}: {usage}%")
                     except ValueError:
-                        lines.append(f"  {mount}: {pct_str}%")
+                        invalid_readings = True
+                        lines.append(f"  [告警] {mount}: 使用率未知（无效数据）")
+                else:
+                    invalid_readings = True
+            else:
+                invalid_readings = True
 
-        if not has_warning:
+        if not valid_readings or invalid_readings:
+            lines.append("  [告警] 总结: 磁盘状态未知，检测数据不完整")
+        elif not has_warning:
             lines.append("  总结: 所有磁盘正常")
         else:
             lines.append(f"  总结: 存在磁盘告警！请及时清理或扩容")
@@ -343,7 +365,7 @@ class RealInspector:
         out, err = self._exec_command(cmd["command"], cmd["timeout"])
 
         if err and not out:
-            return f"[{self.name}] 内存检测失败: {err}"
+            return f"[{self.name}] [异常] 内存检测失败: {err}"
 
         lines = [f"[{self.name}] 内存使用检测:"]
 
@@ -359,21 +381,33 @@ class RealInspector:
                 total = data.get("MEM_TOTAL", "?")
                 used = data.get("MEM_USED", "?")
                 free = data.get("MEM_FREE", "?")
-                pct = data.get("MEM_PCT", "0")
+                pct = data.get("MEM_PCT", "")
 
                 try:
                     pct_val = float(pct)
+                    if not 0 <= pct_val <= 100:
+                        raise ValueError("内存使用率超出范围")
+                    total_val, used_val, free_val = float(total), float(used), float(free)
+                    if not (
+                        all(math.isfinite(value) for value in (total_val, used_val, free_val))
+                        and total_val > 0 and 0 <= used_val <= total_val and 0 <= free_val <= total_val
+                    ):
+                        raise ValueError("内存容量无效")
                     if pct_val >= threshold:
                         lines.append(f"  [告警] 内存使用率过高: {pct}% (阈值 {threshold}%)")
                     else:
                         lines.append(f"  [正常] 内存使用率: {pct}%")
                 except ValueError:
-                    lines.append(f"  内存使用率: {pct}%")
+                    lines.append("  [告警] 内存使用率未知（无效数据）")
+                    continue
 
                 lines.append(f"  总内存: {total}MB | 已用: {used}MB | 可用: {free}MB")
 
                 if pct_val >= threshold:
                     lines.append(f"  建议: 排查内存泄漏进程 top -o %MEM")
+
+        if len(lines) == 1:
+            lines.append("  [告警] 内存状态未知，未获取有效检测数据")
 
         return "\n".join(lines)
 

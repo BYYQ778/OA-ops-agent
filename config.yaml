@@ -7,7 +7,7 @@
 
 # ---- LLM 大模型配置 ----
 llm:
-  provider: deepseek  # deepseek / qwen / openai / ollama
+  provider: ollama  # 本地优先；deepseek / qwen / openai 可选
   api_key: ${OA_LLM_API_KEY:}  # ollama 模式可留空
   base_url: https://api.deepseek.com/v1
   model: deepseek-chat
