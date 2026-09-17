@@ -120,10 +120,10 @@ split、route_expected（LLM 子集用）、notes。
       （dev 88 / holdout 40；锚点 171；子代理撰写 + 校验器/关键词排查复核）
 - [x] 3. metrics.py + 单测（14 用例）
 - [x] 4. pipelines.py（旧版重建 + 新版适配）+ 小规模烟测（8 用例）
-- [ ] 5. runner 全量离线评测实跑 → results JSON
-- [ ] 6. 阈值校准 → 冻结 → holdout 终评
-- [ ] 7. LLM 子集真实运行（Ollama）→ answer 级指标
-- [ ] 8. 报告 + 图表（docs/reports/）+ 惯例文档同步
+- [x] 5. runner 全量离线评测实跑 ✅（全量 128 条：Recall@5 94.4%、拒答率 75.0%）
+- [x] 6. 阈值校准（dev 网格）→ 冻结 → holdout 终评 ✅（分层门控 0.89/10.25 ∥ 0.60/7.75）
+- [ ] 7. LLM 子集真实运行（脚本/索引已就绪；待启动 Ollama）
+- [ ] 8. 报告 + 图表（✅ docs/reports/ 已生成；惯例文档同步进行中）
 - [ ] 9. 全量本地验证（pytest/ruff/pyright/compileall + 运行验证）→ 推送（授权后）→ CI 核验
 
 ## 验收对照

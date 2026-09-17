@@ -796,3 +796,21 @@ Phase 6: 全链路 E2E 验证
   quality 712 passed / 覆盖率 78% + docker-core 双作业）
 - 衔接第 3 周: ≥100 条评测集与阈值校准；jieba 引入评估；quality（BGE-M3 +
   Reranker）实测；新旧对比报告与图表（Recall@5/MRR/引用/拒答/延迟）
+
+═══════════════════════════════════════════
+【2026-09-17 — v3 第 3 周：RAG/Agent 评测体系（feat/rag-evaluation 分支）】
+- 工作区: E:\YunweiAgent\oa-ops-agent-rag-evaluation（分支 feat/rag-evaluation，
+  基于 feat/hybrid-rag 尖端 cf1b3c7；uv .venv=Python 3.12.13；实跑评测用主目录
+  env_new（3.11.9）+ jieba——jieba 已装于 env_new、未入依赖锁，待决策是否引入）
+- 交付: evals 评测体系（24 篇合成语料 / 128 条评测集 dev88+holdout40 / 校验器 /
+  指标 / 旧版重建+新版适配管线 / 运行器 / 报告生成）+ 5 个 CLI 脚本；
+  utils/retrieval.py 分层证据门（默认兼容旧行为）；config.yaml 阈值冻结
+  (0.89/10.25 ∥ 0.60/7.75)；docs/reports/rag-eval-report.md（自动生成）
+- 结果（全量 128 条，同一数据/硬件）: Recall@5 74.1%→94.4%；MRR 0.609→0.807；
+  引用覆盖率 74.1%→98.1%（holdout 97.0%）；误拒率 3.7%；无证据拒答率 0→75.0%
+  （dev 84.6%；85% 目标未达——原因与改进路径见报告「局限与说明」）
+- 测试: 759 passed；ruff（含严格范围）全绿；pyright 0 errors；compileall OK
+- 待办: LLM 端到端子集实跑（scripts/run_llm_subset.py，需启动 Ollama；含回答级
+  拒答/工具选择/步骤/延迟指标）；延迟安静环境复测；推送与 CI 核验（待授权）
+- 衔接第 4 周: 根因诊断复用 HybridRetriever 与 evals 结果结构；
+  /api/v1/evals/latest 读取 results JSON；分层门控沿用
