@@ -417,13 +417,16 @@ class KnowledgeBaseAgent:
 ## 用户问题
 {state['question']}
 
-请给出完整、准确的回答。引用来源。如果信息不足，请明确说明。"""
+## 回答要求
+1. 严格基于上方检索资料回答，禁止使用资料以外的知识；
+2. 引用资料时必须使用《文档名》格式（如"根据《xxx手册.md》"），可同时标注 [参考资料N]；
+3. 若检索资料与问题无关或不足以回答，必须仅回复："抱歉，知识库中未找到相关信息，请补充相关文档后重试。"，不得给出资料以外的具体建议。"""
 
             answer = ""
             try:
                 # 流式生成：writer 把 token 推给 stream_mode="custom" 的消费者
                 for chunk in kb.llm.stream([
-                    {"role": "system", "content": "你是一个 OA 运维知识库助手。严格基于提供的检索信息回答，禁止编造。"},
+                    {"role": "system", "content": "你是一个 OA 运维知识库助手。严格基于提供的检索信息回答，禁止编造；引用使用《文档名》格式，资料不足时按回答要求明确拒答。"},
                     {"role": "user", "content": answer_prompt},
                 ]):
                     token = ""
