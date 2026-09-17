@@ -171,7 +171,7 @@ class KnowledgeBaseAgent:
         self.retriever = HybridRetriever(
             dense_search=self._dense_search,
             corpus_fn=self._corpus_snapshot,
-            reranker=None,  # 可选重排序组件在 quality 模式接入（第 5 步）
+            reranker=self._build_reranker(),
             config=self.retrieval_config,
         )
 
@@ -540,6 +540,18 @@ class KnowledgeBaseAgent:
         except Exception:
             data = {}
         return RetrievalConfig.from_mapping(data)
+
+    def _build_reranker(self):
+        """按配置构建可选重排序组件（quality 模式；不可用时自动直通，不影响检索）。"""
+        try:
+            from utils.rerank import build_reranker
+            return build_reranker(
+                enabled=bool(self.retrieval_config.rerank),
+                model_name=self.retrieval_config.rerank_model,
+            )
+        except Exception as e:
+            logger.warning(f"重排序组件构建失败（忽略，检索直通）: {e}")
+            return None
 
     def _chunking_strategy(self) -> str:
         """分块策略：semantic（RAG 2.0 默认，标题/段落/页）/ fixed（旧固定切块）。"""

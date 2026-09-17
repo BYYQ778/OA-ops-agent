@@ -288,3 +288,17 @@ def test_router_decide_kg_disabled_coerces_action() -> None:
     )
     agent = _router_agent(llm)
     assert agent._router_decide("问题", has_kg=False) == ("search_kb", "某实体")
+
+
+# ========== 重排序接线 ==========
+
+def test_build_reranker_respects_config() -> None:
+    from utils.retrieval import RetrievalConfig
+
+    agent = _make_agent()
+    agent.retrieval_config = RetrievalConfig(rerank=False)
+    assert agent._build_reranker() is None
+    agent.retrieval_config = RetrievalConfig(rerank=True, rerank_model="model-x")
+    built = agent._build_reranker()
+    assert built is not None
+    assert callable(built)
