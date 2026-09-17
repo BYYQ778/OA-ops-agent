@@ -115,6 +115,32 @@ def apply_evidence_gate(
     return any(checks)
 
 
+def format_citations(hits: Sequence[RetrievalHit]) -> str:
+    """把命中渲染为带精确引用的上下文（LLM Prompt 与降级展示共用）。
+
+    格式: [参考资料N] 《source》 · 第X页 · §章节 · chunk_uid（缺项自动跳过）
+    """
+    parts: List[str] = []
+    for i, hit in enumerate(hits, 1):
+        meta = hit.metadata or {}
+        source = meta.get("source", "未知")
+        loc: List[str] = []
+        page = meta.get("page")
+        if isinstance(page, int) and page > 0:
+            loc.append(f"第{page}页")
+        section = meta.get("section")
+        if section:
+            loc.append(f"§{section}")
+        uid = meta.get("chunk_uid")
+        if uid:
+            loc.append(str(uid))
+        elif meta.get("chunk_index") is not None:
+            loc.append(f"块#{meta.get('chunk_index')}")
+        suffix = (" · " + " · ".join(loc)) if loc else ""
+        parts.append(f"[参考资料{i}] 《{source}》{suffix}\n{hit.text}")
+    return "\n\n".join(parts)
+
+
 @dataclass
 class RetrievalConfig:
     """检索配置（config.yaml → knowledge_base.retrieval 段）。"""
