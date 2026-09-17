@@ -746,15 +746,22 @@ Phase 6: 全链路 E2E 验证
   （分支 chore/quality-baseline；uv 环境 .venv=Python 3.12.13；
   uv 缓存 E:\YunweiAgent\.uv-cache）。主目录保持 master 不动。
 - 第 1 周已交付: pyproject+uv.lock、CI quality.yml、pre-commit、
-  pytest 套件（126 → 594 用例，全库覆盖率 75.4%）、system 路由拆分、
-  Docker 现代化、端点/模块测试补全、/api/commands 修复、
+  pytest 套件（126 → 594 用例，全库覆盖率 75.4%、分支 74.6%）、
+  system 路由拆分、Docker 现代化、端点/模块测试补全、/api/commands 修复、
+  裸 pytest/CI 导入路径修复（pythonpath=["."]）、hermes verify 本地通过(ok:true)、
   env_new 源码 + 桌面 --backend 真实运行回归
+- 第 1 周提交（worktree 分支 chore/quality-baseline）: 860af8b（基线）→
+  55657a1 → 72ee8f2 → 120c587 → d83f09f → d99536c（未推送；
+  推送需另行授权）
 - 分支与推送状态: 尚未推送 GitHub（CI 未在远端运行过）；本地 master
   领先 origin 17 个提交（含 v2.5.0 桌面版全部工作）
-- 遗留事项（详见 维护日志.txt 2026-09-17 条目「发现」）:
+- 遗留事项（详见 维护日志.txt 2026-09-17 条目「发现」a–f）:
   P1 长耗时 KB 操作阻塞事件循环（建议第 2 周改线程池/同步端点）；
   P2 本机巡检依赖 wmic（新版 Windows 已移除）导致磁盘/内存「无数据」；
-  P3 日志规则未覆盖 Oracle/SQL Server 错误码（第 3 周评测时补）
+  P3 日志规则未覆盖 Oracle/SQL Server 错误码（第 3 周评测时补）；
+  P3 db_inspector 审计准确性 3 处 + inspection_real 解析脆弱点
+  （「发现」e/f，建议随第 4 周诊断能力一并修）；
+  信息 starlette TestClient 缓冲流式响应（已以直驱 body_iterator 绕过）
 - 环境提示: 该 worktree 由自动化工具创建，.pytest_cache 与
   系统 Temp\pytest-of-YY 被 ACL 锁死；跑 pytest 需重定向
   TMPDIR 与 cache_dir（命令示例见 Hermes 技能 oa-ops-agent

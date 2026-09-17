@@ -95,7 +95,7 @@ uv run pre-commit run --all-files
 
 测试和轻量容器可设置 `OA_ENABLE_BACKGROUND_STARTUP=0`，防止应用启动时探测 Ollama 或预热嵌入模型。设置 `OA_DATA_DIR` 可将默认 SQLite 数据文件隔离到指定目录。测试禁止外部网络连接，不下载模型；API 测试允许事件循环所需的本机回环通信。
 
-工程基线仍在建设中：全库 Ruff 目前检查语法级错误，新 Router 和测试启用 E/F/I/W；Pyright 目前仅检查新 Router 和测试。覆盖率如实统计 agents/ui/utils，尚未达到全库 60% / 核心 80% 的目标。Docker 与绿色版须单独验收，测试通过不等于已发布 v3.0。详见 [阶段验收记录](docs/superpowers/plans/phase-1-acceptance.md)。
+工程基线进展（2026-09-17 本地实测）：pytest **594 passed**（完全离线，不连接外部服务）；覆盖率如实统计 agents/ui/utils——全库 **75.4%**（目标 ≥60%）、核心模块 **93–100%**（目标 ≥80%）本地达标。全库 Ruff（语法级）+ 新 Router/测试严格范围（E/F/I/W）通过；Pyright 0 errors（当前范围：新 Router 与测试）。**远端 CI、Docker 构建与绿色版尚未实际运行验收——测试通过不等于已发布 v3.0。** 详见 [阶段验收记录](docs/superpowers/plans/phase-1-acceptance.md)。
 
 ### 方式三：Docker
 
@@ -220,7 +220,7 @@ oa-ops-agent/
 │   ├── ocr.py                 # 图片文字识别
 │   └── alert.py               # 告警通知
 └── ui/
-    ├── server.py              # FastAPI 服务端（47个API端点，含 Chat + KG + 批量问答）
+    ├── server.py              # FastAPI 服务端（55个API端点，含 Chat + KG + 批量问答）
     ├── templates/index.html   # 纯HTML前端（8页面侧边栏）
     └── static/
         ├── style.css          # 样式

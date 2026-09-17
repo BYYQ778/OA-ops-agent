@@ -99,6 +99,9 @@ Compose 需要 2.24.0 或更高版本（可选 env_file）。默认仅映射 `12
 - P1 /api/kb/* 长任务阻塞事件循环（导入期间整站无响应；master 同样）
 - P2 本机 Windows 磁盘/内存检测依赖 wmic（新版系统已移除）→「无数据」
 - P3 日志规则未覆盖 Oracle/SQL Server 错误码
+- P3 db_inspector 审计准确性 3 处缺陷（listening_ports 正则误分类 /
+  NOARCHIVELOG 误报 / crontab 死分支）+ inspection_real 解析脆弱点
+  （nginx PID 列错位等）—— 维护日志「发现」e/f，建议随第 4 周诊断能力一并修
 - 信息: starlette 1.6.0 TestClient 整体缓冲流式响应（无限 SSE 不可走 HTTP 测试）
 
 ### 仍未验证（保持未完成状态）
