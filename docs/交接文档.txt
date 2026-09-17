@@ -810,7 +810,8 @@ Phase 6: 全链路 E2E 验证
   引用覆盖率 74.1%→98.1%（holdout 97.0%）；误拒率 3.7%；无证据拒答率 0→75.0%
   （dev 84.6%；85% 目标未达——原因与改进路径见报告「局限与说明」）
 - 测试: 759 passed；ruff（含严格范围）全绿；pyright 0 errors；compileall OK
-- 待办: LLM 端到端子集实跑（scripts/run_llm_subset.py，需启动 Ollama；含回答级
-  拒答/工具选择/步骤/延迟指标）；延迟安静环境复测；推送与 CI 核验（待授权）
+- LLM 子集已实跑（云端 DeepSeek，用户授权）: 系统级无证据拒答率 100%（门控 3 +
+  回答级 5）；有依据回答率 77.3%；平均 3.9 步；端到端 mean 3.9s / P95 6.4s
+- 待办: 本地 Ollama 对比跑（可选）；推送与 CI 核验（待授权）
 - 衔接第 4 周: 根因诊断复用 HybridRetriever 与 evals 结果结构；
   /api/v1/evals/latest 读取 results JSON；分层门控沿用

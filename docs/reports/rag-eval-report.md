@@ -77,6 +77,54 @@
 | 延迟 mean (ms) | 16.4 | 26.9 | +10.5 |
 | 延迟 P95 (ms) | 20.8 | 31.1 | +10.3 |
 
+## 六、LLM 端到端子集
+
+LLM 端到端子集（真实 Agent：LangGraph + 云端 DeepSeek；先检索门控，后回答级拒答契约）：
+
+| 指标 | 数值 |
+|---|---|
+| 子集规模 | 30 条（可回答 22 / 无证据 8） |
+| 系统级无证据拒答率 | 100.0%（门控 3 + 回答级 5 / 8） |
+| 有依据回答率（引对 gold） | 77.3% |
+| 可回答条目误拒（系统级） | 18.2% |
+| 工具选择准确率（首跳=检索） | 100.0%（25/25，门控直拒不参与） |
+| 平均推理步数 | 3.9 |
+| 失败率 | 0.0% |
+| 端到端延迟 mean / p95 | 3930 ms / 6366 ms |
+
+| qid | 结果 | 引用 | 路由 | 秒 |
+|---|---|---|---|---|
+| q004 | 有依据回答 | OA系统应用架构与故障分级说明.md、Tomcat服务502与503错误处置指南 | search_kb>search_kb>search_kb>search_kb>answer | 6.4 |
+| q005 | 回答(引用不符) | 生产故障应急响应流程.md、生产故障应急响应流程.md | search_kb>answer | 2.6 |
+| q018 | 有依据回答 | Tomcat服务502与503错误处置指南.md | search_kb>search_kb>search_kb>answer | 6.1 |
+| q020 | 有依据回答 | Tomcat服务502与503错误处置指南.md | search_kb>search_kb>search_kb>answer | 5.4 |
+| q025 | 有依据回答 | Tomcat服务502与503错误处置指南.md | search_kb>answer | 2.5 |
+| q029 | 有依据回答 | JVM内存溢出OOM应急处置手册.md | search_kb>answer | 2.7 |
+| q035 | 有依据回答 | 服务器磁盘空间不足处置指南.md | search_kb>answer | 2.9 |
+| q045 | 有依据回答 | MySQL数据库故障排查手册.md、MySQL慢查询与连接数问题处置指南.md | search_kb>search_kb>search_kb>answer | 4.3 |
+| q050 | 有依据回答 | MySQL慢查询与连接数问题处置指南.md | search_kb>answer | 2.8 |
+| q060 | 有依据回答 | Redis缓存故障应急处置手册.md | search_kb>search_kb>search_kb>search_kb>answer | 5.8 |
+| q063 | 有依据回答 | Redis缓存故障应急处置手册.md | search_kb>search_kb>answer | 2.7 |
+| q069 | 拒答 | - | - | 0.0 |
+| q072 | 有依据回答 | Oracle数据库日常故障处置手册.md | search_kb>search_kb>answer | 4.3 |
+| q078 | 有依据回答 | Oracle表空间与归档日志问题处理指南.md | search_kb>search_kb>search_kb>search_kb>search_kb | 5.2 |
+| q080 | 有依据回答 | Oracle表空间与归档日志问题处理指南.md、Oracle数据库日常故障处置手 | search_kb>search_kb>search_kb>answer | 5.5 |
+| q085 | 有依据回答 | SQLServer数据库故障排查手册.md、SQLServer备份与还原操作指南 | search_kb>search_kb>search_kb>search_kb>answer | 5.1 |
+| q092 | 有依据回答 | SQLServer备份与还原操作指南.md | search_kb>answer | 3.1 |
+| q094 | 拒答 | - | - | 0.1 |
+| q101 | 有依据回答 | DNS解析故障处置指南.md、SSL证书过期与配置问题处置指南.md | search_kb>search_kb>answer | 4.6 |
+| q108 | 有依据回答 | 服务器端口与服务访问检查手册.md | search_kb>search_kb>search_kb>search_kb>answer | 7.1 |
+| q114 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>search_kb | 6.2 |
+| q123 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>search_kb | 5.3 |
+| q016 | 拒答 | - | - | 0.1 |
+| q071 | 拒答 | - | - | 0.1 |
+| q084 | 拒答 | - | - | 0.1 |
+| q096 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>answer | 5.2 |
+| q112 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>search_kb | 6.1 |
+| q043 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>search_kb | 5.0 |
+| q083 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>answer | 5.2 |
+| q095 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>answer | 5.7 |
+
 ## 七、局限与说明
 
 - 语料为合成文档（24 篇，覆盖 9 个运维类别），评测结论针对本语料集，不代表任意生产语料；
@@ -84,7 +132,8 @@
 - 旧版为行为重建（fixed 切块 + 纯稠密 top-5，无阈值/无引用），与 master 代码路径逐点对齐；
 - reranker（BGE-reranker-v2-m3）与 BGE-M3 属 quality 模式，模型未下载，本轮未评估；
 - 引用覆盖率/准确率在「未拒答」条目上统计（拒答影响单列误拒率）；
-- 延迟为纯检索耗时（不含 LLM 生成），CPU 环境。
+- LLM 端到端子集使用**云端 DeepSeek**（用户授权；本机 Ollama 对比跑未做，见维护日志待办），其回答级数字不代表本地 qwen3:8b 行为；路由平均步数偏高源于路由器重复检索（改进项）；
+- 延迟为纯检索耗时（不含 LLM 生成），CPU 环境、共享桌面负载下测得。
 
 ## 八、复现
 

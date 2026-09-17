@@ -5,6 +5,7 @@
     env -u PYTHONPATH env_new/Scripts/python.exe scripts/run_llm_subset.py --prepare
     env -u PYTHONPATH env_new/Scripts/python.exe scripts/run_llm_subset.py --limit 2   # 冒烟
     env -u PYTHONPATH env_new/Scripts/python.exe scripts/run_llm_subset.py             # 全量
+    env -u PYTHONPATH env_new/Scripts/python.exe scripts/run_llm_subset.py --provider deepseek  # 云端（需授权，读 .env 的 OA_LLM_API_KEY）
 
 产物: evals/results/llm-subset-<ts>.json（含 markdown 区块，供报告生成器消费）
       过程中逐条追加 evals/results/llm-subset-<ts>.jsonl（可断点续跑：--skip-done 读回已有 JSONL）
@@ -62,12 +63,25 @@ def ollama_status() -> Dict[str, Any]:
         return {"ready": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
+def _read_env_key(name: str) -> str:
+    """从项目 .env 读取密钥（不打印明文）；优先 worktree，其次主目录。"""
+    candidates = [PROJECT_ROOT / ".env", PROJECT_ROOT.parent / "oa-ops-agent" / ".env"]
+    for path in candidates:
+        if not path.exists():
+            continue
+        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = line.strip()
+            if line.startswith(name + "="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return ""
+
+
 def prepare_index() -> int:
     pipeline = HybridPipeline(INDEX_DIR / "hybrid", collection_name=AGENT_COLLECTION)
     return pipeline.build_index(CORPUS_DIR)
 
 
-def build_agent() -> Any:
+def build_agent(provider: str) -> Any:
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
     import agents.knowledge_agent as ka
@@ -75,15 +89,16 @@ def build_agent() -> Any:
     ka.CHROMA_DB_DIR = str(INDEX_DIR / "hybrid")  # 重定向到评测索引（仅本进程）
     from utils.config import config as app_config
 
-    provider = str(app_config.get("llm.provider", "ollama"))
     if provider == "ollama":
         base_url = str(app_config.get("llm.ollama.base_url", "http://localhost:11434/v1"))
         model = str(app_config.get("llm.ollama.model", "qwen3:8b"))
         api_key = str(app_config.get("llm.ollama.api_key", "ollama") or "ollama")
     else:
-        base_url = str(app_config.get("llm.base_url", ""))
-        model = str(app_config.get("llm.model", ""))
-        api_key = os.environ.get("OA_LLM_API_KEY") or str(app_config.get("llm.api_key", "") or "")
+        base_url = str(app_config.get("llm.base_url", "https://api.deepseek.com/v1"))
+        model = str(app_config.get("llm.model", "deepseek-chat"))
+        api_key = os.environ.get("OA_LLM_API_KEY") or _read_env_key("OA_LLM_API_KEY")
+        if not api_key:
+            raise SystemExit("云端模式需要 OA_LLM_API_KEY（.env）；未找到，已中止。")
     return ka.KnowledgeBaseAgent(llm_api_key=api_key, llm_base_url=base_url, llm_model=model)
 
 
@@ -101,9 +116,9 @@ def classify(answer: str, gold_docs: List[str], routes: List[str]) -> Dict[str, 
     }
 
 
-def markdown_section(summary: Dict[str, Any], records: List[Dict[str, Any]]) -> str:
+def markdown_section(summary: Dict[str, Any], records: List[Dict[str, Any]], provider: str = "ollama") -> str:
     lines = [
-        "LLM 端到端子集（真实 Agent：LangGraph + 本地 Ollama；先检索门控，后回答级拒答契约）：\n",
+        f"LLM 端到端子集（真实 Agent：LangGraph + {provider}；先检索门控，后回答级拒答契约）：\n",
         "| 指标 | 数值 |", "|---|---|",
         f"| 子集规模 | {summary['counts']['total']} 条（可回答 {summary['counts']['answerable']} / 无证据 {summary['counts']['unanswerable']}） |",
         f"| 系统级无证据拒答率 | {summary['system_refusal_rate_unanswerable']:.1%}（门控 {summary['gate_refusal_count_unanswerable']} + 回答级 {summary['llm_refusal_count_unanswerable']} / {summary['counts']['unanswerable']}） |",
@@ -131,6 +146,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--prepare", action="store_true", help="构建子集索引后退出")
     parser.add_argument("--limit", type=int, default=None, help="只跑前 N 条（冒烟）")
     parser.add_argument("--only", type=str, default=None, help="逗号分隔 qid 列表")
+    parser.add_argument(
+        "--provider",
+        choices=["auto", "ollama", "deepseek"],
+        default="auto",
+        help="LLM 提供方（auto=按 config.yaml llm.provider）",
+    )
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
 
@@ -146,18 +167,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"子集索引已构建: {count} 块 → {INDEX_DIR / 'hybrid'}（collection={AGENT_COLLECTION}）")
         return 0
 
-    status = ollama_status()
-    if not status["ready"]:
-        print(f"Ollama 未就绪: {status.get('error')}")
-        print("请先启动 Ollama（例如运行 scripts/setup_ollama.bat 或 `ollama serve`），再重试。")
-        return 3
+    provider = args.provider
+    if provider == "auto":
+        from utils.config import config as app_config
+
+        provider = str(app_config.get("llm.provider", "ollama"))
+
+    if provider == "ollama":
+        status = ollama_status()
+        if not status["ready"]:
+            print(f"Ollama 未就绪: {status.get('error')}")
+            print("请先启动 Ollama（例如运行 scripts/setup_ollama.bat 或 `ollama serve`），再重试。")
+            return 3
+    else:
+        if not (os.environ.get("OA_LLM_API_KEY") or _read_env_key("OA_LLM_API_KEY")):
+            print("云端模式缺少 OA_LLM_API_KEY（.env）；已中止。")
+            return 4
+        status = {"ready": True, "models": []}
 
     if not (INDEX_DIR / "hybrid").exists():
         count = prepare_index()
         print(f"子集索引已构建: {count} 块")
 
     if args.check:
-        print(f"Ollama OK；模型列表: {status['models']}")
+        print(f"provider={provider}；" + (f"Ollama 模型列表: {status['models']}" if provider == "ollama" else "云端密钥已就绪"))
         print(f"索引 OK: {INDEX_DIR / 'hybrid'}")
         return 0
 
@@ -173,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     jsonl_path = out_path.with_suffix(".jsonl")
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    agent = build_agent()
+    agent = build_agent(provider)
     routes: List[str] = []
     original = agent._router_decide
 
@@ -251,12 +284,13 @@ def main(argv: list[str] | None = None) -> int:
         "meta": {
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "subset": str(SUBSET_PATH),
+            "provider": provider,
             "model": agent.llm.model_name if hasattr(agent.llm, "model_name") else "",
             "records": len(records),
         },
         "summary": summary,
         "records": records,
-        "markdown": markdown_section(summary, records),
+        "markdown": markdown_section(summary, records, provider),
     }
     out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print()
