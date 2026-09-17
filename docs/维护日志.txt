@@ -1041,10 +1041,22 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
   d. 【P3】日志规则表（10 类）未覆盖 Oracle/SQL Server 错误码
      （ORA-01555 等落入「未发现已知故障模式」兜底）；第 3 周评测集含
      Oracle/SQL Server，届时随评测补规则
+  e. 【P3】agents/db_inspector.py 审计准确性三处缺陷（补测试时固化复现）:
+     · check_listening_ports 地址解析正则对部分行误分类
+     · Oracle NOARCHIVELOG 归档模式被误报为 ✅（判断方向有误）
+     · audit_cron_jobs 存在死分支（crontab 解析路径不可达）
+     建议：随第 4 周诊断能力一并修，先有测试兜底
+  f. 【P3】agents/inspection_real.py 解析脆弱点（补测试时复现）:
+     · check_nginx 用 parts[-1] 取 PID，真实 tasklist 输出列错位
+       → 打印 "PID: K"
+     · check_oa_service 内存列位置假设脆弱，列序变化即取错列
+     · auto 模式 SSH+local 全失败时不降级模拟数据（行为待产品确认）
 
 回退说明:
   · 全部改动在独立 worktree（E:\YunweiAgent\oa-ops-agent-quality-baseline，
     分支 chore/quality-baseline），主目录（master）零改动；
     回退 = 继续使用主目录版本，或 git checkout 81dd4d4
   · 相关提交: 860af8b（基线）、55657a1（端点测试 + 命令修复）、
-    72ee8f2（模块级测试补全）、本文档同步提交（见 git log）
+    72ee8f2（模块级测试补全）、120c587（文档同步）、
+    d83f09f（裸 pytest/CI 导入路径修复 pythonpath=["."]）、
+    本条目 docs 提交（见 git log）
