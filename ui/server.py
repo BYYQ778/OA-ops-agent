@@ -883,10 +883,24 @@ async def api_commands():
     try:
         with open(commands_path, "r", encoding="utf-8") as f:
             content = f.read()
-        # 提取 JS 对象: OPS_COMMANDS = { ... };
-        start = content.index("{")
-        end = content.rindex("}") + 1
-        js_obj = content[start:end]
+        # 提取 JS 对象: OPS_COMMANDS = { ... }（文件顶部 const 声明）
+        # 按大括号配对截取第一个完整对象，避免把文件里后续的搜索工具函数
+        # 也切进 JSON 导致 "Extra data" 解析失败
+        first_brace = content.index("{")
+        depth = 0
+        end = None
+        for pos in range(first_brace, len(content)):
+            char = content[pos]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    end = pos + 1
+                    break
+        if end is None:
+            raise ValueError("命令数据中未找到完整的 OPS_COMMANDS 对象")
+        js_obj = content[first_brace:end]
         # 移除 JS 注释 (只移除行首 // 注释,避免误删 URL 中的 //)
         js_obj = re.sub(r'^\s*//.*$', '', js_obj, flags=re.MULTILINE)
         js_obj = re.sub(r'/\*.*?\*/', '', js_obj, flags=re.DOTALL)
