@@ -7,7 +7,7 @@
 ## 阶段与验收
 
 - [ ] 1. 工程基线：可复现依赖、pytest、Ruff、Pyright、pre-commit、CI、渐进路由拆分。首批覆盖日志规则、图谱、巡检解析、SQLite、真实 API。核心覆盖率目标 80%，全项目目标 60%；必须说明统计范围，不用排除业务代码冒充达标。**（2026-09-17 本地门槛达成；远端 CI/桌面/绿色重验未完成，故不勾选）**
-- [ ] 2. RAG：BM25 + Dense + RRF、可选重排序、结构化路由、证据引用、低置信度拒答。旧向量库需保留，换 Embedding 时新建版本化索引并评测后切换。
+- [ ] 2. RAG：BM25 + Dense + RRF、可选重排序、结构化路由、证据引用、低置信度拒答。旧向量库需保留，换 Embedding 时新建版本化索引并评测后切换。**（2026-09-17 feat/hybrid-rag 主体完成：712 passed + 运行验证全链路通过；Embedding 版本化切换与阈值校准待第 3 周评测）**
 - [ ] 3. 评测：至少 100 条标注问答，冻结留出集；同一数据/硬件比较旧版与新版 Recall@5、MRR、NDCG、引用、拒答、延迟。目标是验收条件，不是预先宣称的成果。
 - [ ] 4. 根因诊断：统一事件和证据，至少 30 个标准案例，输出候选原因、证据和建议；证据不足时标明不确定，不强凑两条证据。只读诊断，禁止自动执行修复。
 - [ ] 5. 可观测性/安全：本地结构化日志、OpenTelemetry、Prometheus、可选 Langfuse、Session/RBAC、密钥隔离。桌面启动方式兼容；未完成鉴权前不得公开部署。
@@ -40,7 +40,11 @@
   hermes verify --skip-start ok:true；env_new 源码 + 桌面 --backend 运行回归
   通过。过程中发现并修复裸 pytest/CI 导入路径隐患（pyproject pythonpath）。
 - 分支 chore/quality-baseline 领先 master 7 个提交（860af8b → d0aa18c），
-  **未推送**（推送需单独授权）。
-- 待办: 推送 → 远端 CI 首跑；桌面 GUI 交互与绿色版随合并重验。
-- 下一步: 第 2 周 feat/hybrid-rag（RAG 2.0），计划见
-  docs/superpowers/plans/phase-2-hybrid-rag.md（随第 2 周分支提交）。
+  **已推送**（2026-09-17，部署密钥 + SSH over 443 通路），远端 CI 首跑全绿
+  （run 35193433016：quality + docker-core；594 passed / TOTAL 75%）。
+- 待办: 桌面 GUI 交互与绿色版随合并重验；PR 合并待用户授权。
+- 2026-09-17 下午（第 2 周）: feat/hybrid-rag（worktree 2）完成 RAG 2.0 主体 ——
+  混合检索/语义切块/引用 v2/结构化路由/重排序可选件/P1 并发修复；712 passed +
+  ruff（严格范围）/pyright 全绿 + env_new 运行验证全链路通过（导入期间
+  health 最大延迟 19ms；命中引用与契约拒答均实测）。第 2 周分支未推送。
+- 下一步: 第 3 周评测体系（评测集 ≥100 条 + 阈值校准 + 新旧对比报告）。

@@ -148,6 +148,21 @@ knowledge_base:
   chunk_size: 500
   chunk_overlap: 50
 
+  # RAG 2.0 混合检索（BM25 + Dense + RRF，可选重排序，证据不足明确拒答）
+  retrieval:
+    mode: lite                 # lite（默认，随绿色版分发）| quality（BGE-M3 + Reranker，模型单独下载）
+    hybrid_enabled: true
+    final_top_k: 5
+    max_per_document: 2        # 每篇文档最多贡献的块数
+    rerank: false              # quality 预设可开 true（需单独下载重排序模型）
+    thresholds:
+      min_dense_similarity: 0.35   # 余弦相似度下限（第 3 周评测集校准）
+      min_bm25_score: 0.30         # BM25 原始分下限
+
+  # 切块策略（标题/段落/页级语义切块；fixed 为旧固定字符切块）
+  chunking:
+    strategy: semantic
+
   # MinerU 多模态解析（可选，需 pip install magic-pdf）
   mineru:
     enabled: false

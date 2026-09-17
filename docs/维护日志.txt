@@ -1060,3 +1060,61 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
     72ee8f2（模块级测试补全）、120c587（文档同步）、
     d83f09f（裸 pytest/CI 导入路径修复 pythonpath=["."]）、
     本条目 docs 提交（见 git log）
+
+【2026-09-17 — v3 第 2 周：RAG 2.0 混合检索（feat/hybrid-rag，worktree 2）】
+═══════════════════════════════════════════
+一、目标与范围
+  查询规范化 → BM25 + Dense 并行 → RRF 融合 →（可选）重排序 → 去重限流
+  → 阈值判定 → 带引用回答 / 明确拒答；语义切块；结构化路由；KB 并发（P1）。
+  现有 Chroma 数据零迁移（BM25 直接基于现有集合构建）；旧 API/前端零改动。
+
+二、新增模块（全部离线可测；CI core 环境不下载模型）
+  · utils/bm25.py       自实现 BM25（Lucene 型 IDF 恒非负）+ 分词
+                        （jieba 可自动升级，缺失降级 regex bigram）
+  · utils/retrieval.py  HybridRetriever（依赖注入）/RRF/证据阈值门/去重与文档
+                        限流/format_citations 引用渲染；逐级降级
+  · utils/chunking.py   语义切块：标题（MD/中文/编号）/段落/页级；超长段落句界
+                        硬切 + 精确 overlap；稳定 chunk_uid
+  · utils/structured.py Pydantic 结构化输出（JSON 提取/修复/校验三级回退）
+  · utils/rerank.py     BGE CrossEncoder 可选重排序（懒加载，缺失/失败直通）
+  · utils/doc_parser.py 新增 parse_pdf_pages（页级文本，空白页跳过保留页码）
+
+三、存量改造
+  · knowledge_agent: 混合检索接入 _retrieve_context（异常自动降级旧 dense 路径）；
+    引用格式 v2《文档》· 第X页 · §章节 · chunk_uid；拒答短路（_query_agentic/
+    _query_legacy/_stream_agentic 三路，不触达 LLM）；导入默认语义切块
+    （config 可切 fixed）；导入/删除/清空后 corpus_version 递增使 BM25 失效；
+    answer prompt 强化《文档名》引用与契约拒答（运行验证驱动）
+  · 路由: NEXT_ACTION 字符串+正则 → RouterDecision（Pydantic）三级路径
+  · ui/server.py: /api/kb/* 端点 async def → 同步 def（FastAPI 线程池）；
+    导入/删除/清空 _KB_MUTATION_LOCK 互斥；SSE 逐 token 经 anyio.to_thread
+  · config.yaml: knowledge_base.retrieval（lite/quality、RRF、阈值、拒答文案）
+    + chunking.strategy；README 配置段同步
+
+四、验证（全部实测）
+  · 单测 712 passed（594 基线 + 118 新增）；ruff 全绿（含严格范围）；
+    pyright 0 errors；compileall OK
+  · 运行验证（env_new 3.11.9 全依赖 + worktree 源码）：
+    导入 60-66s 期间 /api/health 最大延迟 19-25ms（修复前整站阻塞 → P1 已解）；
+    命中问答按《rag-test-manual.md》引用回答；知识库外问题契约级拒答；
+    删除后列表/统计同步；前端冒烟 200（/、/static、/api/dev/version）
+  · 环境: uv.lock 235 包以 --frozen 安装到独立 .venv（Python 3.12.13）
+
+五、发现与踩坑
+  a. 章节标题紧跟正文（无空行）时首行未识别 → _is_leading_heading 修复
+  b. .gitignore 缺 data/uploads/ 忽略 → 补上
+  c. PyPI 直连极慢（~11KB/s）；清华镜像 3.4MB/s 可用；uv 走镜像需
+     UV_SYSTEM_CERTS=true（aTrust 证书拦截）；--locked 与镜像 registry 冲突
+     须用 --frozen
+  d. git-bash 的 curl 是原生版：/dev/null、/e/ 路径均 exit 23；bash 脚本中文
+     经 MSYS 传参会编码损坏（运行验证改用 Python 客户端）
+  e. jieba 在 PyPI 仅 sdist（无 wheel）→ 默认内置 bigram 分词，jieba 为
+     「已安装自动升级」可选件（第 3 周评测后决定是否正式引入）
+
+六、提交（feat/hybrid-rag，基于 f87ac88）
+  50b1266 计划 → 25794d9 检索核心 → ec17fd5 语义切块 → 0312c09 接入/引用/拒答
+  → 9c37310 结构化路由 → fe613ff 重排序 → 1a615e0 P1 修复 → cf65c50 标题首行
+  → 本条目相关提交（prompt 强化 + 文档同步，见 git log）；未推送（待授权）；
+  第 1 周分支已推送、远端 CI 首跑全绿（run 35193433016）
+
+回退: 全部改动在本 worktree/分支；回退 = git checkout f87ac88 或继续用主目录

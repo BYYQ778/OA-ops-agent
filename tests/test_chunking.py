@@ -7,12 +7,15 @@ uid 稳定性、非法参数、常见误判防护（列表项/IP 行不当标题
 
 import pytest
 
-from utils.chunking import Chunk, split_semantic, split_semantic_pages
+from utils.chunking import split_semantic, split_semantic_pages
 
 # ========== 标题识别 ==========
 
 def test_markdown_headings_tracked() -> None:
-    text = "# 安装指南\n\n这是安装的正文内容，足够长一些来通过最小长度限制的检查。\n\n## 子节标题\n\n子节的正文内容也写得稍微长一点点，以便不被合并。"
+    text = (
+        "# 安装指南\n\n这是安装的正文内容，足够长一些来通过最小长度限制的检查。"
+        "\n\n## 子节标题\n\n子节的正文内容也写得稍微长一点点，以便不被合并。"
+    )
     chunks = split_semantic(text, min_size=0)
     assert chunks[0].section == "安装指南"
     assert chunks[-1].section == "子节标题"

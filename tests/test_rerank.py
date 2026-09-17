@@ -4,8 +4,8 @@
 未启用返回 None、无候选项边界。
 """
 
-from utils.retrieval import RetrievalHit
 from utils.rerank import CrossEncoderReranker, build_reranker
+from utils.retrieval import RetrievalHit
 
 
 def _hit(hid: str, text: str) -> RetrievalHit:

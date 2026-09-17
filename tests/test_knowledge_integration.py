@@ -10,6 +10,7 @@ fake vector_store / fake retriever，验证:
 
 from _optional_deps import import_knowledge_agent
 from _pdf_factory import build_minimal_pdf
+
 from utils.retrieval import RetrievalHit, RetrievalResult, format_citations
 
 ka = import_knowledge_agent()

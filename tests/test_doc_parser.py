@@ -1,6 +1,6 @@
 import pytest
-
 from _pdf_factory import build_minimal_pdf as _build_minimal_pdf
+
 from utils.doc_parser import clean_text, parse_document, parse_txt, split_text
 
 

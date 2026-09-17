@@ -68,14 +68,15 @@ knowledge_base:
 
 ## 实施步骤（TDD：先测试后实现；每步自审后提交）
 
-- [ ] 0. 环境基线：本 worktree（feat/hybrid-rag @ f87ac88）+ uv 环境 + 594 基线复验
-- [ ] 1. `utils/bm25.py` + `utils/retrieval.py`：分词、BM25、RRF、去重限流、阈值
-- [ ] 2. `utils/chunking.py`：语义切块 + 页级元数据；`chunk_uid` 稳定 ID
-- [ ] 3. 接入 `knowledge_agent`：HybridRetriever 替换 `_retrieve_context`（保留降级）、
-      引用格式 v2、拒答路径、导入写新元数据
-- [ ] 4. `utils/structured.py` + 路由改造：Pydantic 决策替代 NEXT_ACTION 正则
-- [ ] 5. `utils/rerank.py`：可选重排序组件（fake 与缺失路径测试）
-- [ ] 6. P1 修复：KB 端点线程池化 + 变更互斥锁；SSE 逐 token 线程池拉取
+- [x] 0. 环境基线：本 worktree（feat/hybrid-rag @ f87ac88）+ uv 环境 + 594 基线复验 ✅
+- [x] 1. `utils/bm25.py` + `utils/retrieval.py`：分词、BM25、RRF、去重限流、阈值 ✅（48 用例）
+- [x] 2. `utils/chunking.py`：语义切块 + 页级元数据；`chunk_uid` 稳定 ID ✅（23 用例；
+      PDF 页级解析 `parse_pdf_pages`；标题紧跟正文的首行识别已在运行验证中修复）
+- [x] 3. 接入 `knowledge_agent`：HybridRetriever 替换 `_retrieve_context`（保留降级）、
+      引用格式 v2、拒答路径、导入写新元数据 ✅（14+ 用例，含路由/接线）
+- [x] 4. `utils/structured.py` + 路由改造：Pydantic 决策替代 NEXT_ACTION 正则 ✅（16 用例）
+- [x] 5. `utils/rerank.py`：可选重排序组件（fake 与缺失路径测试）✅（8 用例）
+- [x] 6. P1 修复：KB 端点线程池化 + 变更互斥锁；SSE 逐 token 线程池拉取 ✅（5 用例）
 - [ ] 7. 全量回归：pytest + ruff + pyright + compileall；env_new 运行验证
       （导入 → 带页引用问答 → 拒答 → 删除 → 索引/KG 同步；前端冒烟）
 - [ ] 8. 文档同步（同步清单核对）+ 提交汇总；推送另行授权
