@@ -751,10 +751,11 @@ Phase 6: 全链路 E2E 验证
   裸 pytest/CI 导入路径修复（pythonpath=["."]）、hermes verify 本地通过(ok:true)、
   env_new 源码 + 桌面 --backend 真实运行回归
 - 第 1 周提交（worktree 分支 chore/quality-baseline）: 860af8b（基线）→
-  55657a1 → 72ee8f2 → 120c587 → d83f09f → d99536c → d0aa18c（未推送；
-  推送需另行授权）
-- 分支与推送状态: 尚未推送 GitHub（CI 未在远端运行过）；本地 master
-  领先 origin 17 个提交（含 v2.5.0 桌面版全部工作）
+  55657a1 → 72ee8f2 → 120c587 → d83f09f → d99536c → d0aa18c → f87ac88 →
+  d49a0fc
+- 分支与推送状态: 已推送 GitHub（2026-09-17，部署密钥 + SSH over 443 通道；
+  远端 CI 首跑全绿 run 35193433016）；本地 master 领先 origin 17 个提交
+  （含 v2.5.0 桌面版全部工作）
 - 遗留事项（详见 维护日志.txt 2026-09-17 条目「发现」a–f）:
   P1 长耗时 KB 操作阻塞事件循环（建议第 2 周改线程池/同步端点）；
   P2 本机巡检依赖 wmic（新版 Windows 已移除）导致磁盘/内存「无数据」；
@@ -791,6 +792,7 @@ Phase 6: 全链路 E2E 验证
   → 用 --frozen；git-bash curl 为原生版（/dev/null、/e/ 路径 exit 23）；
   bash 中文传参给 curl 会编码损坏（验证脚本一律用 Python 客户端）；杀后台
   服务须按端口找 PID + taskkill /T 杀进程树（只杀 bash 包装层杀不干净）
-- 未推送（待授权）；第 1 周分支已推送且远端 CI 首跑全绿（run 35193433016）
+- 已推送（2026-09-17，ssh-origin 通道）；远端 CI 全绿（run 35211380542：
+  quality 712 passed / 覆盖率 78% + docker-core 双作业）
 - 衔接第 3 周: ≥100 条评测集与阈值校准；jieba 引入评估；quality（BGE-M3 +
   Reranker）实测；新旧对比报告与图表（Recall@5/MRR/引用/拒答/延迟）
