@@ -736,3 +736,28 @@ Phase 6: 全链路 E2E 验证
 - 启动器 desktop_app.py 改动仍需重打包（scripts/打包绿色版.bat，
   已含数据备份/恢复 + 自动同步 app/）
 - 详细见 维护日志.txt 2026-08-13 条目
+
+═══════════════════════════════════════════
+【2026-09-17 — v3.0 六周优化计划：第 1 周工作区与进度】
+═══════════════════════════════════════════
+- 六周计划（GPT 制定）执行记录与验收: worktree 内
+  docs/superpowers/plans/2026-09-16-v3-execution.md、phase-1-acceptance.md
+- 工作区: 独立 worktree E:\YunweiAgent\oa-ops-agent-quality-baseline
+  （分支 chore/quality-baseline；uv 环境 .venv=Python 3.12.13；
+  uv 缓存 E:\YunweiAgent\.uv-cache）。主目录保持 master 不动。
+- 第 1 周已交付: pyproject+uv.lock、CI quality.yml、pre-commit、
+  pytest 套件（126 → 594 用例，全库覆盖率 75.4%）、system 路由拆分、
+  Docker 现代化、端点/模块测试补全、/api/commands 修复、
+  env_new 源码 + 桌面 --backend 真实运行回归
+- 分支与推送状态: 尚未推送 GitHub（CI 未在远端运行过）；本地 master
+  领先 origin 17 个提交（含 v2.5.0 桌面版全部工作）
+- 遗留事项（详见 维护日志.txt 2026-09-17 条目「发现」）:
+  P1 长耗时 KB 操作阻塞事件循环（建议第 2 周改线程池/同步端点）；
+  P2 本机巡检依赖 wmic（新版 Windows 已移除）导致磁盘/内存「无数据」；
+  P3 日志规则未覆盖 Oracle/SQL Server 错误码（第 3 周评测时补）
+- 环境提示: 该 worktree 由自动化工具创建，.pytest_cache 与
+  系统 Temp\pytest-of-YY 被 ACL 锁死；跑 pytest 需重定向
+  TMPDIR 与 cache_dir（命令示例见 Hermes 技能 oa-ops-agent
+  references/v3-workbench.md）
+- 桌面/绿色回归: env_new（3.11.9，全依赖）完好，可直接跑 worktree 源码；
+  绿色版 dist 产物在主目录，未被本次改动触及

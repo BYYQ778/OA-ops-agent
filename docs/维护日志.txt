@@ -1,7 +1,7 @@
 OA运维多智能Agent巡检问答系统 - 维护日志
 ===========================================
 创建时间: 2026-05-07
-最后更新: 2026-08-04 17:45
+最后更新: 2026-09-17
 
 ═══════════════════════════════════════════
 【2026-05-25 11:30-11:35 — 启动.bat 完整模式修复】
@@ -964,3 +964,83 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
 
 回退说明:
   · 改动前已打 tag ui-before-tips-20260816-1607
+
+═══════════════════════════════════════════
+【2026-09-17 — v3.0 第1周：工程可信度基线 + 测试补全 + 运行回归】
+═══════════════════════════════════════════
+
+背景:
+  v3.0 六周优化计划（GPT 制定，见 docs/superpowers/plans/）第 1 周「建立
+  工程可信度」。前半程（9-16，GPT，提交 860af8b）：pyproject.toml + uv.lock
+  （235 包）、CI 工作流 quality.yml（Ruff/Pyright/pytest/覆盖率/compileall/
+  docker-core 冒烟）、pre-commit、126 个基础测试、system 路由拆分
+  （create_app + ui/routers/system.py）、Docker 现代化、测试驱动修复
+  （SSH 巡检缺失误报/网络工具参数注入/文档切块游标/DB 批处理）。
+  本次（9-17，Hermes）接力：端点冒烟测试、模块覆盖率、/api/commands 修复、
+  env_new 真实运行回归。
+
+① /api/commands 缺陷修复（提交 55657a1）
+问题: 该端点对当前 ui/static/commands.js 恒返回
+      {"categories":[], "commands":[], "error":"Extra data: line 654 ..."}
+根因: index("{")+rindex("}") 截取把文件尾部 searchCommands/highlightText
+      等工具函数一并括入（rindex 命中最后一个 }），JSON 解析必然失败。
+      （前端加载静态 commands.js，该端点仅备用接口，缺陷长期未暴露）
+修复: 改为按大括号配对扫描，只截取第一个完整对象（ui/server.py）
+自检: 实测返回 6 分类 / 138 条命令；新增成功/缺失文件两分支回归用例 ✓
+
+② 测试补全（全部离线、外部边界 mock，pytest 126 → 594 用例）
+  · 端点层: test_api_operations.py / test_api_knowledge.py /
+    test_system_router.py —— 覆盖 54 个端点主力分支：巡检调度生命周期、
+    仪表盘与 SSE 生成器、日志 OCR 三路径、SSL/网络/数据库/安全基线工具
+    传参、配置保存（含「Key 只进 .env 不进 config.yaml」断言）、命令大全、
+    KB 管理/对话/批量问答/知识图谱、KB 就绪状态机（五路分支）
+  · 模块层: db_inspector / security_audit / inspection_agent /
+    inspection_real / network_diag / ssl_monitor / kg_store / database /
+    dashboard / config（新建或扩展现有测试文件）
+  · tests/_optional_deps.py: RAG 可选依赖缺失时注入占位模块，使 CI core
+    环境可导入 agents.knowledge_agent 而无需下载 torch
+  · 覆盖率（2026-09-17 实测，branch 统计）: 全库 29.1% → 75.4%（分支 74.6%）；
+    ui/server.py 28% → 85.5%
+    核心模块: 巡检 100%/98.8% · 日志 100% · 图谱 96.8% · SQLite 100% ·
+    主要 API 85.5% · db_inspector 95.9% · security_audit 97.0% ·
+    network_diag 97.5% · ssl_monitor 93.2% · dashboard 94.8% · config 100%
+    → 「核心 80%、整体 60%」本周门槛本地达标；未达标: knowledge_agent 8.7%、
+    entity_extractor/kg_builder/alert/ai_reporter/doc_parser_v2/mineru 0%
+    （LLM 重依赖模块，排期第 2-3 周随 RAG 2.0 补测）
+    明细见 docs/superpowers/plans/phase-1-acceptance.md（更新版）
+
+③ env_new 真实运行回归（worktree 源码模式，端口 7862，env_new=3.11.9 全依赖）
+  · 启动约 10s 达 /api/health kb_state=ready（嵌入模型本地缓存加载）
+  · provider=ollama 且 Ollama 未运行 → 应用按设计自动拉起（0.24.0），
+    GPU 推理确认可用
+  · 回归通过: inspect/status、inspect/run（本机模式真实采集 5 项 + 入库 +
+    推送仪表盘）、inspect/history、dashboard/metrics|history、log/analyze
+    （502 规则命中，含完整排查建议）、kb/list|stats、kg/stats、commands
+  · KB 导入链路: 上传 → 解析分块(3 块) → 向量化入 Chroma（秒级）→
+    KG 实体抽取（LLM，本机 4060 每块约 2 分钟，属预期慢）
+  · KB 导入实测: 3 块 ≈ 11 分钟（LLM 抽取慢；其中一次 JSON 解析失败
+    自动走正则兜底成功，提取 5 实体 / 10 边）✓
+  · KB 问答实测: 约 1.5-3 分钟返回基于导入文档的带引用回答 ✓
+  · 桌面壳回归: desktop_app.py --backend（7860，env_new 源码模式）
+    health ready / inspect/status / log/analyze 全部通过；桌面 GUI 壳
+    本次未改动（与 master 逐字节一致）
+
+④ 本次发现（不修复，排入 v3 后续周）
+  a. 【P1】长耗时 KB 操作阻塞事件循环: /api/kb/* 为 async def 内跑同步
+     LLM/向量调用，导入期间整站（含 /api/health）无响应（实测；master 同）。
+     建议第 2 周改用同步 def 端点（FastAPI 自动进线程池）或 run_in_threadpool
+  b. 【P2】本机 Windows 磁盘/内存检测依赖 wmic，新版 Win10/11 已移除该命令
+     → 本机巡检这两项恒显示「无数据」（master 同）。建议增加 PowerShell
+     Get-CimInstance 兜底
+  c. 【信息】uv 环境 starlette 1.6.0 的 TestClient 会整体缓冲流式响应，
+     无限 SSE 端点不能走 HTTP 测试；已改为直接驱动 body_iterator
+  d. 【P3】日志规则表（10 类）未覆盖 Oracle/SQL Server 错误码
+     （ORA-01555 等落入「未发现已知故障模式」兜底）；第 3 周评测集含
+     Oracle/SQL Server，届时随评测补规则
+
+回退说明:
+  · 全部改动在独立 worktree（E:\YunweiAgent\oa-ops-agent-quality-baseline，
+    分支 chore/quality-baseline），主目录（master）零改动；
+    回退 = 继续使用主目录版本，或 git checkout 81dd4d4
+  · 相关提交: 860af8b（基线）、55657a1（端点测试 + 命令修复）、
+    72ee8f2（模块级测试补全）、本文档同步提交（见 git log）

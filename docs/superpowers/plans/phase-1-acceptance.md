@@ -49,3 +49,57 @@ Compose 需要 2.24.0 或更高版本（可选 env_file）。默认仅映射 `12
 补充数据库批事务/删除、图谱文档删除同步、知识库导入与降级、完整巡检和主要 API 行为测试，逐步达成覆盖率门槛；验证全依赖源码环境与桌面功能。审查完成后可保留本地提交；GitHub 推送、PR、合并及 Release 均需另行授权。
 
 回滚：当前改动仅在隔离分支，不影响原目录运行；切回原目录即可使用原版本。不得将备份或私有配置加入仓库。跨目录恢复方式详见仓库外备份的 RESTORE.md。
+
+## 2026-09-17 续作记录（第 1 周剩余工作）
+
+状态：**第 1 周本地门槛达成**（覆盖率双达标 + 静态检查全绿 + 源码运行回归通过）；
+远端 CI、桌面 GUI 完整交互验收、绿色版随 master 合并后重验，仍属**未验证**。
+
+### 本次完成
+
+- 端点测试: 新增 `test_api_operations.py` / `test_api_knowledge.py` /
+  `test_system_router.py`（54 个端点主力分支，stub 工具层，完全离线）
+- 缺陷修复: `/api/commands` 大括号截取（原实现对当前 commands.js 恒报
+  `Extra data`）；实测 6 分类 138 命令可解析，已加回归用例
+- 模块测试: db_inspector / security_audit / inspection_agent /
+  inspection_real / network_diag / ssl_monitor / kg_store / database /
+  dashboard / config（新建或扩展现有文件；`tests/_optional_deps.py` 使
+  CI core 环境可在缺 RAG 依赖时导入 knowledge_agent）
+- 静态检查（本地，命令与 CI 一致）: `ruff check .`、
+  `ruff check --select E,F,I,W ui/routers tests`、`pyright`（0 errors）、
+  `compileall` 全部通过
+
+### 覆盖率实测（branch=true，全库 agents/ui/utils）
+
+- 语句: 29.1% → **75.4%**（3775/4994）；分支: 23.4% → **74.6%**（1272/1704）
+- 核心: 巡检 100% / 98.8%、日志 100%、图谱 96.8%、SQLite 100%、
+  主要 API 85.5%、doc_parser 78.7%；其余模块 db_inspector 95.9%、
+  security_audit 97.0%、network_diag 97.5%、ssl_monitor 93.2%、
+  dashboard 94.8%、config 100%、scheduler 97.2%
+- → 「核心 ≥80%、整体 ≥60%」**本地达标**（pytest 594 passed）
+- 未达标（如实记录）: knowledge_agent 8.7%；entity_extractor / kg_builder /
+  alert / ai_reporter / doc_parser_v2 / mineru_adapter 0%（LLM 重依赖，
+  排期 v3 第 2-3 周随 RAG 2.0 补测）
+
+### 运行回归（env_new 3.11.9 全依赖，worktree 源码）
+
+- 源码模式（7862）: health ready ≈10s；Ollama 自动拉起；inspect/run（本机
+  真实采集 5 项 + 入库 + 仪表盘推送）、log/analyze（502 规则）、
+  kb list/stats、kg/stats、commands 全部 200
+- KB 全链路: 导入（3 块 → Chroma → KG 5 实体/10 边，≈11 分钟，LLM 抽取慢，
+  一次 JSON 失败自动正则兜底）→ 问答（≈1.5-3 分钟，带引用回答）✓
+- 桌面壳: `desktop_app.py --backend`（7860）health / inspect/status /
+  log/analyze 通过；GUI 壳未改动
+
+### 新增发现（不修复，排入后续周）
+
+- P1 /api/kb/* 长任务阻塞事件循环（导入期间整站无响应；master 同样）
+- P2 本机 Windows 磁盘/内存检测依赖 wmic（新版系统已移除）→「无数据」
+- P3 日志规则未覆盖 Oracle/SQL Server 错误码
+- 信息: starlette 1.6.0 TestClient 整体缓冲流式响应（无限 SSE 不可走 HTTP 测试）
+
+### 仍未验证（保持未完成状态）
+
+- 远端 CI（quality.yml）从未运行 —— 需推送分支后验证
+- 覆盖率数据仅为本机实测，CI 环境结果需以远端为准
+- 桌面 GUI 完整交互与绿色版 —— 待合并 master 后按第 6 周流程重验
