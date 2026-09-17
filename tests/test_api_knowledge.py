@@ -518,3 +518,67 @@ def test_build_kb_agent_cloud_branch_uses_configured_values(monkeypatch) -> None
     assert error is None
     assert isinstance(kb, FakeKnowledgeBaseAgent)
     assert created == {"key": "sk-live", "url": "https://api.deepseek.com/v1", "model": "deepseek-chat"}
+
+
+# ============ P1 修复：线程池化 + 变更互斥锁（RAG 2.0 第 2 周） ============
+
+
+def test_kb_endpoints_are_sync_def_for_threadpool() -> None:
+    """同步 def —— FastAPI 自动在线程池执行，长任务不再阻塞事件循环。"""
+    import inspect
+
+    for fn in (
+        server.api_kb_ask,
+        server.api_kb_import,
+        server.api_kb_list,
+        server.api_kb_stats,
+        server.api_kb_document,
+        server.api_kb_delete,
+        server.api_kb_clear,
+        server.api_kb_chat,
+        server.api_kb_batch_ask,
+    ):
+        assert not inspect.iscoroutinefunction(fn), f"{fn.__name__} 应为同步 def"
+
+
+def test_kb_chat_stream_stays_async() -> None:
+    import inspect
+
+    assert inspect.iscoroutinefunction(server.api_kb_chat_stream)
+
+
+class _RecordingLock:
+    def __init__(self):
+        self.entries = 0
+
+    def __enter__(self):
+        self.entries += 1
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_kb_mutation_lock_wraps_delete_and_clear(client, fake_kb, monkeypatch) -> None:
+    lock = _RecordingLock()
+    monkeypatch.setattr(server, "_KB_MUTATION_LOCK", lock)
+    client.post("/api/kb/delete", data={"doc_name": "x.pdf"})
+    client.post("/api/kb/clear")
+    assert lock.entries == 2
+
+
+def test_kb_import_uses_mutation_lock(client, fake_kb, monkeypatch) -> None:
+    lock = _RecordingLock()
+    monkeypatch.setattr(server, "_KB_MUTATION_LOCK", lock)
+    files = {"file": ("手册.md", b"# content", "text/markdown")}
+    resp = client.post("/api/kb/import", files=files)
+    assert resp.status_code == 200
+    assert lock.entries == 1
+    assert ("import", "手册.md") in fake_kb.calls
+
+
+def test_next_or_end_helper() -> None:
+    it = iter([1, 2])
+    assert server._next_or_end(it) == 1
+    assert server._next_or_end(it) == 2
+    assert server._next_or_end(it) is server._STREAM_END
