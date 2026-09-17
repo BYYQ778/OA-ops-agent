@@ -23,6 +23,17 @@ METRIC_ROWS: Sequence[Tuple[str, str, bool]] = (
     ("误拒率（可回答）", "false_refusal_rate", True),
 )
 
+# 图表标签（英文，避免 CJK 字体缺失导致乱码）；与 METRIC_ROWS 一一对应
+_CHART_LABELS: Sequence[str] = (
+    "Recall@5",
+    "MRR",
+    "NDCG@5",
+    "Citation\ncoverage",
+    "Citation\nspan acc.",
+    "Refusal\n(no-evidence)",
+    "False\nrefusal",
+)
+
 
 def load_json(path: Path) -> Dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
@@ -57,7 +68,7 @@ def chart_metric_compare(result: Mapping[str, Any], out_png: Path) -> Path:
     plt = _setup_mpl()
     legacy = result["legacy"]
     hybrid = result["hybrid"]
-    labels = [label for label, _, _ in METRIC_ROWS]
+    labels = list(_CHART_LABELS)
     old_vals = [float(legacy.get(key) or 0.0) for _, key, _ in METRIC_ROWS]
     new_vals = [float(hybrid.get(key) or 0.0) for _, key, _ in METRIC_ROWS]
 
@@ -136,11 +147,26 @@ def chart_threshold_sweep(calibration: Mapping[str, Any], out_png: Path) -> Path
     """阈值扫描曲线：固定推荐的 bm25 阈值，横轴为 dense 阈值。"""
     plt = _setup_mpl()
     rec = calibration["recommended"]
-    grid = [row for row in calibration["grid"] if abs(row["min_bm25_score"] - rec["min_bm25_score"]) < 1e-9]
-    grid.sort(key=lambda r: r["min_dense_similarity"])
-    xs = [r["min_dense_similarity"] for r in grid]
-    recall = [r["recall_at_k"] for r in grid]
-    refusal = [r["refusal_rate_unanswerable"] for r in grid]
+    grid = list(calibration["grid"])
+
+    def _nearest(key: str, target: Any) -> Any:
+        vals = sorted({row[key] for row in grid if row.get(key) is not None})
+        return min(vals, key=lambda v: abs(v - float(target))) if vals else None
+
+    b1 = _nearest("min_bm25_score", rec["min_bm25_score"])
+    a2 = _nearest("joint_dense_similarity", rec.get("joint_dense_similarity") or 0.6)
+    b2 = _nearest("joint_bm25_score", rec.get("joint_bm25_score") or 8.0)
+    rows = [
+        row
+        for row in grid
+        if row["min_bm25_score"] == b1
+        and row.get("joint_dense_similarity") == a2
+        and row.get("joint_bm25_score") == b2
+    ]
+    rows.sort(key=lambda r: r["min_dense_similarity"])
+    xs = [r["min_dense_similarity"] for r in rows]
+    recall = [r["recall_at_k"] for r in rows]
+    refusal = [r["refusal_rate_unanswerable"] for r in rows]
 
     fig, ax = plt.subplots(figsize=(7.5, 4.6))
     ax.plot(xs, recall, marker="o", ms=3, label="Recall@5 (answerable)")
@@ -202,6 +228,7 @@ def render_report(
     llm_subset: Optional[Mapping[str, Any]] = None,
     *,
     assets: Optional[Dict[str, str]] = None,
+    holdout: Optional[Mapping[str, Any]] = None,
 ) -> str:
     meta = result["meta"]
     rc = meta.get("retrieval_config", {})
@@ -210,6 +237,20 @@ def render_report(
     def _img(key: str, alt: str) -> str:
         rel = assets.get(key)
         return f"![{alt}]({rel})\n" if rel else ""
+
+    def _split_table(data: Mapping[str, Any]) -> str:
+        """按 split 汇总的小表（holdout 冻结口径）。"""
+        m = data["meta"]
+        lines = [
+            f"| split={m.get('split')}（{m.get('items')} 条，k={m.get('k')}） | 旧版 | 新版 | Δ |",
+            "|---|---|---|---|",
+        ]
+        for label, key, pct in METRIC_ROWS:
+            lines.append(
+                f"| {label} | {_fmt(data['legacy'].get(key), pct)} | {_fmt(data['hybrid'].get(key), pct)} | "
+                f"{_delta(data['hybrid'].get(key), data['legacy'].get(key), pct)} |"
+            )
+        return "\n".join(lines)
 
     parts: List[str] = []
     parts.append("# RAG 检索评测报告（第 3 周 · feat/rag-evaluation）\n")
@@ -225,8 +266,8 @@ def render_report(
         f"- 评测集：{meta.get('items')} 条（split={meta.get('split')}），其中无证据负例按类别分布；\n"
         f"- 两版共用同一嵌入模型（{meta.get('embedding_model')}）与同一硬件（{meta.get('processor')}，"
         f"{meta.get('cpu_count')} 核，Python {meta.get('python')}）；\n"
-        f"- 新版阈值：min_dense_similarity={rc.get('thresholds', {}).get('min_dense_similarity', rc.get('min_dense_similarity'))}, "
-        f"min_bm25_score={rc.get('thresholds', {}).get('min_bm25_score', rc.get('min_bm25_score'))}"
+        f"- 新版阈值：强证据 dense≥{rc.get('min_dense_similarity')} 或 bm25≥{rc.get('min_bm25_score')}；"
+        f"互证 dense≥{rc.get('joint_dense_similarity')} 且 bm25≥{rc.get('joint_bm25_score')}"
         f"（dev 校准后冻结）；`rerank: {rc.get('rerank')}`（重排序模型未下载，未纳入本轮）；\n"
         f"- 说明：解析层不参与对比（两版读取同一原文）；BM25 分词器："
         f"{'jieba' if meta.get('jieba_available') else 'bigram 降级'}；评测时间 {meta.get('timestamp')}。\n"
@@ -235,23 +276,46 @@ def render_report(
     parts.append("## 二、总体结果\n")
     parts.append(_metrics_table(result) + "\n")
     parts.append(_img("metrics", "核心指标对比") + "\n")
+    if holdout:
+        parts.append("### holdout 冻结口径终评\n")
+        parts.append(
+            "dev 划分用于阈值校准；以下为 holdout（未参与任何调参）在冻结阈值下的终评结果：\n"
+        )
+        parts.append(_split_table(holdout) + "\n")
 
     parts.append("## 三、分类别 Recall@5\n")
     parts.append(_category_table(result) + "\n")
     parts.append(_img("category", "分类别 Recall@5") + "\n")
 
     parts.append("## 四、延迟\n")
+    quiet = ""
+    if initial is not None:
+        li = initial["legacy"]["latency_ms"]
+        hi = initial["hybrid"]["latency_ms"]
+        quiet = (
+            f"同一代码在较安静环境下（早期全量运行，阈值差异不影响检索计算量）的参考："
+            f"旧版 mean {li.get('mean', 0):.1f}ms / P95 {li.get('p95', 0):.1f}ms；"
+            f"新版 mean {hi.get('mean', 0):.1f}ms / P95 {hi.get('p95', 0):.1f}ms。"
+        )
+    parts.append(
+        "延迟为**纯检索耗时**（不含 LLM 生成）。当前测量于共享桌面环境（测量期间本机存在其他负载），"
+        "绝对值为参考，两版**相对差**为主要结论。" + quiet + "\n"
+    )
     parts.append(_img("latency", "检索延迟") + "\n")
 
     if calibration:
         parts.append("## 五、阈值校准（dev）\n")
         rec = calibration["recommended"]
         parts.append(
-            f"- 网格：min_dense_similarity × min_bm25_score 全组合，目标「无证据拒答率 ≥"
-            f"{calibration.get('refusal_floor')} 前提下最大化 Recall@5」；\n"
-            f"- 推荐并冻结：**min_dense_similarity={rec['min_dense_similarity']}，"
-            f"min_bm25_score={rec['min_bm25_score']}**；\n"
-            f"- holdout 终评使用该冻结值（未参与调参）。\n"
+            f"- 分层门控网格：单通道强证据（dense/bm25）× 双通道互证（joint_dense/joint_bm25）全组合，"
+            f"目标「拒答率（无证据）达标且误拒率 ≤{calibration.get('false_refusal_budget', 0.07):.0%} "
+            f"前提下最大化拒答率」；\n"
+            f"- 推荐并冻结：**强证据 dense≥{rec['min_dense_similarity']} 或 bm25≥{rec['min_bm25_score']}；"
+            f"互证 dense≥{rec.get('joint_dense_similarity')} 且 bm25≥{rec.get('joint_bm25_score')}**；\n"
+            f"- 对照（单层 OR 门控同预算最优）：dense≥{calibration.get('or_only_reference', {}).get('min_dense_similarity')}、"
+            f"bm25≥{calibration.get('or_only_reference', {}).get('min_bm25_score')} → 拒答率 "
+            f"{calibration.get('or_only_reference', {}).get('metrics', {}).get('refusal_rate_unanswerable', 0):.1%}；\n"
+            f"- holdout 终评使用冻结值（未参与调参）。\n"
         )
         parts.append(_img("sweep", "阈值扫描") + "\n")
 
@@ -284,6 +348,7 @@ def render_report(
         "env -u PYTHONPATH env_new/Scripts/python.exe scripts/validate_eval_set.py          # 校验评测集\n"
         "env -u PYTHONPATH env_new/Scripts/python.exe scripts/run_eval.py --split holdout    # 终评\n"
         "env -u PYTHONPATH env_new/Scripts/python.exe scripts/calibrate_thresholds.py        # 阈值校准\n"
+        "env -u PYTHONPATH env_new/Scripts/python.exe scripts/run_llm_subset.py              # LLM 子集（需本地 Ollama）\n"
         "env -u PYTHONPATH env_new/Scripts/python.exe scripts/gen_report.py --final <结果.json>\n"
         "```\n"
     )
@@ -297,11 +362,13 @@ def write_report(
     calibration_path: Optional[Path] = None,
     initial_path: Optional[Path] = None,
     llm_path: Optional[Path] = None,
+    holdout_path: Optional[Path] = None,
 ) -> Tuple[Path, List[Path]]:
     result = load_json(result_path)
     calibration = load_json(calibration_path) if calibration_path else None
     initial = load_json(initial_path) if initial_path else None
     llm_subset = load_json(llm_path) if llm_path else None
+    holdout = load_json(holdout_path) if holdout_path else None
 
     assets_dir = out_md.parent / "assets"
     images: Dict[str, str] = {}
@@ -320,7 +387,7 @@ def write_report(
         images["sweep"] = "assets/rag-threshold-sweep.png"
         made.append(p)
 
-    md = render_report(result, calibration, initial, llm_subset, assets=images)
+    md = render_report(result, calibration, initial, llm_subset, assets=images, holdout=holdout)
     out_md.parent.mkdir(parents=True, exist_ok=True)
     out_md.write_text(md, encoding="utf-8")
     return out_md, made

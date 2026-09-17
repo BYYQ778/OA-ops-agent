@@ -25,6 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--final", type=Path, required=True, help="终评结果 JSON（holdout，冻结阈值）")
     parser.add_argument("--calibration", type=Path, default=None, help="阈值校准 JSON（可选）")
     parser.add_argument("--initial", type=Path, default=None, help="初始阈值全量结果 JSON（可选附注）")
+    parser.add_argument("--holdout", type=Path, default=None, help="holdout 冻结口径终评 JSON（可选）")
     parser.add_argument("--llm", type=Path, default=None, help="LLM 子集结果 JSON（可选）")
     parser.add_argument(
         "--output",
