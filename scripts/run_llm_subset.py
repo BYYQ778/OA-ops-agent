@@ -8,7 +8,7 @@
     env -u PYTHONPATH env_new/Scripts/python.exe scripts/run_llm_subset.py --provider deepseek  # 云端（需授权，读 .env 的 OA_LLM_API_KEY）
 
 产物: evals/results/llm-subset-<ts>.json（含 markdown 区块，供报告生成器消费）
-      过程中逐条追加 evals/results/llm-subset-<ts>.jsonl（可断点续跑：--skip-done 读回已有 JSONL）
+      过程中逐条追加 evals/results/<同名>.jsonl（过程留档，已 gitignore）
 """
 
 from __future__ import annotations
