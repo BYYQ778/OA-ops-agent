@@ -751,10 +751,17 @@ Phase 6: 全链路 E2E 验证
   裸 pytest/CI 导入路径修复（pythonpath=["."]）、hermes verify 本地通过(ok:true)、
   env_new 源码 + 桌面 --backend 真实运行回归
 - 第 1 周提交（worktree 分支 chore/quality-baseline）: 860af8b（基线）→
-  55657a1 → 72ee8f2 → 120c587 → d83f09f → d99536c → d0aa18c（未推送；
-  推送需另行授权）
-- 分支与推送状态: 尚未推送 GitHub（CI 未在远端运行过）；本地 master
-  领先 origin 17 个提交（含 v2.5.0 桌面版全部工作）
+  55657a1 → 72ee8f2 → 120c587 → d83f09f → d99536c → d0aa18c（首推于此；
+  此后追加 docs 提交见 git log）
+- 推送与 CI（2026-09-17）: 分支已推送 GitHub，**远端 CI 首跑全绿**
+  （run 35193433016：quality 全步骤 + docker-core 构建与容器冒烟；
+  594 passed / 远端 TOTAL 75%，与本地一致）。本地 master 领先
+  origin/master 17 个提交（含 v2.5.0 桌面版全部工作，尚未推送）。
+- 推送通路（重要）: github.com:443 直连被重置（DNS 返回 IP 不可达；
+  改 hosts 需管理员权限）。现用部署密钥 `~/.ssh/oa_deploy`（仓库
+  Deploy Key，仅本仓库写权限）+ SSH over 443；remote `ssh-origin` =
+  git@github.com:BYYQ778/OA-ops-agent.git；`~/.ssh/config` 已配
+  github.com → ssh.github.com:443。推送：`git push ssh-origin <branch>`。
 - 遗留事项（详见 维护日志.txt 2026-09-17 条目「发现」a–f）:
   P1 长耗时 KB 操作阻塞事件循环（建议第 2 周改线程池/同步端点）；
   P2 本机巡检依赖 wmic（新版 Windows 已移除）导致磁盘/内存「无数据」；
