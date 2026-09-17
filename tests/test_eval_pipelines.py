@@ -170,3 +170,15 @@ def test_build_pipelines_wires_distinct_dirs(tmp_path: Path) -> None:
     assert isinstance(legacy, LegacyPipeline)
     assert isinstance(hybrid, HybridPipeline)
     assert legacy.index_dir != hybrid.index_dir
+
+
+def test_rebuild_clears_index_dir(tmp_path: Path) -> None:
+    """重复 build_index 必须先清空目录（防止向量库重复写入）。"""
+    corpus = _write_corpus(tmp_path)
+    stores: Dict[str, FakeStore] = {}
+    pipeline = LegacyPipeline(tmp_path / "idx", store_factory=_factory_for(stores))
+    pipeline.build_index(corpus)
+    marker = tmp_path / "idx" / "marker.txt"
+    marker.write_text("x", encoding="utf-8")
+    pipeline.build_index(corpus)
+    assert not marker.exists()

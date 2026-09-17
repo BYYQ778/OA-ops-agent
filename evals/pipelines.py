@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -141,6 +142,7 @@ class LegacyPipeline:
         """建索引：逐文档 fixed 切块（500/50）后写入向量库；返回块数。"""
         from utils.doc_parser import split_text
 
+        shutil.rmtree(self.index_dir, ignore_errors=True)  # 重建即清空，避免重复写入
         store = self._make_store()
         documents: List[Any] = []
         for path, raw in read_corpus_texts(corpus_dir):
@@ -202,6 +204,7 @@ class HybridPipeline:
         """建索引：逐文档语义切块（含 section/page/chunk_uid 元数据）后写入向量库。"""
         from utils.chunking import split_semantic
 
+        shutil.rmtree(self.index_dir, ignore_errors=True)  # 重建即清空，避免重复写入
         store = self._make_store()
         documents: List[Any] = []
         for path, raw in read_corpus_texts(corpus_dir):
