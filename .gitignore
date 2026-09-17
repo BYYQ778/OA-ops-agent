@@ -29,8 +29,8 @@ data/oa_ops.db-wal
 ~$*
 
 # 评测临时产物（第 3 周）
-.eval-index/
-.eval-index-calib/
+.eval-index*/
+evals/results/latest.json
 evals/dataset/_draft_*.jsonl
 
 # IDE

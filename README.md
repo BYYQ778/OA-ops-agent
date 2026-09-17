@@ -156,8 +156,11 @@ knowledge_base:
     max_per_document: 2        # 每篇文档最多贡献的块数
     rerank: false              # quality 预设可开 true（需单独下载重排序模型）
     thresholds:
-      min_dense_similarity: 0.35   # 余弦相似度下限（第 3 周评测集校准）
-      min_bm25_score: 0.30         # BM25 原始分下限
+      # 第 3 周评测校准（dev 网格 + holdout 冻结）——分层证据门
+      min_dense_similarity: 0.89    # 单通道强证据：余弦相似度 ≥0.89
+      min_bm25_score: 10.25         # 单通道强证据：BM25 ≥10.25
+      joint_dense_similarity: 0.60  # 双通道互证：dense ≥0.60 且 bm25 ≥7.75 也视为证据充分
+      joint_bm25_score: 7.75
 
   # 切块策略（标题/段落/页级语义切块；fixed 为旧固定字符切块）
   chunking:

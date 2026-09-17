@@ -120,11 +120,11 @@ knowledge_base:
     rerank_model: BAAI/bge-reranker-v2-m3
     thresholds:
       # 第 3 周评测校准（dev 网格 + holdout 冻结）——分层证据门：
-      # 单通道强证据：dense>=0.90 或 bm25>=11.0；双通道互证：dense>=0.60 且 bm25>=8.0
-      min_dense_similarity: 0.90
-      min_bm25_score: 11.0
+      # 单通道强证据：dense>=0.89 或 bm25>=10.25；双通道互证：dense>=0.60 且 bm25>=7.75
+      min_dense_similarity: 0.89
+      min_bm25_score: 10.25
       joint_dense_similarity: 0.60
-      joint_bm25_score: 8.0
+      joint_bm25_score: 7.75
       refuse_message: "抱歉，知识库中未找到相关信息，请补充相关文档后重试。"
 
   # 切块策略（RAG 2.0：标题/段落/页级语义切块）

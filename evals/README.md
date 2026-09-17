@@ -55,6 +55,9 @@ env -u PYTHONPATH python scripts/validate_eval_set.py --no-strict  # 仅结构
 
 - 文档级 Recall@5 / MRR / NDCG@5（Top-5 命中折叠为唯一文档序列后比对）；
 - 引用准确率（Top-5 命中文本命中锚点的比例）、引用覆盖率；
-- 无证据拒答率；检索延迟 mean/P95；LLM 子集（30 条）的回答级指标与延迟。
-- 一键复现：`scripts/run_eval.py`（离线，产出 `results/*.json`）；
-  阈值校准：`scripts/calibrate_thresholds.py`。详细口径见 `docs/reports/` 中的评测报告。
+- 无证据拒答率（dev 校准、holdout 冻结；被拒的可回答条目计未命中，误拒率单列）；
+- 检索延迟 mean/P95；LLM 子集（30 条）的回答级拒答/工具选择/步骤/延迟。
+- 一键复现：`scripts/run_eval.py`（离线）；阈值校准 `scripts/calibrate_thresholds.py`；
+  LLM 子集 `scripts/run_llm_subset.py`（需本地 Ollama）；报告 `scripts/gen_report.py`。
+- 最新结果：`docs/reports/rag-eval-report.md`（全量 Recall@5 74.1%→94.4%、
+  引用覆盖率→98.1%、无证据拒答 0→75.0%；holdout 冻结口径见报告）。
