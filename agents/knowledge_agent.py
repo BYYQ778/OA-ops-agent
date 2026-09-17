@@ -20,7 +20,7 @@ RAG流程：
 import os
 import hashlib
 from datetime import datetime
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
@@ -28,6 +28,7 @@ from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
+from pydantic import BaseModel, ValidationError
 
 from utils.doc_parser import parse_document, parse_pdf_pages, split_text
 from utils.chunking import Chunk, split_semantic, split_semantic_pages
@@ -38,6 +39,7 @@ from utils.retrieval import (
     RetrievalResult,
     format_citations,
 )
+from utils.structured import parse_structured
 from utils.config import get_app_root
 from utils.logger import get_logger
 from utils.prompt_safety import UNTRUSTED_DATA_GUARD, wrap_untrusted
@@ -77,6 +79,15 @@ RAG_SYSTEM_PROMPT = """你是一名OA运维知识库助手，你的职责是基�
 - 然后列出依据（引用的文档片段）
 - 如果涉及操作，给出具体步骤和命令
 """ + UNTRUSTED_DATA_GUARD
+
+
+class RouterDecision(BaseModel):
+    """Agentic 路由决策（Pydantic 结构化输出，替代 NEXT_ACTION 字符串解析）。"""
+
+    action: Literal["search_kb", "search_kg", "explore_graph", "answer"]
+    query: str = ""
+    reasoning: str = ""
+
 
 # ========== 文档分块配置 ==========
 CHUNK_SIZE = 500        # 每块最多500字
@@ -155,6 +166,7 @@ class KnowledgeBaseAgent:
 
         # ---- 混合检索（RAG 2.0：BM25 + Dense + RRF）----
         self._corpus_version = 0
+        self._structured_ok = None  # 路由结构化输出可用性（首次失败后禁用）
         self.retrieval_config = self._load_retrieval_config()
         self.retriever = HybridRetriever(
             dense_search=self._dense_search,
@@ -271,12 +283,13 @@ class KnowledgeBaseAgent:
 - 引用具体的文档来源
 - 按步骤列出操作建议
 
-## 输出格式
-每次你的回复必须以以下格式开头：
-NEXT_ACTION: search_kb | search_kg | explore_graph | answer
+## 输出格式（JSON 结构化输出）
+每次必须仅输出一个 JSON 对象，不要 markdown 围栏、不要任何多余文字：
+{"action": "search_kb | search_kg | explore_graph | answer", "query": "传给工具的查询词", "reasoning": "一句话决策理由"}
 
-如果是 answer，之后的内容就是给用户的最终回答。
-如果是其他 action，之后的内容是传给该工具的查询关键词（纯文本，不含引号）。""" + UNTRUSTED_DATA_GUARD
+- action=answer 时 query 留空（最终回答由后续节点生成）
+- 只能基于检索到的内容作答，禁止使用外部知识
+- 如检索结果不足以回答，选择 answer 并在最终回答中明确说明信息不足""" + UNTRUSTED_DATA_GUARD
 
     def _setup_agentic_rag(self):
         """构建 LangGraph ReAct Agent（支持 Ollama 和 DeepSeek）。"""
@@ -336,42 +349,18 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 基于当前信息，决定下一步。如果已有足够信息回答用户，选择 answer。"""
 
             try:
-                resp = kb.llm.invoke([
-                    {"role": "system", "content": kb.AGENTIC_RAG_PROMPT},
-                    {"role": "user", "content": router_msg},
-                ])
-                content = resp.content if hasattr(resp, "content") else str(resp)
-
-                # 解析 NEXT_ACTION
-                import re as _re
-                action_match = _re.search(r"NEXT_ACTION:\s*(\w+)", content, _re.IGNORECASE)
-                if action_match:
-                    action = action_match.group(1).strip().lower()
-                    if action not in ("search_kb", "search_kg", "explore_graph", "answer"):
-                        action = "search_kb"
-                else:
-                    # 如果 LLM 没有遵循格式，检查是否看起来像一个答案
-                    if len(content) > 100 and "NEXT_ACTION" not in content.upper():
-                        action = "answer"
-                    else:
-                        action = "search_kb"
-
-                if action in ("search_kg", "explore_graph") and not has_kg:
-                    action = "search_kb"
-
+                action, tool_input = kb._router_decide(router_msg, has_kg)
             except Exception as e:
-                logger.warning(f"Router LLM 调用失败: {e}")
-                action = "search_kb"
+                logger.warning(f"Router 决策失败: {e}")
+                action, tool_input = "search_kb", ""
 
-            # 提取工具参数（NEXT_ACTION 行之后的内容）
-            tool_input = content
-            if action_match:
-                tool_input = content[action_match.end():].strip()
-                if not tool_input:
-                    tool_input = state["question"]
+            if not tool_input:
+                tool_input = state["question"]
 
             return {
-                "messages": state.get("messages", []) + [{"role": "assistant", "content": content}],
+                "messages": state.get("messages", []) + [
+                    {"role": "assistant", "content": f"[router] action={action}"}
+                ],
                 "next_action": action,
                 "reasoning_steps": step,
                 "_tool_input": tool_input,
@@ -491,6 +480,47 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 
         self.agentic_graph = builder.compile()
         logger.info(f"Agentic RAG (LangGraph ReAct) 已就绪" + (" (含 KG)" if has_kg else " (仅向量检索)"))
+
+    def _router_invoke(self, messages: list):
+        """路由 LLM 调用：结构化输出优先，失败回退文本 JSON 解析。
+
+        Returns: (RouterDecision | None, raw_text)
+        """
+        if self._structured_ok is not False:
+            try:
+                out = self.llm.with_structured_output(RouterDecision).invoke(messages)
+                self._structured_ok = True
+                if isinstance(out, RouterDecision):
+                    return out, ""
+                if isinstance(out, dict):
+                    try:
+                        return RouterDecision.model_validate(out), ""
+                    except ValidationError:
+                        pass
+            except Exception as e:
+                self._structured_ok = False
+                logger.info(f"路由结构化输出不可用，改用文本 JSON 解析: {e}")
+        try:
+            resp = self.llm.invoke(messages)
+        except Exception as e:
+            logger.warning(f"Router LLM 调用失败: {e}")
+            return None, ""
+        content = resp.content if hasattr(resp, "content") else str(resp)
+        return parse_structured(content, RouterDecision), content
+
+    def _router_decide(self, router_msg: str, has_kg: bool):
+        """路由决策 → (action, tool_input)。解析失败安全默认 search_kb。"""
+        messages = [
+            {"role": "system", "content": self.AGENTIC_RAG_PROMPT},
+            {"role": "user", "content": router_msg},
+        ]
+        decision, _content = self._router_invoke(messages)
+        if decision is None:
+            return "search_kb", ""
+        action = decision.action
+        if action in ("search_kg", "explore_graph") and not has_kg:
+            action = "search_kb"
+        return action, (decision.query or "").strip()
 
     def _get_agentic_config(self, key: str, default):
         """读取 agentic_rag 配置项。"""

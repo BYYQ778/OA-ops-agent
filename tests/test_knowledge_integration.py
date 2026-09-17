@@ -212,3 +212,79 @@ def test_distance_to_similarity_conversion() -> None:
     assert abs(f(2 ** 0.5) - 0.0) < 1e-9  # d²/2 = 1 → cos 0
     assert f(10.0) == -1.0  # 裁剪下界
     assert f("bad-value") == 0.0
+
+
+# ========== 结构化路由决策 ==========
+
+class _FakeStructured:
+    def __init__(self, result):
+        self._result = result
+
+    def invoke(self, messages):
+        return self._result
+
+
+class _FakeMessage:
+    def __init__(self, content):
+        self.content = content
+
+
+class _FakeRouterLLM:
+    def __init__(self, structured=None, text="", structured_raises=False):
+        self.structured = structured
+        self.text = text
+        self.structured_raises = structured_raises
+        self.structured_calls = 0
+        self.text_calls = 0
+
+    def with_structured_output(self, schema):
+        self.structured_calls += 1
+        if self.structured_raises:
+            raise RuntimeError("tools not supported by this endpoint")
+        return _FakeStructured(self.structured)
+
+    def invoke(self, messages):
+        self.text_calls += 1
+        return _FakeMessage(self.text)
+
+
+def _router_agent(llm):
+    agent = _make_agent()
+    agent.llm = llm
+    agent._structured_ok = None
+    return agent
+
+
+def test_router_decide_uses_structured_output() -> None:
+    llm = _FakeRouterLLM(structured=ka.RouterDecision(action="answer"))
+    agent = _router_agent(llm)
+    assert agent._router_decide("问题", has_kg=True) == ("answer", "")
+    assert llm.structured_calls == 1
+    assert llm.text_calls == 0
+
+
+def test_router_decide_text_json_fallback() -> None:
+    llm = _FakeRouterLLM(
+        structured_raises=True,
+        text='{"action": "search_kb", "query": "磁盘空间不足", "reasoning": "先检索"}',
+    )
+    agent = _router_agent(llm)
+    assert agent._router_decide("磁盘满了", has_kg=True) == ("search_kb", "磁盘空间不足")
+    assert agent._structured_ok is False
+    # 第二次不再尝试结构化输出（避免每步双调用）
+    agent._router_decide("再问一次", has_kg=True)
+    assert llm.structured_calls == 1
+
+
+def test_router_decide_invalid_text_defaults_to_search_kb() -> None:
+    llm = _FakeRouterLLM(structured_raises=True, text="一段没有 JSON 的自由文本")
+    agent = _router_agent(llm)
+    assert agent._router_decide("问题", has_kg=True) == ("search_kb", "")
+
+
+def test_router_decide_kg_disabled_coerces_action() -> None:
+    llm = _FakeRouterLLM(
+        structured=ka.RouterDecision(action="search_kg", query="某实体")
+    )
+    agent = _router_agent(llm)
+    assert agent._router_decide("问题", has_kg=False) == ("search_kb", "某实体")
