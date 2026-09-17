@@ -1,0 +1,30 @@
+{"qid": "q004", "expected_route": "search_kb", "expect_refusal": false, "notes": "OA 故障定位顺序（常规）"}
+{"qid": "q005", "expected_route": "search_kb", "expect_refusal": false, "notes": "通报要求（检索曾未命中 gold，困难正例）"}
+{"qid": "q018", "expected_route": "search_kb", "expect_refusal": false, "notes": "502/503 区别（术语精确）"}
+{"qid": "q020", "expected_route": "search_kb", "expect_refusal": false, "notes": "静态资源正常但报 502（推理）"}
+{"qid": "q025", "expected_route": "search_kb", "expect_refusal": false, "notes": "proxy_read_timeout 报错（参数精确）"}
+{"qid": "q029", "expected_route": "search_kb", "expect_refusal": false, "notes": "OOM 第一步（常规）"}
+{"qid": "q035", "expected_route": "search_kb", "expect_refusal": false, "notes": "清空正在写入的日志（操作性）"}
+{"qid": "q045", "expected_route": "search_kb", "expect_refusal": false, "notes": "1040 连接满（错误码）"}
+{"qid": "q050", "expected_route": "search_kb", "expect_refusal": false, "notes": "慢查询排序（操作）"}
+{"qid": "q060", "expected_route": "search_kb", "expect_refusal": false, "notes": "Redis OOM command（错误码）"}
+{"qid": "q063", "expected_route": "search_kb", "expect_refusal": false, "notes": "CLIENT LIST 字段（细节）"}
+{"qid": "q069", "expected_route": "search_kb", "expect_refusal": false, "notes": "拒写后健康检查（检索级误拒案例，观察系统行为）"}
+{"qid": "q072", "expected_route": "search_kb", "expect_refusal": false, "notes": "ORA-12541（错误码）"}
+{"qid": "q078", "expected_route": "search_kb", "expect_refusal": false, "notes": "ORA-00257（错误码）"}
+{"qid": "q080", "expected_route": "search_kb", "expect_refusal": false, "notes": "ORA-01652（错误码）"}
+{"qid": "q085", "expected_route": "search_kb", "expect_refusal": false, "notes": "9002 日志满（错误码）"}
+{"qid": "q092", "expected_route": "search_kb", "expect_refusal": false, "notes": "STOPAT 时间点还原（操作）"}
+{"qid": "q094", "expected_route": "search_kb", "expect_refusal": false, "notes": "备份可用性确认（检索级误拒案例，观察系统行为）"}
+{"qid": "q101", "expected_route": "search_kb", "expect_refusal": false, "notes": "域名 vs IP（DNS 定位）"}
+{"qid": "q108", "expected_route": "search_kb", "expect_refusal": false, "notes": "端口未监听分层排查"}
+{"qid": "q114", "expected_route": "search_kb", "expect_refusal": false, "notes": "SSH 加固操作"}
+{"qid": "q123", "expected_route": "search_kb", "expect_refusal": false, "notes": "journalctl 巡检"}
+{"qid": "q016", "expected_route": "search_kb", "expect_refusal": true, "notes": "钉钉集成（近域负例；门控应直接拒答）"}
+{"qid": "q071", "expected_route": "search_kb", "expect_refusal": true, "notes": "Redis Cluster 槽位（近域负例；门控应直接拒答）"}
+{"qid": "q084", "expected_route": "search_kb", "expect_refusal": true, "notes": "Oracle RAC（近域负例；门控应直接拒答）"}
+{"qid": "q096", "expected_route": "search_kb", "expect_refusal": true, "notes": "列存储索引（近域负例；门控放过，考验回答级拒答）"}
+{"qid": "q112", "expected_route": "search_kb", "expect_refusal": true, "notes": "IPv6 双栈（近域负例；门控放过，考验回答级拒答）"}
+{"qid": "q043", "expected_route": "search_kb", "expect_refusal": true, "notes": "ECC 报错（近域负例；门控放过，考验回答级拒答）"}
+{"qid": "q083", "expected_route": "search_kb", "expect_refusal": true, "notes": "Data Guard 延迟（近域负例；门控放过，考验回答级拒答）"}
+{"qid": "q095", "expected_route": "search_kb", "expect_refusal": true, "notes": "AlwaysOn（近域负例；门控放过，考验回答级拒答）"}

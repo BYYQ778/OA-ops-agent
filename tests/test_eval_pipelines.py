@@ -182,3 +182,18 @@ def test_rebuild_clears_index_dir(tmp_path: Path) -> None:
     marker.write_text("x", encoding="utf-8")
     pipeline.build_index(corpus)
     assert not marker.exists()
+
+
+def test_hybrid_custom_collection_name(tmp_path: Path) -> None:
+    """可指定集合名（LLM 子集需要对接生产 Agent 的 oa_knowledge_base）。"""
+    corpus = _write_corpus(tmp_path)
+    stores: Dict[str, FakeStore] = {}
+    pipeline = HybridPipeline(
+        tmp_path / "idx",
+        store_factory=_factory_for(stores),
+        retrieval_config=RetrievalConfig(),
+        collection_name="oa_knowledge_base",
+    )
+    pipeline.build_index(corpus)
+    assert "oa_knowledge_base" in stores
+    assert "eval_hybrid" not in stores

@@ -185,11 +185,13 @@ class HybridPipeline:
         store_factory: Optional[StoreFactory] = None,
         retrieval_config: Optional[RetrievalConfig] = None,
         reranker: Optional[Any] = None,
+        collection_name: str = HYBRID_COLLECTION,
     ) -> None:
         self.index_dir = Path(index_dir)
         self._store_factory = store_factory
         self.retrieval_config = retrieval_config or load_retrieval_config()
         self.reranker = reranker
+        self.collection_name = collection_name
         self.store: Any = None
         self.retriever: Optional[HybridRetriever] = None
         self.chunk_count = 0
@@ -198,7 +200,7 @@ class HybridPipeline:
     def _make_store(self) -> Any:
         self.index_dir.mkdir(parents=True, exist_ok=True)
         factory = self._store_factory or _default_store_factory
-        return factory(HYBRID_COLLECTION, str(self.index_dir))
+        return factory(self.collection_name, str(self.index_dir))
 
     def build_index(self, corpus_dir: Path) -> int:
         """建索引：逐文档语义切块（含 section/page/chunk_uid 元数据）后写入向量库。"""
