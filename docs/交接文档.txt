@@ -812,6 +812,6 @@ Phase 6: 全链路 E2E 验证
 - 测试: 759 passed；ruff（含严格范围）全绿；pyright 0 errors；compileall OK
 - LLM 子集已实跑（云端 DeepSeek，用户授权）: 系统级无证据拒答率 100%（门控 3 +
   回答级 5）；有依据回答率 77.3%；平均 3.9 步；端到端 mean 3.9s / P95 6.4s
-- 待办: 本地 Ollama 对比跑（可选）；推送与 CI 核验（待授权）
+- 待办: 本地 Ollama 对比跑（可选）；推送与 CI 核验——已完成（2026-09-17 推送；远端 CI 全绿 run 35223665459）
 - 衔接第 4 周: 根因诊断复用 HybridRetriever 与 evals 结果结构；
   /api/v1/evals/latest 读取 results JSON；分层门控沿用

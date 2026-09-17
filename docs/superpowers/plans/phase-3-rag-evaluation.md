@@ -125,7 +125,7 @@ split、route_expected（LLM 子集用）、notes。
 - [x] 7. LLM 子集真实运行 ✅（云端 DeepSeek，用户授权）：系统级无证据拒答率 100%
       （门控 3 + 回答级 5）、有依据回答率 77.3%、平均 3.9 步、端到端 mean 3.9s/P95 6.4s
 - [x] 8. 报告 + 图表（docs/reports/ 含 LLM 子集区块）+ 惯例文档同步 ✅
-- [ ] 9. 全量本地验证（pytest/ruff/pyright/compileall + 运行验证）→ 推送（授权后）→ CI 核验
+- [x] 9. 全量本地验证（pytest/ruff/pyright/compileall + 运行验证）→ 推送（2026-09-17 已授权）→ CI 核验（run 35223665459 全绿）
 
 ## 验收对照
 
