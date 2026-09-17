@@ -1185,3 +1185,6 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
   ③ 回答阶段出现 2 例可答误拒（q114/q123）——从严契约 + 循环上下文所致，
   已列为改进项；④ 云端子集数字不代表本地 Ollama 行为（对比跑待做）
 - 脚本: scripts/run_llm_subset.py --provider deepseek（结果 results/llm-subset-deepseek.json）
+- 分词器消融（dev，冻结阈值）: jieba recall@5 93.3%/MRR 0.798/误拒 5.3% vs bigram 降级
+  88.0%/0.752/8.0% → 建议 jieba 升格正式依赖（一行改动，待评审）；结果存
+  results/jieba-ablation.json
