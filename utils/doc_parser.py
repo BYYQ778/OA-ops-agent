@@ -39,6 +39,32 @@ def parse_pdf(file_path: str) -> str:
         raise RuntimeError(f"PDF解析失败 [{file_path}]: {e}")
 
 
+def parse_pdf_pages(file_path: str) -> list[tuple[int, str]]:
+    """
+    解析PDF文件，按页返回文本（页级引用所需）。
+
+    Args:
+        file_path: PDF文件的绝对路径
+
+    Returns:
+        [(页码(从1起), 页文本)]；空白页跳过（页码保留原始编号，不重排）
+    """
+    try:
+        from PyPDF2 import PdfReader
+        reader = PdfReader(file_path)
+        pages: list[tuple[int, str]] = []
+        for i, page in enumerate(reader.pages, 1):
+            page_text = page.extract_text() or ""
+            page_text = clean_text(page_text)
+            if page_text.strip():
+                pages.append((i, page_text))
+        return pages
+    except ImportError:
+        raise ImportError("请安装 PyPDF2 库: pip install PyPDF2")
+    except Exception as e:
+        raise RuntimeError(f"PDF解析失败 [{file_path}]: {e}")
+
+
 def parse_docx(file_path: str) -> str:
     """
     解析Word(.docx)文件，提取纯文本内容。

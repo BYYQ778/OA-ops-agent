@@ -1,5 +1,6 @@
 import pytest
 
+from _pdf_factory import build_minimal_pdf as _build_minimal_pdf
 from utils.doc_parser import clean_text, parse_document, parse_txt, split_text
 
 
@@ -112,3 +113,36 @@ def test_natural_boundary_with_large_overlap_always_advances():
     assert chunks[0] == "123456。"
     assert all(0 < len(chunk) <= 10 for chunk in chunks)
     assert chunks[-1].endswith("k")
+
+
+# ========== PDF 页级解析（最小 PDF 构造器见 tests/_pdf_factory.py） ==========
+
+
+def test_parse_pdf_pages_extracts_per_page_text(tmp_path):
+    from utils.doc_parser import parse_pdf_pages
+
+    path = tmp_path / "manual.pdf"
+    path.write_bytes(_build_minimal_pdf(["First page OA guide", "Second page nginx 502"]))
+    pages = parse_pdf_pages(str(path))
+    assert [p[0] for p in pages] == [1, 2]
+    assert "First page OA guide" in pages[0][1]
+    assert "Second page nginx 502" in pages[1][1]
+
+
+def test_parse_pdf_pages_keeps_original_page_numbers(tmp_path):
+    from utils.doc_parser import parse_pdf_pages
+
+    path = tmp_path / "blank-first.pdf"
+    path.write_bytes(_build_minimal_pdf(["", "Real content on second page"]))
+    pages = parse_pdf_pages(str(path))
+    assert [p[0] for p in pages] == [2]
+    assert "Real content" in pages[0][1]
+
+
+def test_parse_pdf_pages_corrupt_raises_explained_error(tmp_path):
+    from utils.doc_parser import parse_pdf_pages
+
+    path = tmp_path / "corrupt.pdf"
+    path.write_bytes(b"not a document")
+    with pytest.raises(RuntimeError, match="PDF"):
+        parse_pdf_pages(str(path))
