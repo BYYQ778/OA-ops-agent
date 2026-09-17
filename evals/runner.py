@@ -218,7 +218,7 @@ def summary_lines(result: Mapping[str, Any]) -> List[str]:
         if not isinstance(new, (int, float)) or not isinstance(old, (int, float)):
             return "-"
         diff = new - old
-        return f"{diff:+.1%}" if pct else f"{diff:+.3f}"
+        return f"{diff * 100:+.1f}pp" if pct else f"{diff:+.3f}"
 
     pairs = [
         ("Recall@5", "recall_at_k", True),
