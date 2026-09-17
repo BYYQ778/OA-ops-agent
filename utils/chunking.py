@@ -63,6 +63,27 @@ def _is_heading(line: str) -> Optional[str]:
     return None
 
 
+def _is_leading_heading(line: str) -> Optional[str]:
+    """多行块首行的标题识别（保守）：仅 Markdown #、中文章节、X.Y 及更深编号。
+
+    用于「标题紧跟正文（无空行）」的常见写法，避免把「1. 步骤」类列表项误判。
+    """
+    stripped = line.strip()
+    if not stripped or len(stripped) > 80:
+        return None
+    if stripped[-1] in _SENTENCE_END:
+        return None
+    md = _MD_HEADING.match(stripped)
+    if md:
+        return md.group(1).strip()
+    if _CN_HEADING.match(stripped):
+        return stripped
+    # 编号需至少两级（X.Y），单级「1.」可能只是列表步骤
+    if _NUM_HEADING.match(stripped) and re.match(r"^\s*\d{1,2}\.\d{1,2}", stripped):
+        return stripped
+    return None
+
+
 def _hard_split(paragraph: str, max_size: int, overlap: int) -> List[str]:
     """超长段落硬切：优先句界，切不动按 max_size 精确切；相邻块保留精确 overlap。"""
     pieces: List[str] = []
@@ -106,13 +127,18 @@ def _process_text(
         para = block.strip()
         if not para:
             continue
-        # 单行块可能是标题
-        if "\n" not in para:
-            heading = _is_heading(para)
-            if heading is not None:
-                flush()
-                section = heading
+        # 首行标题识别：单行块用全部规则；多行块仅对强信号
+        # （Markdown # / 第X章 / X.Y 编号）识别，避免「1. 步骤」误判
+        lines = para.split("\n")
+        first = lines[0].strip()
+        heading = _is_heading(first) if len(lines) == 1 else _is_leading_heading(first)
+        if heading is not None:
+            flush()
+            section = heading
+            rest = "\n".join(lines[1:]).strip()
+            if not rest:
                 continue
+            para = rest
         if len(para) > max_size:
             flush()
             for piece in _hard_split(para, max_size, overlap):

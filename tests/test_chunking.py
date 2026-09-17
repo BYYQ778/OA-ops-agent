@@ -47,6 +47,31 @@ def test_no_headings_section_empty() -> None:
     assert all(c.section == "" for c in chunks)
 
 
+# ========== 标题紧跟正文（无空行）的首行识别 ==========
+
+def test_md_heading_followed_directly_by_body() -> None:
+    text = "## 第一章 磁盘空间不足处理\n当出现磁盘告警时按以下步骤处理，此段正文紧随标题而无空行。"
+    chunks = split_semantic(text, min_size=0)
+    assert chunks[0].section == "第一章 磁盘空间不足处理"
+    assert chunks[0].text.startswith("当出现磁盘告警时")
+    assert "第一章" not in chunks[0].text
+
+
+def test_numbered_subheading_followed_directly_by_body() -> None:
+    text = "3.1 增量备份\n先停应用再复制数据目录，这段正文紧随编号小节标题。"
+    chunks = split_semantic(text, min_size=0)
+    assert chunks[0].section == "3.1 增量备份"
+    assert chunks[0].text.startswith("先停应用")
+
+
+def test_single_level_numbered_step_is_not_heading() -> None:
+    # 「1. 步骤」类列表首行不应被误判为标题（内容必须保留在正文中）
+    text = "1. 打开配置文件\n修改 listen 端口后保存并重启服务。"
+    chunks = split_semantic(text, min_size=0)
+    assert chunks[0].section == ""
+    assert "打开配置文件" in chunks[0].text
+
+
 # ========== 段落分组与大小上限 ==========
 
 def test_paragraphs_grouped_up_to_max_size() -> None:
