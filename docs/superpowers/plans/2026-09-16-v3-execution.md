@@ -6,7 +6,7 @@
 
 ## 阶段与验收
 
-- [ ] 1. 工程基线：可复现依赖、pytest、Ruff、Pyright、pre-commit、CI、渐进路由拆分。首批覆盖日志规则、图谱、巡检解析、SQLite、真实 API。核心覆盖率目标 80%，全项目目标 60%；必须说明统计范围，不用排除业务代码冒充达标。
+- [ ] 1. 工程基线：可复现依赖、pytest、Ruff、Pyright、pre-commit、CI、渐进路由拆分。首批覆盖日志规则、图谱、巡检解析、SQLite、真实 API。核心覆盖率目标 80%，全项目目标 60%；必须说明统计范围，不用排除业务代码冒充达标。**（2026-09-17 本地门槛达成；远端 CI/桌面/绿色重验未完成，故不勾选）**
 - [ ] 2. RAG：BM25 + Dense + RRF、可选重排序、结构化路由、证据引用、低置信度拒答。旧向量库需保留，换 Embedding 时新建版本化索引并评测后切换。
 - [ ] 3. 评测：至少 100 条标注问答，冻结留出集；同一数据/硬件比较旧版与新版 Recall@5、MRR、NDCG、引用、拒答、延迟。目标是验收条件，不是预先宣称的成果。
 - [ ] 4. 根因诊断：统一事件和证据，至少 30 个标准案例，输出候选原因、证据和建议；证据不足时标明不确定，不强凑两条证据。只读诊断，禁止自动执行修复。
@@ -32,3 +32,15 @@
 - `utils/dashboard.py` 在线程调度器和 asyncio SSE 间直接写队列，后续需验证跨线程推送与断连清理。
 - `agents/knowledge_agent.py` 升级检索时同时检查路由状态字段、异常路径、会话历史与并发行为。
 - `oa_agent.spec` 和旧 bat 脚本绑定 env_new、固定模型缓存和外置代码；更换运行环境后必须单独验证完整桌面包。
+
+## 进度记录
+
+- 2026-09-17: 第 1 周本地门槛达成 —— pytest 594 passed（全离线）、全库覆盖率
+  75.4%（分支 74.6%）、核心模块 93–100%、ruff/pyright/compileall 全绿、
+  hermes verify --skip-start ok:true；env_new 源码 + 桌面 --backend 运行回归
+  通过。过程中发现并修复裸 pytest/CI 导入路径隐患（pyproject pythonpath）。
+- 分支 chore/quality-baseline 领先 master 7 个提交（860af8b → d0aa18c），
+  **未推送**（推送需单独授权）。
+- 待办: 推送 → 远端 CI 首跑；桌面 GUI 交互与绿色版随合并重验。
+- 下一步: 第 2 周 feat/hybrid-rag（RAG 2.0），计划见
+  docs/superpowers/plans/phase-2-hybrid-rag.md（随第 2 周分支提交）。
