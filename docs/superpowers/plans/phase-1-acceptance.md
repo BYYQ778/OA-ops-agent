@@ -65,6 +65,9 @@ Compose 需要 2.24.0 或更高版本（可选 env_file）。默认仅映射 `12
   inspection_real / network_diag / ssl_monitor / kg_store / database /
   dashboard / config（新建或扩展现有文件；`tests/_optional_deps.py` 使
   CI core 环境可在缺 RAG 依赖时导入 knowledge_agent）
+- 修复裸 pytest / CI 导入路径: pyproject 增加 `pythonpath = ["."]`
+  —— 裸 `pytest` 与 CI 的 `uv run pytest` 不把项目根放入 sys.path，
+  `import ui` 会 ModuleNotFoundError（CI 首次运行的必挂隐患，已修复并复验）
 - 静态检查（本地，命令与 CI 一致）: `ruff check .`、
   `ruff check --select E,F,I,W ui/routers tests`、`pyright`（0 errors）、
   `compileall` 全部通过

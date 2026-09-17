@@ -999,6 +999,10 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
     dashboard / config（新建或扩展现有测试文件）
   · tests/_optional_deps.py: RAG 可选依赖缺失时注入占位模块，使 CI core
     环境可导入 agents.knowledge_agent 而无需下载 torch
+  · 修复裸 pytest / CI 导入路径: pyproject 增加 pythonpath = ["."]
+    （裸 `pytest` 与 `uv run pytest` 不会把项目根放进 sys.path，
+    `import ui` 会 ModuleNotFoundError —— 属 CI 首次运行必挂的隐患，
+    验证过程中发现并修复；本机以裸 pytest 复验 594 passed）
   · 覆盖率（2026-09-17 实测，branch 统计）: 全库 29.1% → 75.4%（分支 74.6%）；
     ui/server.py 28% → 85.5%
     核心模块: 巡检 100%/98.8% · 日志 100% · 图谱 96.8% · SQLite 100% ·

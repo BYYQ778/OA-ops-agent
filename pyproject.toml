@@ -58,6 +58,7 @@ dev = [
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers --disable-socket --allow-unix-socket"
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = [
   "allow_hosts(hosts): permit loopback hosts for in-process ASGI test clients",
 ]
