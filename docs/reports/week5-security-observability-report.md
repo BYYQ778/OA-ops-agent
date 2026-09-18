@@ -109,4 +109,8 @@ c5d92ad 计划 → 0a5fea1 日志 → 8c06adc 指标 → 20a5cb3 追踪 → 7beb
 → 本文档（文档同步）
 ```
 
+**已推送（2026-09-18，ssh-origin 直通）**；远端 CI 双绿：run `35318040465`
+（quality **927 passed / TOTAL 81%**——覆盖率 80%→81%；docker-core 冒烟通过，容器已按
+启动门禁要求注入 `OA_AUTH_PASSWORD`）；PR **#5**（→ feat/incident-rca，堆叠链之一）。
+
 回退：改动全部在本 worktree/分支；前端另有 tag `ui-before-security`；回退 = `git checkout f250434`。

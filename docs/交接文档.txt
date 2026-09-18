@@ -836,4 +836,6 @@ Phase 6: 全链路 E2E 验证
   实测（span/trace_id）；CI docker-core 冒烟补 OA_AUTH_PASSWORD
 - 文档: README 认证章节重写；优化清单 P0-5/P2-13 关闭；
   docs/reports/week5-security-observability-report.md
-- 待办: 推送与远端 CI（待授权）；第 6 周 release/v3.0.0（绿色版重建 + 文档/演示材料）
+- 推送与 CI: **已完成**（2026-09-18，push run 35318040465 双绿：927 passed / TOTAL 81% +
+  docker-core 冒烟；PR #5 已开）；六周计划 PR 链 #1~#5 已全部开通（堆叠式）
+- 待办: 第 6 周 release/v3.0.0（绿色版重建 + 文档/演示材料；先按 #1→#5 顺序合并 PR）

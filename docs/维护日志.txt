@@ -1303,8 +1303,12 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
      "truncated \UXXXXXXXX escape" 语法错误——已修复（r-string）
   e. 严格模式验证用 OA_AUTH_BYPASS_LOOPBACK=0 让 localhost 复现远端行为
 
-七、提交（feat/observability-security，基于 f250434）
+七、提交与推送（feat/observability-security，基于 f250434）
   见 git log（计划 → 日志 → 指标 → 追踪 → 安全基础 → 认证端点 → RBAC 门 → 前端 → 文档）；
-  推送与远端 CI 待用户授权后执行（本条目先记本地完成）
+  **已推送（2026-09-18，ssh-origin 直通）**：push run 35318040465 双绿
+  （quality 927 passed / TOTAL 81%（80%→81%）+ docker-core 冒烟；docker 冒烟已按门禁要求
+  注入 OA_AUTH_PASSWORD）；**并开通六周计划 PR 链 #1~#5**（堆叠式：quality-baseline→master、
+  hybrid-rag→quality-baseline、rag-evaluation→hybrid-rag、incident-rca→rag-evaluation、
+  observability-security→incident-rca；各 PR 触发 run 全绿）
 
 回退: 全部改动在本 worktree/分支；UI 另有 tag ui-before-security；回退 = git checkout f250434

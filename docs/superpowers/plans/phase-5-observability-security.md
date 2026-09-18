@@ -110,10 +110,10 @@
       ⑤ env_new + 真 OTel SDK（console exporter）实测 span 输出；
       ⑥ 门禁实测：`--host 0.0.0.0` + 默认密码 → 拒绝启动并打印指引。
       验证脚本落 `E:/YunweiAgent/.hermes/tmp/`，结果写报告。
-- [ ] **w5-9** 文档与报告：`docs/reports/week5-security-observability-report.md`（验收对照 +
+- [x] **w5-9** 文档与报告：`docs/reports/week5-security-observability-report.md`（验收对照 +
       实测数据 + 口径声明）；README 认证章节重写（关闭 P0-5 / P2-13 叙述）；
       `docs/维护日志.txt`、`docs/交接文档.txt` 同步；执行记录勾选；优化清单状态更新。
-- [ ] **w5-10** 全量回归（pytest/ruff/pyright/hermes verify --skip-start）+ 收尾
+- [x] **w5-10** 全量回归（pytest/ruff/pyright/hermes verify --skip-start）+ 收尾
       （端口/进程清理、待办盘点）+ 推送授权请示 + 微信通知（频控失败不重试）。
 
 ## 四、验证口径
