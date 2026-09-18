@@ -31,6 +31,7 @@ from utils.scheduler import InspectionScheduler
 from utils.dashboard import dashboard_manager
 from ui.routers.incidents import create_incidents_router
 from ui.routers.system import create_system_router
+from ui.middleware import RequestContextMiddleware
 
 logger = get_logger(__name__)
 
@@ -135,6 +136,7 @@ def create_app(
         enable_background_services = os.environ.get("OA_ENABLE_BACKGROUND_STARTUP", "1") != "0"
     application = FastAPI(title="OA 运维助手", version="2.5.0", lifespan=_lifespan)
     application.state.enable_background_services = enable_background_services
+    application.add_middleware(RequestContextMiddleware)
 
     application.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
     application.include_router(create_system_router(Path(BASE_DIR), lambda: _kb_state))
