@@ -196,7 +196,9 @@ llm:
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `OA_LLM_API_KEY` | DeepSeek API Key | — |
-| `OA_AUTH_PASSWORD` | Web 登录密码（v2.3 暂未启用） | `admin123` |
+| `OA_AUTH_PASSWORD` | Web 登录密码（第 5 周起生效；非回环部署必须设置非默认值，否则拒绝启动） | （空） |
+| `OA_LOG_FORMAT` | 日志格式：`text` / `json`（结构化 JSON Lines） | `text` |
+| `OA_TRACING` | 启用 OpenTelemetry 追踪（需 `pip install opentelemetry-sdk`） | 关闭 |
 | `OA_SSH_PASSWORD` | SSH 巡检密码 | — |
 | `OA_EMAIL_USER` | 告警邮箱 | — |
 | `OA_EMAIL_PASSWORD` | SMTP 授权码 | — |
@@ -275,8 +277,12 @@ A: 在 `config.yaml` 中将 `inspection.mode` 改为 `local` 即可使用本机�
 **Q: 可以部署到 Linux 服务器吗？**
 A: 可以。安装 Python 3.11+ 和 Ollama，将 `inspection.mode` 改为 `ssh` 并配置目标主机即可。
 
-**Q: 如何修改默认密码？**
-A: v2.3 暂未启用 Web 登录认证。如需启用，可在 `.env` 中设置 `OA_AUTH_PASSWORD=你的新密码`，并在 `ui/server.py` 中添加认证中间件。
+**Q: 登录认证怎么工作？部署到局域网/公网要注意什么？**
+A: 第 5 周起认证实际生效：**本机回环访问（桌面版/本机浏览器）免登录直通；非回环客户端必须登录**
+（用 `.env` 的 `OA_AUTH_PASSWORD`，或 `config.yaml` 的 `auth.users` 配置多用户 + `role: admin/viewer`，
+密码哈希用 `python scripts/hash_password.py` 生成）。启动带安全门禁：绑定 `0.0.0.0` 等非回环地址时，
+未设置非默认密码会**直接拒绝启动**。HTTPS 部署时把 `auth.cookie_secure` 设为 `true`；
+细节与实测见 `docs/reports/week5-security-observability-report.md`。
 
 **Q: 启动画面要等一会儿才进入主界面？**
 A: 桌面版会等待本地嵌入模型加载完成（首次约 20~40 秒，之后 3~5 秒）。等待超过 8 秒时可点「跳过等待，直接进入」，知识库功能在后台就绪后自动可用。

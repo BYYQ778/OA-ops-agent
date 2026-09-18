@@ -77,33 +77,33 @@
 
 ## 三、实施步骤（TDD：先测后改 → ruff/pyright 自审 → 提交；每步全量回归）
 
-- [ ] **w5-0** 工作树+环境+基线：`uv sync --frozen --dev` + 857 passed 复现 + 本计划提交。
-- [ ] **w5-1** 结构化日志：`utils/request_context.py`（contextvar）、`utils/logger.py`
+- [x] **w5-0** 工作树+环境+基线：`uv sync --frozen --dev` + 857 passed 复现 + 本计划提交。
+- [x] **w5-1** 结构化日志：`utils/request_context.py`（contextvar）、`utils/logger.py`
       升级（JsonFormatter + 脱敏 filter + format 开关）、`ui/middleware.py`
       RequestContextMiddleware（request-id + 访问日志）；测试：JSON 可解析、
       request_id 贯通、响应头存在、脱敏生效、text 默认零变化。
-- [ ] **w5-2** 指标扩展：`utils/metrics.py` 增 gauge/histogram + TYPE/HELP 渲染
+- [x] **w5-2** 指标扩展：`utils/metrics.py` 增 gauge/histogram + TYPE/HELP 渲染
       （旧 API 与旧行不动）、路由基数归一器、MetricsMiddleware；测试：直方图桶/累计、
       归一表、`/api/v1/metrics` 旧断言仍绿 + 新行断言。
-- [ ] **w5-3** OTel 追踪：`utils/tracing.py`（no-op 降级 + console/otlp exporter +
+- [x] **w5-3** OTel 追踪：`utils/tracing.py`（no-op 降级 + console/otlp exporter +
       span 上下文管理器）、埋点 HTTP/RAG/诊断、trace_id 进日志；测试：假 otel 模块注入、
       no-op 路径、span 名/属性断言。
-- [ ] **w5-4** 安全基础：`utils/security.py`（哈希/恒时比较/门禁评估/用户解析，
+- [x] **w5-4** 安全基础：`utils/security.py`（哈希/恒时比较/门禁评估/用户解析，
       兼容旧 `username/password` 配置合成 users）、`sessions`+`auth_events` 表与存取
       （`utils/database.py`）、`scripts/hash_password.py`、`config.yaml`+`.env.example`
       清理（注意 config.yaml 含 `${}` → 用 Python 脚本改，走 LF）；测试：哈希往返、
       门禁矩阵（非回环×认证关/默认密码/空密码/合规）、表存取。
-- [ ] **w5-5** 认证端点：`ui/routers/auth.py`——`POST /api/auth/login`（cookie 下发、
+- [x] **w5-5** 认证端点：`ui/routers/auth.py`——`POST /api/auth/login`（cookie 下发、
       429 限速、审计）、`POST /api/auth/logout`、`GET /api/auth/session`
       （loopback/session 两种模式自述）；测试：登录成功/失败/限速/登出/会话查询。
-- [ ] **w5-6** RBAC 中间件：`ui/middleware.py` AuthGateMiddleware（豁免表 + 策略表 +
+- [x] **w5-6** RBAC 中间件：`ui/middleware.py` AuthGateMiddleware（豁免表 + 策略表 +
       回环旁路 + 401/403/302 分支）、`create_app` 接线（含请求上下文/指标中间件）；
       测试：回环直通、远端 401→登录→放行、viewer 越权 403、豁免路径、SSE 透传；
       **全量回归（既有 857 必须全绿）**。
-- [ ] **w5-7** 前端：tag `ui-before-security` → `login.html`（登录页，深浅主题一致）+
+- [x] **w5-7** 前端：tag `ui-before-security` → `login.html`（登录页，深浅主题一致）+
       `index.html` 顶栏会话控件（会话模式下显示用户/登出）+ 401 跳转处理；
       验证链：node --check → playwright 截图（浅/深）→ DOM 断言（登录→回跳→登出）→ GLM-4V 目检。
-- [ ] **w5-8** E2E 运行验证（真实服务，无模型依赖路径）：① 严格模式
+- [x] **w5-8** E2E 运行验证（真实服务，无模型依赖路径）：① 严格模式
       （`OA_AUTH_BYPASS_LOOPBACK=0` + 非默认密码，:7863）实测未登录 401→登录→访问→登出；
       ② 默认模式（:7864）回环无缝 + `desktop_app.py --backend` 启动兼容 + `/api/health` 公开；
       ③ `/api/v1/metrics` 抓取含新直方图；④ `OA_LOG_FORMAT=json` 下日志行 JSON 抽检；

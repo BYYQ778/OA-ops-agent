@@ -1247,3 +1247,64 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
   run 35309448459（quality 857 passed / TOTAL 80% + docker-core 冒烟）**
 
 回退: 全部改动在本 worktree/分支；UI 另有 tag ui-before-rca；回退 = git checkout 9b3c5c5
+
+───────────────────────────────────────────
+【2026-09-18 — v3 第 5 周：可观测性与安全（feat/observability-security，worktree 5）】
+───────────────────────────────────────────
+一、目标与范围
+  结构化日志 / Prometheus 指标 / OpenTelemetry / Session-RBAC / 密钥隔离 / 启动安全
+  门禁（非回环绑定 + 默认/空密码 → 拒绝启动）；桌面回环兼容；关闭 P0-5 认证配置「撒谎」。
+
+二、新增模块（纯标准库，零新硬依赖）
+  · utils/request_context.py  request-id/trace-id contextvars（日志贯通）
+  · utils/tracing.py          OTel 薄封装（无 SDK 自动 no-op；console/otlp exporter；
+                              span 期间 trace_id 进日志）
+  · utils/security.py         PBKDF2 哈希/恒时比较/会话令牌/登录限速/启动门禁/开关
+  · ui/routers/auth.py        /api/auth/login|logout|session（cookie TTL/429/审计）
+  · ui/templates/login.html   登录页（?next= 回跳；错误与限速提示）
+  · scripts/hash_password.py  生成 password_hash（替代明文配置）
+
+三、升级模块与接线
+  · utils/logger.py       JSON Lines formatter + OA_LOG_FORMAT + 密钥脱敏 filter
+  · utils/metrics.py      手写 Prometheus 原语（counter/gauge/histogram + le 桶 +
+                          TYPE/HELP + 标签转义 + 路由基数归一）；旧 API/旧行零变化
+  · ui/middleware.py      纯 ASGI 三件套：RequestContext / Metrics / AuthGate（豁免表 +
+                          角色策略 + 401/403/302；顺序用探针实测后接线）
+  · utils/database.py     sessions（只存 sha256(token)）+ auth_events 审计表
+  · ui/server.py          中间件接线 + run_server 启动门禁（拒绝时 exit 1 + 修复指引）
+                          + /login 路由 + auth_router_factory 注入点
+  · incidents.py/incident_kb.py  incident.analyze / rag.query / kb_search span 埋点
+  · index.html            侧栏会话控件 + 401 兜底跳转（tag ui-before-security 可回退）
+  · config.yaml/.env.example  auth 段重写 + logging.format + observability.tracing；
+                          清除 admin123 默认值；环境变量说明补齐
+  · CI quality.yml        docker-core 冒烟补 OA_AUTH_PASSWORD（门禁生效所需）
+
+四、RBAC 策略（默认 GET=viewer；写=admin，白名单除外）
+  · viewer 白名单=只读查询/诊断类 POST（log/net/ssl/sec/db/kg 查询 + kb 问答 +
+    /api/v1/rag/query + /api/v1/incidents/analyze）
+  · 巡检运行/调度、配置保存、知识库导入/删除/清空 = admin
+  · 豁免：/api/health、/api/dev/version、/api/auth/*、/login、/static/*、/docs 等
+
+五、验证（全部实测）
+  · 927 passed（857 基线 + 70 新增）；ruff（含严格范围）全绿；pyright 0 errors
+  · 严格模式 E2E（真实服务 :7865）15/15：匿名 401 / admin 放行 / viewer 403 与白名单
+    放行 / 指标旧契约+新直方图 / 审计（login_ok/login_fail/logout/rate_limited + request_id）
+  · 门禁：--host 0.0.0.0 + 空密码 → 拒绝启动（exit 1）
+  · JSON 日志 14 行 / 11 带 request_id；OTel 真 SDK（env_new 临时安装）：span
+    [http.request, rag.query] + 12 条 trace_id 日志
+  · 桌面兼容：desktop_app.py --backend（:7860）与默认模式（:7864）回环匿名全通
+  · UI：Playwright 登录流（跳转→报错→登录→会话控件→登出）全过 + GLM-4V 目检通过
+
+六、发现与踩坑
+  a. starlette add_middleware 后加的更外层——接线顺序先用探针脚本实测再定
+  b. TestClient 支持 client=("10.x",port) 模拟远端；"testclient" 主机视同回环
+  c. config.yaml 空占位 ${VAR:} 解析为 None（load_users 按空串兜底，空密码不可登录）
+  d. 技能 visual_check.py docstring 非 r-string，含 C:\Users 路径触发
+     "truncated \UXXXXXXXX escape" 语法错误——已修复（r-string）
+  e. 严格模式验证用 OA_AUTH_BYPASS_LOOPBACK=0 让 localhost 复现远端行为
+
+七、提交（feat/observability-security，基于 f250434）
+  见 git log（计划 → 日志 → 指标 → 追踪 → 安全基础 → 认证端点 → RBAC 门 → 前端 → 文档）；
+  推送与远端 CI 待用户授权后执行（本条目先记本地完成）
+
+回退: 全部改动在本 worktree/分支；UI 另有 tag ui-before-security；回退 = git checkout f250434

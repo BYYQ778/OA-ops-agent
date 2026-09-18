@@ -815,3 +815,25 @@ Phase 6: 全链路 E2E 验证
 - 待办: 本地 Ollama 对比跑（可选）；推送与 CI 核验——已完成（2026-09-17 推送；远端 CI 全绿 run 35223665459）
 - 衔接第 4 周: 根因诊断复用 HybridRetriever 与 evals 结果结构；
   /api/v1/evals/latest 读取 results JSON；分层门控沿用
+
+═══════════════════════════════════════════
+【2026-09-18 — v3 第 4 周：智能根因诊断（feat/incident-rca 分支）】
+- 工作区: E:\YunweiAgent\oa-ops-agent-incident-rca（基于 feat/rag-evaluation 尖端
+  9b3c5c5）；数据模型/规则/只读管线/存储/接口/一键入口全链落地；35 案例 Top-1 30/30
+- 测试: 857 passed；第 1 周 e/f 六处缺陷修复（测试固化翻转）
+- 已推送（2026-09-18）；远端 CI 双绿（run 35309448459：857 passed / TOTAL 80% + docker-core）
+- 衔接第 5 周: 可观测性与安全（/metrics 扩展、结构化日志、Session/RBAC、密钥隔离）
+
+═══════════════════════════════════════════
+【2026-09-18 — v3 第 5 周：可观测性与安全（feat/observability-security 分支）】
+- 工作区: E:\YunweiAgent\oa-ops-agent-observability-security（基于 feat/incident-rca 尖端
+  f250434）；结构化日志（JSON/request-id/密钥脱敏）、Prometheus 指标扩展（手写原语，
+  零新硬依赖）、OTel 追踪（可选 SDK 自动 no-op）、Session/RBAC（admin/viewer + 路由
+  策略表 + cookie 会话）、密钥隔离、**启动安全门禁**（非回环 + 默认/空密码 → 拒绝启动）
+- 兼容: 回环旁路（desktop_app --backend 与默认模式实测匿名直通）；legacy API 与
+  /api/v1/metrics 旧契约零变化；前端新增登录页 + 会话控件（tag ui-before-security）
+- 验证: 927 passed + ruff/pyright 全绿；严格模式 E2E 15/15；JSON 日志与 OTel 真 SDK
+  实测（span/trace_id）；CI docker-core 冒烟补 OA_AUTH_PASSWORD
+- 文档: README 认证章节重写；优化清单 P0-5/P2-13 关闭；
+  docs/reports/week5-security-observability-report.md
+- 待办: 推送与远端 CI（待授权）；第 6 周 release/v3.0.0（绿色版重建 + 文档/演示材料）
