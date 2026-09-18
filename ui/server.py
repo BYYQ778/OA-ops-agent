@@ -35,7 +35,7 @@ from utils.tracing import configure_tracing
 from ui.routers.auth import create_auth_router
 from ui.routers.incidents import create_incidents_router
 from ui.routers.system import create_system_router
-from ui.middleware import MetricsMiddleware, RequestContextMiddleware
+from ui.middleware import AuthGateMiddleware, MetricsMiddleware, RequestContextMiddleware
 
 logger = get_logger(__name__)
 
@@ -142,7 +142,8 @@ def create_app(
         enable_background_services = os.environ.get("OA_ENABLE_BACKGROUND_STARTUP", "1") != "0"
     application = FastAPI(title="OA 运维助手", version="2.5.0", lifespan=_lifespan)
     application.state.enable_background_services = enable_background_services
-    # 注意：starlette 的 add_middleware 后加的更外层；顺序 = 请求上下文 → 指标 → 路由
+    # 注意：starlette 的 add_middleware 后加的更外层；顺序 = 请求上下文 → 指标 → 认证门 → 路由
+    application.add_middleware(AuthGateMiddleware)
     application.add_middleware(MetricsMiddleware)
     application.add_middleware(RequestContextMiddleware)
     init_default_metrics("2.5.0")

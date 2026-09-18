@@ -8,12 +8,24 @@
 from __future__ import annotations
 
 import time
+from http.cookies import SimpleCookie
+from urllib.parse import quote
 
+from starlette.responses import JSONResponse, RedirectResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from utils.config import config as app_config
+from utils.database import db
 from utils.logger import get_logger
 from utils.metrics import metrics, normalize_route
 from utils.request_context import new_request_id, reset_request_id, set_request_id
+from utils.security import (
+    SESSION_COOKIE_NAME,
+    auth_enabled,
+    bypass_loopback,
+    hash_session_token,
+    is_loopback_host,
+)
 from utils.tracing import span as tracing_span
 
 _access_logger = get_logger("oa.access")
@@ -110,3 +122,148 @@ class MetricsMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
+
+
+# ---- 认证与 RBAC 门（第 5 周）----
+
+#: 豁免路径（公开）：健康检查/开发热刷新/认证入口/登录页/API 文档
+_PUBLIC_EXACT = frozenset(
+    {
+        "/api/health",
+        "/api/dev/version",
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/api/auth/session",
+        "/login",
+        "/favicon.ico",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    }
+)
+_PUBLIC_PREFIXES = ("/static/",)
+
+#: viewer 可用的只读查询/诊断类 POST（其余写操作一律要求 admin）
+_VIEWER_POSTS = frozenset(
+    {
+        "/api/log/analyze",
+        "/api/log/ocr",
+        "/api/kb/ask",
+        "/api/kb/chat",
+        "/api/kb/chat/stream",
+        "/api/kb/batch-ask",
+        "/api/kb/conversation",
+        "/api/kb/conversation/delete",
+        "/api/kb/conversation/rename",
+        "/api/net/dns",
+        "/api/net/http",
+        "/api/net/ping",
+        "/api/net/port",
+        "/api/net/trace",
+        "/api/ssl/check",
+        "/api/ssl/batch",
+        "/api/sec/all",
+        "/api/sec/cron",
+        "/api/sec/firewall",
+        "/api/sec/login",
+        "/api/sec/ports",
+        "/api/sec/ssh",
+        "/api/db/mssql",
+        "/api/db/mysql",
+        "/api/db/mysql/slow",
+        "/api/db/oracle",
+        "/api/db/redis",
+        "/api/kg/explore",
+        "/api/kg/path",
+        "/api/kg/search",
+        "/api/v1/rag/query",
+        "/api/v1/incidents/analyze",
+    }
+)
+
+
+def is_public_path(path: str) -> bool:
+    """认证门豁免路径（公开访问）。"""
+    if path in _PUBLIC_EXACT:
+        return True
+    return path.startswith(_PUBLIC_PREFIXES)
+
+
+def required_role(method: str, path: str) -> str:
+    """路由所需最低角色：GET/HEAD/OPTIONS 与白名单 POST = viewer；其余 = admin。"""
+    if method in ("GET", "HEAD", "OPTIONS"):
+        return "viewer"
+    if path in _VIEWER_POSTS:
+        return "viewer"
+    return "admin"
+
+
+def _cookie_token(scope: Scope) -> str:
+    for key, value in scope.get("headers", []):
+        if key == b"cookie":
+            cookie: SimpleCookie = SimpleCookie()
+            try:
+                cookie.load(value.decode("latin-1"))
+            except Exception:  # noqa: BLE001 - 畸形 cookie 按无 cookie 处理
+                return ""
+            morsel = cookie.get(SESSION_COOKIE_NAME)
+            return morsel.value if morsel is not None else ""
+    return ""
+
+
+def _client_host(scope: Scope) -> str:
+    client = scope.get("client")
+    return client[0] if client else ""
+
+
+class AuthGateMiddleware:
+    """认证与 RBAC 门。
+
+    - 认证关闭 → 直通；回环客户端（bypass_loopback=true）→ 直通（桌面壳/本机浏览器）；
+    - 远端客户端：要求有效会话 cookie，并按路由所需角色校验；
+      API 返回 401/403 JSON，页面 302 → /login?next=...
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        if is_public_path(path) or not auth_enabled(app_config):
+            await self.app(scope, receive, send)
+            return
+
+        if bypass_loopback(app_config) and is_loopback_host(_client_host(scope)):
+            await self.app(scope, receive, send)
+            return
+
+        record = None
+        token = _cookie_token(scope)
+        if token:
+            try:
+                record = db.get_session(hash_session_token(token))
+            except Exception:  # noqa: BLE001 - 会话库异常按未登录处理，避免 500
+                record = None
+
+        if record is None:
+            if path.startswith("/api/"):
+                response = JSONResponse({"detail": "需要登录", "login_url": "/login"}, status_code=401)
+            else:
+                response = RedirectResponse(f"/login?next={quote(path, safe='')}", status_code=302)
+            await response(scope, receive, send)
+            return
+
+        role = str(record.get("role") or "viewer")
+        if required_role(str(scope.get("method", "GET")), path) == "admin" and role != "admin":
+            response = JSONResponse({"detail": "权限不足（需要 admin 角色）"}, status_code=403)
+            await response(scope, receive, send)
+            return
+
+        state = scope.setdefault("state", {})
+        if isinstance(state, dict):
+            state["oa_user"] = {"username": record.get("username"), "role": role}
+        await self.app(scope, receive, send)
