@@ -197,6 +197,10 @@
         <div class="card-col wide">
           <div class="status-bar" id="inspect-status">{{ scheduler_status }}</div>
           <pre class="output-box" id="inspect-output">执行巡检后结果将显示在此处...</pre>
+          <div class="btn-row" style="margin-top:8px;">
+            <button class="btn btn-primary" onclick="rcaFromInspect()">🧠 一键根因分析</button>
+            <span style="font-size:12px;color:var(--text-secondary);">基于最近一次巡检结果 · 只读诊断</span>
+          </div>
         </div>
       </div>
     </div>
@@ -221,6 +225,7 @@
       <textarea id="log-input" placeholder="在此粘贴日志内容，或下方上传截图自动识别..." style="height:160px;width:100%;"></textarea>
       <div class="btn-row" style="margin-top:10px;">
         <button class="btn btn-primary" onclick="logAnalyze()">分析内容</button>
+        <button class="btn btn-primary" onclick="rcaFromLog()">🧠 发起根因分析</button>
         <button class="btn btn-primary" onclick="document.getElementById('log-image-input').click()">📷 识别截图</button>
         <input type="file" id="log-image-input" accept=".png,.jpg,.jpeg,.bmp,.tiff,.webp" onchange="logOCR()" style="display:none;">
         <button class="btn btn-danger" onclick="document.getElementById('log-input').value='';document.getElementById('log-output').textContent='';">清空</button>
@@ -1247,6 +1252,88 @@ function updateStatus() { get('/api/inspect/status').then(r => { document.getEle
 function logAnalyze() { var txt = document.getElementById('log-input').value; if(!txt.trim()) return; setLoading('log-output'); post('/api/log/analyze', {log_text: txt}).then(r => setOutput('log-output', r.result)); }
 function logOCR() { var f = document.getElementById('log-image-input').files[0]; if(!f) return; var fd = new FormData(); fd.append('file', f); document.getElementById('log-ocr-status').textContent = 'OCR 识别中...'; setLoading('log-output'); post('/api/log/ocr', fd).then(function(r) { if (r.error) { document.getElementById('log-ocr-status').textContent = '✗ 识别失败'; return; } var text = r.text || ''; document.getElementById('log-input').value = text; document.getElementById('log-ocr-status').textContent = '✓ 识别完成，' + text.length + ' 字'; document.getElementById('log-image-input').value = ''; setOutput('log-output', r.result); }); }
 
+ // ============ 根因诊断（第 4 周：只读一键分析；/api/v1/incidents/analyze）============
+var RCA_EVIDENCE_LABEL = {
+log_pattern: '日志匹配', inspection_metric: '巡检指标', kb_citation: '知识库引用',
+history_match: '历史故障', correlation: '多源互证', alert: '告警'
+};
+function rcaOpenModal() { document.getElementById('rca-modal').style.display = 'flex'; }
+function rcaCloseModal() { document.getElementById('rca-modal').style.display = 'none'; }
+function rcaFromLog() {
+var txt = document.getElementById('log-input').value;
+if (!txt.trim()) { showToast('请先粘贴或上传日志内容', 'error'); return; }
+rcaAnalyze({ log_text: txt });
+}
+function rcaFromInspect() {
+rcaAnalyze({ use_latest_inspection: true });
+}
+function rcaAnalyze(payload) {
+var body = document.getElementById('rca-modal-body');
+rcaOpenModal();
+body.innerHTML = '<div style="padding:28px;color:var(--text-secondary);">诊断中：标准化事件 → 关联 → 检索知识库 → 证据验证与排序…</div>';
+fetch('/api/v1/incidents/analyze', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify(payload)
+}).then(function (r) {
+return r.json().then(function (data) { if (!r.ok) { throw new Error((data && data.detail) || ('HTTP ' + r.status)); } return data; });
+}).then(function (resp) {
+if (!resp || !resp.report) { throw new Error('响应缺少 report 字段'); }
+rcaRender(resp.report);
+}).catch(function (err) {
+body.innerHTML = '<div style="padding:28px;color:var(--danger);">分析失败：' + escapeHtml(String((err && err.message) || err)) + '</div>';
+});
+}
+function rcaRender(report) {
+var ok = report.status === 'ok';
+var h = '';
+h += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">';
+h += '<span style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:' + (ok ? '#16a34a22' : '#f59e0b22') + ';color:' + (ok ? '#16a34a' : '#b45309') + ';">' + (ok ? '✓ 确定根因' : '⚠ 证据不足 · 不确定') + '</span>';
+h += '<span style="font-size:12px;color:var(--text-secondary);">' + escapeHtml(report.incident_id || '') + ' · ' + escapeHtml(report.created_at || '') + ' · 只读诊断（不自动执行修复）</span>';
+h += '</div>';
+if (ok && report.root_cause) {
+h += '<div style="padding:14px 16px;border-radius:10px;background:var(--bg-secondary);margin-bottom:14px;">';
+h += '<div style="font-size:18px;font-weight:700;color:var(--text-primary);">' + escapeHtml(report.root_cause.title || '') + '</div>';
+h += '<div style="margin-top:6px;font-size:13px;color:var(--text-secondary);">置信度 <b>' + Math.round((report.confidence || 0) * 100) + '%</b>' + (report.root_cause.category ? ' ｜ 类别 ' + escapeHtml(report.root_cause.category) : '') + '</div>';
+h += '</div>';
+} else {
+var reasons = (report.uncertain_reasons || []).map(function (x) { return '· ' + escapeHtml(x); }).join('<br>');
+h += '<div style="padding:12px 16px;border-radius:10px;background:#f59e0b14;color:#92400e;margin-bottom:14px;font-size:13px;line-height:1.7;">' + (reasons || '· 证据不足') + '</div>';
+}
+var ev = report.evidence || [];
+h += '<h4 style="margin:12px 0 6px;font-size:14px;">🔗 证据链（' + ev.length + ' 条）</h4>';
+ev.slice(0, 8).forEach(function (item, i) {
+var label = RCA_EVIDENCE_LABEL[item.kind] || item.kind;
+h += '<div style="border-left:3px solid var(--primary);padding:6px 10px;margin-bottom:6px;background:var(--bg-secondary);border-radius:0 8px 8px 0;font-size:13px;">';
+h += '<span style="color:var(--primary);font-weight:600;">[' + (i + 1) + '] ' + escapeHtml(label) + '</span>';
+if (item.source) { h += ' <span style="color:var(--text-secondary);">· ' + escapeHtml(item.source) + '</span>'; }
+h += '<div style="margin-top:4px;color:var(--text-primary);word-break:break-all;">' + escapeHtml(item.content || '') + '</div>';
+h += '</div>';
+});
+if (ev.length > 8) { h += '<div style="font-size:12px;color:var(--text-secondary);">… 另有 ' + (ev.length - 8) + ' 条证据，见诊断记录</div>'; }
+var alts = report.alternatives || [];
+if (alts.length) {
+h += '<h4 style="margin:12px 0 6px;font-size:14px;">🎯 备选原因</h4><ul style="margin:0;padding-left:20px;font-size:13px;color:var(--text-secondary);">';
+alts.slice(0, 4).forEach(function (c) { h += '<li>' + escapeHtml(c.title || c.cause_id) + '（' + Math.round((c.score || 0) * 100) + '%）</li>'; });
+h += '</ul>';
+}
+var sug = report.suggestions || [];
+h += '<h4 style="margin:12px 0 6px;font-size:14px;">🛠 处置建议（仅供参考，需人工执行）</h4><ol style="margin:0;padding-left:20px;font-size:13px;line-height:1.8;">';
+sug.forEach(function (s) { h += '<li>' + escapeHtml(s) + '</li>'; });
+h += '</ol>';
+var cites = report.citations || [];
+if (cites.length) {
+h += '<h4 style="margin:12px 0 6px;font-size:14px;">📚 引用资料</h4><div style="font-size:13px;color:var(--text-secondary);">' + cites.map(escapeHtml).join('　') + '</div>';
+}
+if (report.meta && report.meta.llm_narrative) {
+h += '<h4 style="margin:12px 0 6px;font-size:14px;">🤖 LLM 叙述（基于既有证据，不新增根因）</h4><div style="font-size:13px;color:var(--text-secondary);line-height:1.7;">' + escapeHtml(report.meta.llm_narrative) + '</div>';
+}
+if (report.meta && report.meta.degraded) {
+h += '<div style="margin-top:12px;font-size:12px;color:var(--text-secondary);">⚠ 知识库检索本次不可用/未就绪，报告基于规则信号与输入证据生成。</div>';
+}
+document.getElementById('rca-modal-body').innerHTML = h;
+}
+
 // ============ Chatbot ============
 
 var chatConversationId = null;
@@ -2209,6 +2296,17 @@ if (document.getElementById('page-dashboard').classList.contains('active')) {
   });
 }
 </script>
+
+<!-- 根因诊断报告弹窗（第 4 周） -->
+<div id="rca-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center;" onclick="if(event.target===this)rcaCloseModal()">
+  <div style="background:var(--card);border-radius:12px;width:85%;max-width:900px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border-color);">
+      <h3 style="margin:0;font-size:16px;">🧠 根因诊断报告 <span style="font-size:11px;color:var(--text-secondary);font-weight:400;">只读 · 证据可追溯</span></h3>
+      <button onclick="rcaCloseModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-secondary);line-height:1;">✕</button>
+    </div>
+    <div id="rca-modal-body" style="flex:1;overflow-y:auto;padding:20px;"></div>
+  </div>
+</div>
 
 <!-- 文档预览弹窗 -->
 <div id="doc-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center;" onclick="if(event.target===this)closeDocModal()">
