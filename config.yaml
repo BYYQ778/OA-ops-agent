@@ -32,11 +32,22 @@ server:
   port: 7860
   share: false                 # 是否生成公网分享链接
 
-# ---- 登录认证 ----
+# ---- 登录认证（第 5 周实际生效）----
 auth:
   enabled: true
+  bypass_loopback: true            # 回环（桌面壳/本机浏览器）直通；远端客户端必须登录
+  session_ttl_hours: 12            # 会话有效期（小时）
+  max_attempts_per_minute: 10      # 登录失败限速（次/分钟/IP）
+  # 单用户快捷写法（向后兼容，角色固定 admin）；多用户请用下方 users 列表
   username: admin
-  password: ${OA_AUTH_PASSWORD:admin123}  # 生产环境务必修改！
+  password: ${OA_AUTH_PASSWORD:}
+  # users:
+  #   - username: admin
+  #     password: ${OA_AUTH_PASSWORD:}          # 明文亦可；推荐 password_hash
+  #     role: admin                             # admin（全量）/ viewer（只读）
+  #   - username: viewer
+  #     password_hash: pbkdf2_sha256$200000$... # python scripts/hash_password.py 生成
+  #     role: viewer
 
 # ---- 巡检目标服务器 ----
 inspection:
@@ -158,8 +169,16 @@ knowledge_base:
 # ---- 日志配置 ----
 logging:
   level: INFO                   # DEBUG / INFO / WARNING / ERROR
+  format: text                  # text（默认）| json（结构化 JSON Lines；OA_LOG_FORMAT 可覆盖）
   dir: data/inspection_logs
   backup_days: 7
+
+# ---- 可观测性（第 5 周）----
+observability:
+  tracing:
+    enabled: false              # 启用需安装 opentelemetry-sdk（可选依赖，未装自动 no-op）
+    exporter: console           # console（本地调试）/ otlp
+    otlp_endpoint: ""           # exporter=otlp 时填写（可指向 Langfuse 等 OTLP 兼容端点）
 
 # ---- SSL/TLS 证书监控 ----
 ssl_monitor:

@@ -8,6 +8,7 @@ SQLite 持久化层，管理巡检记录、告警历史、日志分析记录。
 - alert_history: 告警记录（触发条件、通知状态）
 - log_analysis_records: 日志分析历史
 - incidents: 根因诊断报告（完整 JSON + 摘要列，第 4 周）
+- sessions / auth_events: 认证会话与登录审计（第 5 周）
 - conversations: 对话会话（标题、更新时间、消息数）
 - conversation_messages: 对话消息（role/content/顺序）
 
@@ -22,6 +23,7 @@ import atexit
 import sqlite3
 import json
 import threading
+import time
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
@@ -190,6 +192,32 @@ class Database:
 
                 CREATE INDEX IF NOT EXISTS idx_msg_conversation
                     ON conversation_messages(conversation_id, seq);
+
+                -- 会话表（第 5 周）：只存 token 的 sha256 哈希（库泄露也无法重放）
+                CREATE TABLE IF NOT EXISTS sessions (
+                    token_hash TEXT PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    client TEXT DEFAULT '',
+                    created_at REAL NOT NULL,          -- epoch 秒
+                    expires_at REAL NOT NULL           -- epoch 秒
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_sessions_expires
+                    ON sessions(expires_at);
+
+                -- 认证事件审计表（第 5 周）
+                CREATE TABLE IF NOT EXISTS auth_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts TEXT NOT NULL,
+                    event TEXT NOT NULL,               -- login_ok / login_fail / logout / login_rate_limited
+                    username TEXT DEFAULT '',
+                    client TEXT DEFAULT '',
+                    request_id TEXT DEFAULT ''
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_auth_events_ts
+                    ON auth_events(ts);
             """)
             conn.commit()
             logger.info("数据库表初始化完成")
@@ -503,6 +531,65 @@ class Database:
             """SELECT id, created_at, service, host, status, root_cause, root_title, confidence
                FROM incidents ORDER BY created_at DESC, rowid DESC LIMIT ?""",
             (limit,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    # ========== 认证会话与审计（第 5 周）==========
+
+    def create_session(self, token_hash: str, username: str, role: str, ttl_seconds: float, client: str = "") -> None:
+        """写入会话记录（同一 token_hash 覆盖；expires_at 为 epoch 秒）。"""
+        now = time.time()
+        with self._lock:
+            self._conn.execute(
+                """INSERT OR REPLACE INTO sessions
+                   (token_hash, username, role, client, created_at, expires_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (token_hash, username, role, client, now, now + float(ttl_seconds)),
+            )
+            self._conn.commit()
+
+    def get_session(self, token_hash: str, now: Optional[float] = None) -> Optional[Dict]:
+        """取会话；过期自动删除并返回 None。"""
+        moment = time.time() if now is None else now
+        cursor = self._conn.execute("SELECT * FROM sessions WHERE token_hash = ?", (token_hash,))
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        record = dict(row)
+        if float(record.get("expires_at") or 0) <= moment:
+            self.delete_session(token_hash)
+            return None
+        return record
+
+    def delete_session(self, token_hash: str) -> bool:
+        """删除会话；返回是否命中。"""
+        with self._lock:
+            cursor = self._conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
+            self._conn.commit()
+        return cursor.rowcount > 0
+
+    def delete_expired_sessions(self, now: Optional[float] = None) -> int:
+        """清理过期会话，返回清理条数。"""
+        moment = time.time() if now is None else now
+        with self._lock:
+            cursor = self._conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (moment,))
+            self._conn.commit()
+        return int(cursor.rowcount or 0)
+
+    def record_auth_event(self, event: str, username: str = "", client: str = "", request_id: str = "") -> None:
+        """记录认证事件（登录成功/失败/登出等，审计用）。"""
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO auth_events (ts, event, username, client, request_id) VALUES (?, ?, ?, ?, ?)",
+                (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(event), username, client, request_id),
+            )
+            self._conn.commit()
+
+    def list_auth_events(self, limit: int = 50) -> List[Dict]:
+        """最近的认证事件（倒序）。"""
+        cursor = self._conn.execute(
+            "SELECT id, ts, event, username, client, request_id FROM auth_events ORDER BY id DESC LIMIT ?",
+            (max(1, int(limit)),),
         )
         return [dict(row) for row in cursor.fetchall()]
 

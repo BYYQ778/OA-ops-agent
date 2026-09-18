@@ -30,6 +30,7 @@ from utils.database import db
 from utils.scheduler import InspectionScheduler
 from utils.dashboard import dashboard_manager
 from utils.metrics import init_default_metrics
+from utils.security import SecurityGateError, enforce_startup_security
 from utils.tracing import configure_tracing
 from ui.routers.incidents import create_incidents_router
 from ui.routers.system import create_system_router
@@ -967,6 +968,12 @@ async def api_commands():
 app = create_app()
 
 def run_server(host: str = "127.0.0.1", port: int = 7860, enable_background_services: bool | None = None):
+    try:
+        enforce_startup_security(app_config, host)
+    except SecurityGateError as exc:
+        print(f"[安全门禁] 拒绝启动：{exc}")
+        print("修复方式：在 .env 设置 OA_AUTH_PASSWORD（非默认强密码），或改绑 127.0.0.1（仅本机访问）。")
+        raise SystemExit(1) from None
     uvicorn.run(create_app(enable_background_services), host=host, port=port, log_level="info")
 
 
