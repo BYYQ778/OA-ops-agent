@@ -159,7 +159,9 @@ LLM 可选（`include_llm`，默认关）：只允许在已有证据/候选范�
   检索接入 / 78ed476+75f6c97 案例与实跑 / ba13f0a API / 2c5eb31 前端（tag ui-before-rca）/
   bceb216 缺陷修复。
 - 详情与口径: docs/reports/incident-rca-report.md；结果数据 evals/results/incidents-v1.json。
-- 待办: 推送 + 远端 CI（另行请示）；可选: jieba 转正、路由器重复检索优化、Ollama 对比跑。
+- 推送 + 远端 CI 已完成（2026-09-18，ssh-origin 直通；run 35309448459 双绿：
+  857 passed / TOTAL 80% + docker-core 冒烟）；可选: jieba 转正、路由器重复检索优化、
+  Ollama 对比跑。
 
 ## 验收对照
 

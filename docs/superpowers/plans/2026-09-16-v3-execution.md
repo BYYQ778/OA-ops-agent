@@ -74,6 +74,7 @@
   docs/reports/incident-rca-report.md（合成案例集，非生产数据）。
 - 验证: 857 passed（全离线）+ ruff 严格范围全绿 + pyright 全范围 0 错误 + 运行验证
   （服务 :7862 起，日志页/巡检页一键入口 DOM 断言 + 截图 + GLM-4V 目检全过）。
-- 待办: 推送 + 远端 CI（另行按授权执行）；可选: jieba 转正、路由器重复检索优化、
-  Ollama 对比跑。
+- 推送与 CI 核验已完成（2026-09-18 推送 feat/incident-rca，ssh-origin 直通；远端 CI
+  双绿 run 35309448459：quality 857 passed / **TOTAL 80%** + docker-core 健康冒烟通过）；
+  待办: 可选 jieba 转正、路由器重复检索优化、Ollama 对比跑。
 - 下一步: 第 5 周可观测性与安全（/metrics 扩展 OTel/Prometheus、结构化日志、鉴权）。

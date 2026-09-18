@@ -1243,6 +1243,7 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
 
 七、提交（feat/incident-rca，基于 9b3c5c5）
   见 git log（计划 → 模型 → 规则 → 管线 → 存储 → 检索接入 → 案例/实跑 → API →
-  前端 → 缺陷修复 → 文档）；推送待用户授权
+  前端 → 缺陷修复 → 文档）；**已推送（2026-09-18，ssh-origin 直通）：远端 CI 双绿
+  run 35309448459（quality 857 passed / TOTAL 80% + docker-core 冒烟）**
 
 回退: 全部改动在本 worktree/分支；UI 另有 tag ui-before-rca；回退 = git checkout 9b3c5c5
