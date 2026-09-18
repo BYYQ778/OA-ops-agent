@@ -8,6 +8,7 @@ OA运维助手 — FastAPI Web 服务端
 import os
 import sys
 from pathlib import Path
+from typing import Any, Callable, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -28,6 +29,7 @@ from utils.config import config as app_config
 from utils.database import db
 from utils.scheduler import InspectionScheduler
 from utils.dashboard import dashboard_manager
+from ui.routers.incidents import create_incidents_router
 from ui.routers.system import create_system_router
 
 logger = get_logger(__name__)
@@ -121,8 +123,14 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 legacy_router = APIRouter()
 
 
-def create_app(enable_background_services: bool | None = None) -> FastAPI:
-    """Create an application while allowing tests/demo mode to disable model startup."""
+def create_app(
+    enable_background_services: bool | None = None,
+    kb_agent_factory: Optional[Callable[[], Any]] | None = None,
+) -> FastAPI:
+    """Create an application while allowing tests/demo mode to disable model startup.
+
+    kb_agent_factory: 供 /api/v1 根因诊断取知识库检索器；None 时默认使用全局 get_kb_agent。
+    """
     if enable_background_services is None:
         enable_background_services = os.environ.get("OA_ENABLE_BACKGROUND_STARTUP", "1") != "0"
     application = FastAPI(title="OA 运维助手", version="2.5.0", lifespan=_lifespan)
@@ -130,6 +138,7 @@ def create_app(enable_background_services: bool | None = None) -> FastAPI:
 
     application.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
     application.include_router(create_system_router(Path(BASE_DIR), lambda: _kb_state))
+    application.include_router(create_incidents_router(kb_agent_factory or (lambda: get_kb_agent())))
     application.include_router(legacy_router)
     return application
 

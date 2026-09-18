@@ -20,7 +20,7 @@ RAG流程：
 import os
 import hashlib
 from datetime import datetime
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
@@ -664,6 +664,59 @@ class KnowledgeBaseAgent:
         except Exception as e:
             logger.error(f"检索失败: {e}")
             return f"检索出错: {str(e)}"
+
+    def retrieve(self, question: str, top_k: int = 5) -> Dict[str, Any]:
+        """结构化检索（不调用 LLM），供 /api/v1/rag/query 等程序化消费。
+
+        Returns:
+            {
+              "available": 混合检索是否可用（旧向量库/异常时为 False）,
+              "query": 规范化后的查询,
+              "refused": 证据是否不足（分层证据门）,
+              "refuse_message": 拒答文案,
+              "hits": [{source, text, score, bm25_score, chunk_uid}],
+              "citations": ["《文档名》", ...],
+              "context": 带精确引用的拼接上下文,
+            }
+        """
+        result = self._retrieve(question, top_k=top_k)
+        if result is None:
+            return {
+                "available": False,
+                "query": question,
+                "refused": False,
+                "refuse_message": "",
+                "hits": [],
+                "citations": [],
+                "context": "",
+            }
+
+        hits = [
+            {
+                "source": str(hit.metadata.get("source") or "未知"),
+                "text": hit.text,
+                "score": hit.dense_similarity,
+                "bm25_score": hit.bm25_score,
+                "chunk_uid": str(hit.metadata.get("chunk_uid") or ""),
+            }
+            for hit in result.hits
+        ]
+        citations: List[str] = []
+        for hit in result.hits:
+            source = str(hit.metadata.get("source") or "未知")
+            ref = source if source.startswith("《") else f"《{source}》"
+            if ref not in citations:
+                citations.append(ref)
+        context = format_citations(result.hits) if (result.hits and not result.refused) else ""
+        return {
+            "available": True,
+            "query": result.query,
+            "refused": result.refused,
+            "refuse_message": result.refuse_message or "",
+            "hits": hits,
+            "citations": citations,
+            "context": context,
+        }
 
     def import_document(self, file_path: str) -> str:
         """
