@@ -433,7 +433,9 @@ def test_run_ssh_inspection_auto_mode_falls_back_to_local(monkeypatch):
     assert result["mode"] == "local"
 
 
-def test_run_ssh_inspection_auto_mode_returns_ssh_error_when_local_also_fails(monkeypatch):
+def test_run_ssh_inspection_auto_mode_fails_honestly_when_all_sources_fail(monkeypatch):
+    """第 4 周行为确认：auto 的 SSH 与 local 全部失败时返回明确错误
+    （mode=auto、合并两路原因），不降级伪造模拟数据。"""
     _patch_config(monkeypatch, {
         "inspection.mode": "auto",
         "inspection.ssh_hosts": [{"name": "OA服务器9", "host": "192.0.2.29"}],
@@ -442,8 +444,9 @@ def test_run_ssh_inspection_auto_mode_returns_ssh_error_when_local_also_fails(mo
     monkeypatch.setattr(inspection_real, "LocalInspector", _BrokenLocalInspector)
     result = run_ssh_inspection()
     assert result["success"] is False
-    assert result["mode"] == "ssh"
+    assert result["mode"] == "auto"
     assert "SSH 连接超时" in result["error"]
+    assert "本机检测不可用" in result["error"]
 
 
 def test_try_local_inspection_builds_report_from_results(monkeypatch):
@@ -541,7 +544,8 @@ def test_local_check_nginx_running_via_sc_query(monkeypatch):
     })
     report = inspector.check_nginx()
     assert "  [正常] Nginx 进程运行中" in report
-    assert "  PID: " in report
+    assert "  PID: 4321" in report
+    assert "PID: K" not in report
 
 
 def test_local_check_nginx_detected_by_tasklist_only(monkeypatch):
@@ -576,6 +580,17 @@ def test_local_check_oa_service_with_java_process(monkeypatch):
     assert "  [正常] Java 进程运行中" in report
     assert "  Java 进程数: 1" in report
     assert "  内存: 1,234,567 KB" in report
+
+
+def test_local_check_oa_service_memory_without_unit_column(monkeypatch) -> None:
+    """第 4 周修复：内存列固定为第 5 列；旧实现按 parts[-2] 取值，
+    缺单位列时会误取「会话#」列。"""
+    inspector = _make_local_inspector()
+    tasklist_out = "java.exe 9876 Console 1 1,234,567"
+    _patch_run_cmd(monkeypatch, inspector, {"java.exe": tasklist_out})
+    report = inspector.check_oa_service()
+    assert "  内存: 1,234,567 KB" in report
+    assert "  内存: 1 KB" not in report
 
 
 def test_local_check_oa_service_without_java(monkeypatch):

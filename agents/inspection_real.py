@@ -6,7 +6,7 @@ SSH 真实巡检模块
 支持三种模式：
 - simulated: 使用随机模拟数据（默认，适合演示）
 - ssh: 通过 paramiko SSH 连接真实服务器
-- auto: 先尝试 SSH，失败则自动降级为模拟模式
+- auto: 先尝试 SSH，失败则尝试本机检测；全部失败时返回错误（不伪造模拟数据）
 
 SSH 连接支持：
 - 密码认证
@@ -455,7 +455,7 @@ def run_ssh_inspection() -> Dict:
     - simulated: 随机模拟数据
     - ssh: 远程SSH真实检测
     - local: 本机Windows命令真实检测
-    - auto: 优先SSH → local → 模拟（逐级降级）
+    - auto: 优先 SSH → local（逐级降级）；全部失败时返回错误信息（由上层展示，不伪造模拟数据）
     """
     mode = config.get("inspection.mode", "simulated")
 
@@ -517,12 +517,17 @@ def run_ssh_inspection() -> Dict:
             error_msg = "; ".join(errors) if errors else "SSH 连接失败"
             if mode == "ssh":
                 return {"success": False, "mode": "ssh", "error": error_msg}
-            # auto 模式 SSH 全部失败 → 尝试 local
+            # auto 模式 SSH 全部失败 → 尝试 local；全部失败则如实报错（不伪造模拟数据）
             logger.warning(f"SSH 全部失败 ({error_msg})，尝试本机检测...")
             local_result = _try_local_inspection()
             if local_result["success"]:
                 return local_result
-            return {"success": False, "mode": "ssh", "error": error_msg}
+            local_error = str(local_result.get("error") or "本机检测失败")
+            return {
+                "success": False,
+                "mode": "auto",
+                "error": f"SSH 与本地检测均失败 — SSH: {error_msg}；本地: {local_error}",
+            }
 
     # ---- 未识别的模式 ----
     return {"success": True, "mode": "simulated", "results": [], "report": ""}
@@ -605,12 +610,12 @@ class LocalInspector:
         lines = [f"[{self.hostname}] Nginx服务检测:"]
         if "RUNNING" in sc_out or "nginx.exe" in task_out:
             lines.append("  [正常] Nginx 进程运行中")
-            # 提取 PID
+            # 提取 PID（tasklist 列: 映像名称 PID 会话名 会话# 内存使用；PID 固定第 2 列）
             for line in task_out.split("\n"):
                 if "nginx.exe" in line:
                     parts = line.split()
-                    if len(parts) >= 2:
-                        lines.append(f"  PID: {parts[-1]}")
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        lines.append(f"  PID: {parts[1]}")
                     break
         else:
             lines.append("  [信息] Nginx 未安装或未运行")
@@ -630,8 +635,9 @@ class LocalInspector:
             for line in out.split("\n"):
                 if "java.exe" in line:
                     parts = line.split()
-                    if len(parts) >= 5:
-                        lines.append(f"  内存: {parts[-2]} KB")
+                    # tasklist 列: 映像名称 PID 会话名 会话# 内存使用 [单位]；内存固定第 5 列
+                    if len(parts) >= 5 and parts[4].replace(",", "").isdigit():
+                        lines.append(f"  内存: {parts[4]} KB")
                     break
         else:
             lines.append("  [信息] 未检测到 Java 进程")

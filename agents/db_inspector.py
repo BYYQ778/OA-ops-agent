@@ -850,7 +850,10 @@ def check_oracle_status(config_text: str) -> str:
                 row = row.strip()
                 if row and "ORA-" not in row:
                     if "LOG_MODE:" in row:
-                        if "ARCHIVELOG" in row.upper():
+                        upper_row = row.upper()
+                        if "NOARCHIVELOG" in upper_row:
+                            lines.append(f"🔴 {row} (未开启归档模式，建议立即开启！)")
+                        elif "ARCHIVELOG" in upper_row:
                             lines.append(f"✅ {row}")
                         else:
                             lines.append(f"🔴 {row} (建议开启归档模式！)")

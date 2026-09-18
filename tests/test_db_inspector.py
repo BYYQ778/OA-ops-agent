@@ -709,9 +709,9 @@ def test_oracle_status_full_report(monkeypatch) -> None:
     assert "   ARCHIVE_DEST: LOG_ARCHIVE_DEST_3 | STATUS: DEFERRED" in report
 
 
-def test_oracle_status_misreports_noarchivelog_as_safe(monkeypatch) -> None:
-    """已知缺陷（随交付汇报）：判定用 "ARCHIVELOG" in row.upper() 做子串匹配，
-    NOARCHIVELOG 同样命中，未开归档被误报为 ✅，🔴 分支对真实 log_mode 不可达。"""
+def test_oracle_status_flags_noarchivelog(monkeypatch) -> None:
+    """第 4 周修复：此前用子串 "ARCHIVELOG" in row.upper() 判定，NOARCHIVELOG
+    同样命中被误报为 ✅；现明确识别 NOARCHIVELOG 并给出 🔴 与开启归档建议。"""
     router = _oracle_router(
         sessions="37 total sessions\nORA-00942: table or view does not exist",
         archive="LOG_MODE: NOARCHIVELOG",
@@ -720,8 +720,9 @@ def test_oracle_status_misreports_noarchivelog_as_safe(monkeypatch) -> None:
 
     report = db.check_oracle_status.invoke({"config_text": "host=ora01 user=system password=x"})
 
-    assert "✅ LOG_MODE: NOARCHIVELOG" in report
-    assert "建议开启归档模式" not in report
+    assert "🔴 LOG_MODE: NOARCHIVELOG" in report
+    assert "未开启归档模式" in report
+    assert "✅ LOG_MODE" not in report
     assert "ORA-00942" not in report
     assert "目标: ora01:1521/orcl" in report
 

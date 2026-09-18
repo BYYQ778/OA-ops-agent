@@ -469,7 +469,7 @@ def run_unified_inspection() -> str:
                     report_lines.append(ai_report)
                 return "\n".join(report_lines)
 
-            elif ssh_result["mode"] == "ssh" and not ssh_result.get("success"):
+            elif ssh_result["mode"] in ("ssh", "auto") and not ssh_result.get("success"):
                 report_lines.append("OA系统巡检报告（SSH 连接失败）")
                 report_lines.append(f"巡检时间: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 report_lines.append("=" * 55)
