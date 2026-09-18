@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 from agents.incident_agent import analyze_incident
 from evals.incident_cases import IncidentCase, load_incident_cases, validate_incident_cases
@@ -9,7 +10,7 @@ from evals.incident_runner import evaluate_case, run_incident_eval, summarize
 
 DISK_LOG = "2026-09-18 09:12:44 [FATAL] No space left on device - /data/logs/oa.log"
 
-OK_CASE = {
+OK_CASE: dict[str, Any] = {
     "id": "t-ok-1",
     "category": "resource",
     "title": "磁盘写满",
@@ -19,6 +20,12 @@ OK_CASE = {
     "expected_keywords": ["No space left on device"],
     "log_text": DISK_LOG + "\n2026-09-18 09:13:02 [ERROR] No space left on device - /data/upload",
 }
+
+
+def _case(**overrides: Any) -> IncidentCase:
+    data: dict[str, Any] = dict(OK_CASE)
+    data.update(overrides)
+    return IncidentCase(**data)
 
 
 def _write_jsonl(tmp_path: Path, rows: list) -> Path:
@@ -53,7 +60,8 @@ def test_load_and_validate_valid_case(tmp_path: Path) -> None:
 
 
 def test_load_rejects_unknown_field(tmp_path: Path) -> None:
-    bad = dict(OK_CASE, unexpected_key=1)
+    bad: dict[str, Any] = dict(OK_CASE)
+    bad["unexpected_key"] = 1
     path = _write_jsonl(tmp_path, [bad])
     try:
         load_incident_cases(path)
@@ -79,31 +87,29 @@ def test_validate_catches_structural_errors() -> None:
 
 
 def test_validate_catches_keyword_not_in_input() -> None:
-    bad = dict(OK_CASE, expected_keywords=["不存在的锚点"])
-    cases = [IncidentCase(**bad)]
+    cases = [_case(expected_keywords=["不存在的锚点"])]
     errors, _warnings, _stats = validate_incident_cases(cases, min_cases=1)
     assert any("锚点未出现在输入中" in err for err in errors)
 
 
 def test_validate_warns_on_single_signal() -> None:
-    weak = {
-        "id": "t-weak",
-        "category": "oa_service",
-        "title": "单条弱信号",
-        "expected_status": "ok",
-        "expected_cause_id": "service_down",
-        "expected_keywords": ["Connection refused"],
-        "log_text": "2026-09-18 [WARN] Connection refused",
-    }
-    cases = [IncidentCase(**weak)]
+    cases = [
+        _case(
+            id="t-weak",
+            category="oa_service",
+            title="单条弱信号",
+            expected_cause_id="service_down",
+            expected_keywords=["Connection refused"],
+            log_text="2026-09-18 [WARN] Connection refused",
+        )
+    ]
     errors, warnings, _stats = validate_incident_cases(cases, min_cases=1)
     assert errors == []
     assert any("信号证据仅" in w for w in warnings)
 
 
 def test_validate_enforces_min_cases() -> None:
-    cases = [IncidentCase(id="a", category="resource", title="x", expected_cause_id="disk_full",
-                          expected_keywords=["No space"], log_text="No space left on device")]
+    cases = [_case(id="a", expected_keywords=["No space"], log_text="No space left on device")]
     errors, _warnings, _stats = validate_incident_cases(cases, min_cases=30)
     assert any("案例总数" in err for err in errors)
 
@@ -113,21 +119,22 @@ def test_validate_enforces_min_cases() -> None:
 
 def test_runner_metrics_with_real_analyze() -> None:
     cases = [
-        IncidentCase(**OK_CASE),
-        IncidentCase(
+        _case(),
+        _case(
             id="t-wrong",
             category="oa_service",
             title="预期错误（输入为磁盘问题）",
-            expected_status="ok",
             expected_cause_id="oom",
             expected_keywords=["No space left on device"],
             log_text=DISK_LOG,
         ),
-        IncidentCase(
+        _case(
             id="t-uncertain",
             category="resource",
             title="无信号",
             expected_status="uncertain",
+            expected_cause_id="",
+            expected_keywords=[],
             log_text="2026-09-18 [INFO] 一切正常",
         ),
     ]
@@ -143,8 +150,8 @@ def test_runner_metrics_with_real_analyze() -> None:
 
 def test_runner_split_filter() -> None:
     cases = [
-        IncidentCase(**OK_CASE),
-        IncidentCase(**dict(OK_CASE, id="t-ok-2", split="holdout")),
+        _case(),
+        _case(id="t-ok-2", split="holdout"),
     ]
     summary = run_incident_eval(cases, _analyze, split="holdout")
     assert summary["counts"]["total"] == 1
@@ -159,11 +166,11 @@ def test_evaluate_case_flags_report_violation() -> None:
     class FakeReport:
         status = type("S", (), {"value": "ok"})()
         root_cause = FakeRoot()
-        suggestions = []
-        citations = []
+        suggestions: list = []
+        citations: list = []
         meta = {"signals": 1, "kb_assigned": 0, "duration_ms": 5}
 
-    row = evaluate_case(IncidentCase(**OK_CASE), FakeReport())
+    row = evaluate_case(_case(), FakeReport())
     assert row["evidence_ok"] is False
     assert row["suggestions_ok"] is False
     assert row["top1_hit"] is True
