@@ -32,6 +32,7 @@ from utils.dashboard import dashboard_manager
 from utils.metrics import init_default_metrics
 from utils.security import SecurityGateError, enforce_startup_security
 from utils.tracing import configure_tracing
+from ui.routers.auth import create_auth_router
 from ui.routers.incidents import create_incidents_router
 from ui.routers.system import create_system_router
 from ui.middleware import MetricsMiddleware, RequestContextMiddleware
@@ -130,10 +131,12 @@ legacy_router = APIRouter()
 def create_app(
     enable_background_services: bool | None = None,
     kb_agent_factory: Optional[Callable[[], Any]] | None = None,
+    auth_router_factory: Optional[Callable[[], APIRouter]] | None = None,
 ) -> FastAPI:
     """Create an application while allowing tests/demo mode to disable model startup.
 
     kb_agent_factory: 供 /api/v1 根因诊断取知识库检索器；None 时默认使用全局 get_kb_agent。
+    auth_router_factory: 供测试注入认证依赖（假用户/限速器）；None 时按默认配置构建。
     """
     if enable_background_services is None:
         enable_background_services = os.environ.get("OA_ENABLE_BACKGROUND_STARTUP", "1") != "0"
@@ -147,6 +150,7 @@ def create_app(
 
     application.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
     application.include_router(create_system_router(Path(BASE_DIR), lambda: _kb_state))
+    application.include_router(auth_router_factory() if auth_router_factory is not None else create_auth_router())
     application.include_router(create_incidents_router(kb_agent_factory or (lambda: get_kb_agent())))
     application.include_router(legacy_router)
     return application
