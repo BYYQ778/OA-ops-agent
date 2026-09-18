@@ -12,16 +12,17 @@ import time
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from utils.logger import get_logger
+from utils.metrics import metrics, normalize_route
 from utils.request_context import new_request_id, reset_request_id, set_request_id
 
 _access_logger = get_logger("oa.access")
 
-#: 访问日志静默路径（静态资源与开发热刷新轮询，避免噪音）
+#: 遥测静默路径（静态资源与开发热刷新轮询，避免噪音与基数浪费）
 _SILENT_PREFIXES = ("/static/", "/favicon.ico")
 _SILENT_EXACT = {"/api/dev/version"}
 
 
-def _should_log_access(path: str) -> bool:
+def _should_track(path: str) -> bool:
     if path in _SILENT_EXACT:
         return False
     return not path.startswith(_SILENT_PREFIXES)
@@ -54,7 +55,7 @@ class RequestContextMiddleware:
                 message["headers"] = headers
             elif message["type"] == "http.response.body" and not message.get("more_body") and not logged:
                 logged = True
-                if _should_log_access(path):
+                if _should_track(path):
                     duration_ms = (time.perf_counter() - start) * 1000
                     client = scope.get("client")
                     client_host = client[0] if client else ""
@@ -69,3 +70,38 @@ class RequestContextMiddleware:
             await self.app(scope, receive, send_wrapper)
         finally:
             reset_request_id(token)
+
+
+class MetricsMiddleware:
+    """统计 HTTP 请求计数与时长（路由名归一化，防标签基数爆炸）。"""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        if not _should_track(path):
+            await self.app(scope, receive, send)
+            return
+
+        method = str(scope.get("method", "?"))
+        start = time.perf_counter()
+        status_code = 500
+        recorded = False
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status_code, recorded
+            if message["type"] == "http.response.start":
+                status_code = int(message.get("status", 500))
+            elif message["type"] == "http.response.body" and not message.get("more_body") and not recorded:
+                recorded = True
+                labels = {"method": method, "route": normalize_route(path)}
+                metrics.inc_labeled("oa_http_requests_total", {**labels, "status": str(status_code)})
+                metrics.observe("oa_http_request_duration_seconds", time.perf_counter() - start, labels)
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)

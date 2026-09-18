@@ -29,9 +29,10 @@ from utils.config import config as app_config
 from utils.database import db
 from utils.scheduler import InspectionScheduler
 from utils.dashboard import dashboard_manager
+from utils.metrics import init_default_metrics
 from ui.routers.incidents import create_incidents_router
 from ui.routers.system import create_system_router
-from ui.middleware import RequestContextMiddleware
+from ui.middleware import MetricsMiddleware, RequestContextMiddleware
 
 logger = get_logger(__name__)
 
@@ -136,7 +137,10 @@ def create_app(
         enable_background_services = os.environ.get("OA_ENABLE_BACKGROUND_STARTUP", "1") != "0"
     application = FastAPI(title="OA 运维助手", version="2.5.0", lifespan=_lifespan)
     application.state.enable_background_services = enable_background_services
+    # 注意：starlette 的 add_middleware 后加的更外层；顺序 = 请求上下文 → 指标 → 路由
+    application.add_middleware(MetricsMiddleware)
     application.add_middleware(RequestContextMiddleware)
+    init_default_metrics("2.5.0")
 
     application.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
     application.include_router(create_system_router(Path(BASE_DIR), lambda: _kb_state))
