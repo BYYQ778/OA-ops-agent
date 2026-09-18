@@ -14,6 +14,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from utils.logger import get_logger
 from utils.metrics import metrics, normalize_route
 from utils.request_context import new_request_id, reset_request_id, set_request_id
+from utils.tracing import span as tracing_span
 
 _access_logger = get_logger("oa.access")
 
@@ -45,6 +46,7 @@ class RequestContextMiddleware:
         status_code = 500
         logged = False
         path = scope.get("path", "")
+        method = str(scope.get("method", "?"))
 
         async def send_wrapper(message: Message) -> None:
             nonlocal status_code, logged
@@ -61,13 +63,16 @@ class RequestContextMiddleware:
                     client_host = client[0] if client else ""
                     _access_logger.info(
                         "%s %s -> %d %.1fms client=%s req=%s",
-                        scope.get("method", "?"), path, status_code,
+                        method, path, status_code,
                         duration_ms, client_host, request_id,
                     )
             await send(message)
 
         try:
-            await self.app(scope, receive, send_wrapper)
+            with tracing_span("http.request", {"http.method": method, "http.path": path}) as active:
+                await self.app(scope, receive, send_wrapper)
+                if active is not None:
+                    active.set_attribute("http.status_code", status_code)
         finally:
             reset_request_id(token)
 

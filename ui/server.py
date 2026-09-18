@@ -30,6 +30,7 @@ from utils.database import db
 from utils.scheduler import InspectionScheduler
 from utils.dashboard import dashboard_manager
 from utils.metrics import init_default_metrics
+from utils.tracing import configure_tracing
 from ui.routers.incidents import create_incidents_router
 from ui.routers.system import create_system_router
 from ui.middleware import MetricsMiddleware, RequestContextMiddleware
@@ -141,6 +142,7 @@ def create_app(
     application.add_middleware(MetricsMiddleware)
     application.add_middleware(RequestContextMiddleware)
     init_default_metrics("2.5.0")
+    configure_tracing()
 
     application.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
     application.include_router(create_system_router(Path(BASE_DIR), lambda: _kb_state))

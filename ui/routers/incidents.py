@@ -19,6 +19,7 @@ from agents.incident_agent import analyze_incident
 from agents.incident_kb import RetrievalKbAdapter
 from utils.database import db
 from utils.metrics import metrics
+from utils.tracing import span as tracing_span
 
 #: 评测结果目录（源码运行 = 仓库 evals/results；冻结版缺失 → available=false）
 RESULTS_DIR = Path(__file__).resolve().parents[2] / "evals" / "results"
@@ -85,15 +86,16 @@ def create_incidents_router(kb_agent_factory: Optional[Callable[[], Any]] = None
         if payload.include_llm and kb_agent is not None:
             narrator = _build_llm_narrator(kb_agent)
 
-        report = analyze_incident(
-            log_text=payload.log_text,
-            inspection_results=inspection or None,
-            alerts=payload.alerts or None,
-            service=payload.service,
-            host=payload.host,
-            retriever=retriever,
-            llm_narrator=narrator,
-        )
+        with tracing_span("incident.analyze", {"incident.service": payload.service, "incident.host": payload.host}):
+            report = analyze_incident(
+                log_text=payload.log_text,
+                inspection_results=inspection or None,
+                alerts=payload.alerts or None,
+                service=payload.service,
+                host=payload.host,
+                retriever=retriever,
+                llm_narrator=narrator,
+            )
         if payload.include_llm and narrator is None:
             report.meta["llm_note"] = "LLM 叙述不可用（未配置或知识库引擎未就绪），已返回确定性报告"
 
@@ -135,7 +137,8 @@ def create_incidents_router(kb_agent_factory: Optional[Callable[[], Any]] = None
                 "refused": False,
             }
         top_k = max(1, min(int(payload.top_k), 20))
-        outcome = kb_agent.retrieve(payload.question, top_k=top_k)
+        with tracing_span("rag.query", {"rag.question_len": len(payload.question), "rag.top_k": top_k}):
+            outcome = kb_agent.retrieve(payload.question, top_k=top_k)
         if outcome.get("refused"):
             metrics.inc("oa_rag_query_refused_total")
         return outcome
