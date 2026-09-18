@@ -139,18 +139,27 @@ LLM 可选（`include_llm`，默认关）：只允许在已有证据/候选范�
 
 ## 九、实施步骤（TDD；每步自审后提交）
 
-- [ ] 0. 环境基线：worktree#4 + uv venv + 全量冒烟（759 passed 预期）
-- [ ] 1. incident_models.py + 单测（证据纪律在模型层）
-- [ ] 2. incident_rules.py（日志/巡检/告警信号；补 Oracle/SQLServer 规则）+ 单测
-- [ ] 3. incident_agent.py 管线（标准化/关联/候选/排序/报告）+ 单测（fakes）
-- [ ] 4. database.py incidents 表 + 存取方法 + 单测
-- [ ] 5. 知识检索接入（HybridRetriever 复用 + 引用进证据链）+ 历史故障检索 + 单测
-- [ ] 6. 案例集 ≥30 + 校验器 + run_incident_eval 实跑 → Top-1 目标 ≥80%
-- [ ] 7. /api/v1 路由（incidents/rag/evals/metrics）+ API 单测 + 兼容回归
-- [ ] 8. 前端一键入口 + 视觉验证（tag 可回退）
-- [ ] 9. e/f 缺陷修复 + 测试兜底
-- [ ] 10. 全量验证（pytest/ruff/pyright/compileall + 运行验证）→ 文档同步
-      → 推送按惯例另行请示
+- [x] 0. 环境基线：worktree#4 + uv venv + 全量冒烟（759 passed 预期）
+- [x] 1. incident_models.py + 单测（证据纪律在模型层）
+- [x] 2. incident_rules.py（日志/巡检/告警信号；补 Oracle/SQLServer 规则）+ 单测
+- [x] 3. incident_agent.py 管线（标准化/关联/候选/排序/报告）+ 单测（fakes）
+- [x] 4. database.py incidents 表 + 存取方法 + 单测
+- [x] 5. 知识检索接入（HybridRetriever 复用 + 引用进证据链）+ 历史故障检索 + 单测
+- [x] 6. 案例集 ≥30 + 校验器 + run_incident_eval 实跑 → Top-1 目标 ≥80%
+- [x] 7. /api/v1 路由（incidents/rag/evals/metrics）+ API 单测 + 兼容回归
+- [x] 8. 前端一键入口 + 视觉验证（tag 可回退）
+- [x] 9. e/f 缺陷修复 + 测试兜底
+- [x] 10. 全量验证（pytest/ruff/pyright/compileall + 运行验证）→ 文档同步
+
+## 完成情况（2026-09-18，本地全部完成）
+
+- 11 步全部完成；857 passed（全离线）/ ruff 严格范围全绿 / pyright 全范围 0 错误。
+- 实跑: Top-1 30/30（dev25/25、holdout5/5）｜不确定判定 5/5｜报告违规 0｜平均 198ms/条。
+- 主要提交: d055351 模型 / a38b83f 规则 / 54fb4f3 管线 / 130fb57 存储 / 6cb260e
+  检索接入 / 78ed476+75f6c97 案例与实跑 / ba13f0a API / 2c5eb31 前端（tag ui-before-rca）/
+  bceb216 缺陷修复。
+- 详情与口径: docs/reports/incident-rca-report.md；结果数据 evals/results/incidents-v1.json。
+- 待办: 推送 + 远端 CI（另行请示）；可选: jieba 转正、路由器重复检索优化、Ollama 对比跑。
 
 ## 验收对照
 
