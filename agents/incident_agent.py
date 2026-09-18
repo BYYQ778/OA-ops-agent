@@ -36,6 +36,8 @@ MIN_ROOT_SCORE = 0.6
 KB_TOP_K = 3
 #: KB 片段与候选标题的 2-gram 重合数达到该值才认为相关
 KB_TITLE_OVERLAP_MIN = 2
+#: 历史故障条目处理条数上限
+HISTORY_MAX_ENTRIES = 20
 
 #: 各候选根因的标准处置建议（报告用；root/最高候选命中）
 CAUSE_SUGGESTIONS: Dict[str, tuple[str, ...]] = {
@@ -382,14 +384,18 @@ def analyze_incident(
                 citations.append(doc_ref)
             kb_assigned += 1
 
-    # ---- 历史故障增强（可选） ----
+    # ---- 历史故障增强（可选；同一原因只取最早一条，防重复刷分） ----
     history_matched = 0
+    history_seen: set = set()
     if history and candidates:
-        for entry in history:
+        for entry in list(history)[:HISTORY_MAX_ENTRIES]:
             cause_id = _history_cause_id(entry)
+            if cause_id in history_seen:
+                continue
             target = next((c for c in candidates if c.cause_id == cause_id), None)
             if target is None:
                 continue
+            history_seen.add(cause_id)
             incident_ref = str(entry.get("incident_id") or "历史诊断")
             item = Evidence(
                 kind=EvidenceKind.history_match,
