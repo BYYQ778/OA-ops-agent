@@ -47,6 +47,7 @@ class EvidenceKind(str, Enum):
     kb_citation = "kb_citation"
     history_match = "history_match"
     correlation = "correlation"
+    alert = "alert"
 
 
 class ReportStatus(str, Enum):

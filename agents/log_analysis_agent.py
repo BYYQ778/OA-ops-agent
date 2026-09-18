@@ -182,6 +182,44 @@ FAULT_RULES: List[Tuple[str, str, str, List[str]]] = [
             "排查是否有文件句柄泄漏（打开未关闭的socket/文件）",
         ]
     ),
+    # ---- Oracle 表空间不足（2026-09-18 补，原 P3 遗留） ----
+    (
+        r"(ORA-01653|ORA-01654|ORA-01652|表空间.*(?:不足|无法扩展|已满))",
+        "Oracle表空间不足",
+        "高",
+        [
+            "查看表空间使用率: SELECT tablespace_name, used_percent FROM dba_tablespace_usage_metrics",
+            "根据 ORA-01653 报错中的表名定位所在表空间",
+            "为表空间添加数据文件: ALTER TABLESPACE <ts> ADD DATAFILE '<path>' SIZE 2G AUTOEXTEND ON",
+            "清理历史数据或将大表迁移到新表空间",
+            "排查异常增长对象: SELECT segment_name, bytes/1024/1024 mb FROM user_segments ORDER BY mb DESC",
+        ]
+    ),
+    # ---- Oracle 快照过旧（UNDO 不足） ----
+    (
+        r"(ORA-01555|snapshot\s+too\s+old)",
+        "Oracle快照过旧（UNDO不足）",
+        "中",
+        [
+            "检查 UNDO 表空间使用情况: SELECT * FROM v$undostat",
+            "排查执行时间过长的查询或批处理任务",
+            "适当增大 UNDO 表空间与 undo_retention 参数",
+            "确认是否存在未提交的长事务持续占用回滚段",
+        ]
+    ),
+    # ---- SQL Server 事务日志已满 ----
+    (
+        r"(Msg\s*9002|错误\s*9002|The\s+transaction\s+log\s+for\s+database|事务日志.*已满)",
+        "SQLServer事务日志已满",
+        "高",
+        [
+            "查看各库日志空间使用: DBCC SQLPERF(LOGSPACE)",
+            "确认数据库恢复模式: SELECT name, recovery_model_desc FROM sys.databases",
+            "执行事务日志备份以截断（完整恢复模式）: BACKUP LOG <db> TO DISK='<path>'",
+            "如无需时点恢复，切换简单恢复模式: ALTER DATABASE <db> SET RECOVERY SIMPLE",
+            "排查长时间未提交的事务或异常大的批量操作",
+        ]
+    ),
 ]
 
 
