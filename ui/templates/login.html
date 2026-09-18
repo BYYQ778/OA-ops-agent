@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - OA运维Agent</title>
+  <style>
+    :root { --bg:#0f1115; --card:#171a21; --border:#262b36; --text:#e6e9ef; --muted:#8b93a3; --primary:#4f8cff; --danger:#ff5c5c; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+      background:radial-gradient(1200px 600px at 50% -10%, #1b2233 0%, var(--bg) 55%);
+      color:var(--text); font-family:"Segoe UI","Microsoft YaHei",sans-serif; }
+    .login-card { width:360px; background:var(--card); border:1px solid var(--border); border-radius:14px;
+      padding:32px 28px; box-shadow:0 24px 64px rgba(0,0,0,.45); }
+    .login-logo { font-size:34px; text-align:center; margin-bottom:6px; }
+    h1 { font-size:18px; margin:0 0 4px; text-align:center; }
+    .subtitle { color:var(--muted); font-size:12px; text-align:center; margin-bottom:22px; }
+    label { display:block; font-size:12px; color:var(--muted); margin:12px 0 6px; }
+    input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+      background:#10131a; color:var(--text); font-size:14px; outline:none; }
+    input:focus { border-color:var(--primary); }
+    #login-submit { width:100%; margin-top:18px; padding:11px; border:none; border-radius:8px;
+      background:var(--primary); color:#fff; font-size:14px; cursor:pointer; }
+    #login-submit:disabled { opacity:.6; cursor:not-allowed; }
+    .error { display:none; margin-top:14px; padding:9px 12px; border-radius:8px;
+      background:rgba(255,92,92,.12); border:1px solid rgba(255,92,92,.4); color:var(--danger); font-size:12.5px; }
+    .footer { margin-top:18px; text-align:center; color:var(--muted); font-size:11px; }
+  </style>
+</head>
+<body>
+  <form class="login-card" id="login-form">
+    <div class="login-logo">🛠️</div>
+    <h1>OA运维Agent</h1>
+    <div class="subtitle">请登录以继续（远端访问已启用认证）</div>
+    <label for="username">用户名</label>
+    <input id="username" name="username" autocomplete="username" required>
+    <label for="password">密码</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit" id="login-submit">登 录</button>
+    <div class="error" id="login-error"></div>
+    <div class="footer">v{{ version }} · 本机回环访问可免登录</div>
+  </form>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var next = params.get('next') || '/';
+      if (next.charAt(0) !== '/') next = '/';
+      var errorBox = document.getElementById('login-error');
+      var submit = document.getElementById('login-submit');
+      function showError(text) { errorBox.textContent = text; errorBox.style.display = 'block'; }
+      // 已有会话则直接进入目标页
+      fetch('/api/auth/session').then(function (r) { return r.json(); }).then(function (info) {
+        if (info && info.authenticated && info.mode === 'session') location.href = next;
+      }).catch(function () {});
+      document.getElementById('login-form').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        errorBox.style.display = 'none';
+        submit.disabled = true;
+        submit.textContent = '登录中...';
+        try {
+          var resp = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: document.getElementById('username').value,
+              password: document.getElementById('password').value
+            })
+          });
+          if (resp.ok) { location.href = next; return; }
+          if (resp.status === 401) showError('用户名或密码错误');
+          else if (resp.status === 429) showError('尝试过于频繁，请稍后再试');
+          else showError('登录失败（HTTP ' + resp.status + '）');
+        } catch (e) {
+          showError('网络错误，请重试');
+        } finally {
+          submit.disabled = false;
+          submit.textContent = '登 录';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

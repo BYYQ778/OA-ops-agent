@@ -180,6 +180,15 @@ async def index(request: Request):
     return HTMLResponse(html)
 
 
+@legacy_router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """登录页（第 5 周；认证门对远端未登录页面的跳转目标）。"""
+    import time
+    template = templates.get_template("login.html")
+    html = template.render(version="2.5.0", cache_buster=str(int(time.time())))
+    return HTMLResponse(html)
+
+
 
 # ============ 巡检 API ============
 

@@ -137,3 +137,11 @@ def test_bypass_loopback_disabled_strict_mode(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr("ui.middleware.bypass_loopback", lambda cfg: False)
     client = TestClient(_fake_app())  # 主机为 testclient，但严格模式下不再直通
     assert client.get("/api/v1/incidents").status_code == 401
+
+
+def test_login_page_renders_anonymously() -> None:
+    client = _remote(_fake_app())
+    response = client.get("/login")
+    assert response.status_code == 200
+    assert "login-form" in response.text
+    assert "OA运维Agent" in response.text

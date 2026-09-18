@@ -96,6 +96,11 @@
     <span class="dot {{ 'dot-online' if is_running else 'dot-offline' }}"></span>
     <span id="scheduler-status-text">{{ scheduler_status }}</span>
   </div>
+  <div class="sidebar-session" id="session-box" style="display:none;align-items:center;gap:8px;">
+    <span class="dot dot-online"></span>
+    <span id="session-user" style="font-size:12px;color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">-</span>
+    <a href="#" onclick="logoutSession();return false;" style="font-size:12px;color:var(--primary);text-decoration:none;">登出</a>
+  </div>
 </nav>
 
 <!-- ===== Main Content ===== -->
@@ -2327,6 +2332,44 @@ document.addEventListener('DOMContentLoaded', function() {
     el.setAttribute('autocomplete', 'off');
   });
 });
+</script>
+
+<script>
+// ============ 会话（第 5 周）：登录态展示 + 401 兜底跳转 ============
+function refreshSession() {
+  fetch('/api/auth/session').then(function (resp) { return resp.ok ? resp.json() : null; }).then(function (info) {
+    var box = document.getElementById('session-box');
+    if (!box || !info) return;
+    if (info.mode === 'session' && info.authenticated) {
+      box.style.display = 'flex';
+      var user = document.getElementById('session-user');
+      if (user) user.textContent = info.username + '（' + (info.role || 'viewer') + '）';
+    } else {
+      box.style.display = 'none';
+    }
+  }).catch(function () {});
+}
+function logoutSession() {
+  fetch('/api/auth/logout', { method: 'POST' }).catch(function () {}).finally(function () {
+    location.href = '/login';
+  });
+}
+(function installAuthRedirect() {
+  // 会话失效（远端场景）时任意 API 的 401 都跳登录页；auth 接口自身除外，避免循环。
+  var originalFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    return originalFetch(input, init).then(function (resp) {
+      try {
+        var url = (typeof input === 'string') ? input : ((input && input.url) || '');
+        if (resp.status === 401 && url.indexOf('/api/auth/') !== 0 && location.pathname.indexOf('/login') !== 0) {
+          location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
+        }
+      } catch (e) { /* 忽略 */ }
+      return resp;
+    });
+  };
+})();
+document.addEventListener('DOMContentLoaded', refreshSession);
 </script>
 
 </body>
