@@ -273,3 +273,96 @@ def test_close_all_checkpoints_wal_and_swallows_errors(tmp_path) -> None:
 
     database.close_all()
     assert database._conn_local.conn is None
+
+
+# ========== 根因诊断记录（第 4 周） ==========
+
+
+def test_incident_report_roundtrip(tmp_path) -> None:
+    database = Database(tmp_path / "incidents.db")
+    report = {
+        "incident_id": "INC-TEST-1",
+        "created_at": "2026-09-18 10:00:00",
+        "status": "ok",
+        "root_cause": {"cause_id": "disk_full", "title": "服务器磁盘空间不足", "score": 0.87},
+        "confidence": 0.87,
+        "events": [
+            {
+                "id": "EVT-1",
+                "timestamp": "2026-09-18 09:12:44",
+                "source": "log",
+                "service": "",
+                "host": "",
+                "metric": "resource",
+                "severity": "critical",
+                "raw": "No space left on device",
+                "tags": [],
+            }
+        ],
+    }
+    incident_id = database.save_incident(report, service="oa-web", host="10.20.1.11", source="api")
+    assert incident_id == "INC-TEST-1"
+
+    loaded = database.get_incident("INC-TEST-1")
+    assert loaded is not None
+    assert loaded["status"] == "ok"
+    assert loaded["root_cause"] == "disk_full"
+    assert loaded["root_title"] == "服务器磁盘空间不足"
+    assert loaded["service"] == "oa-web"
+    assert abs(float(loaded["confidence"]) - 0.87) < 1e-9
+    assert loaded["report"]["root_cause"]["cause_id"] == "disk_full"
+    assert loaded["events"][0]["raw"] == "No space left on device"
+    assert "report_json" not in loaded
+    database.close()
+
+
+def test_incident_missing_returns_none(tmp_path) -> None:
+    database = Database(tmp_path / "incidents-missing.db")
+    assert database.get_incident("INC-NOPE") is None
+    database.close()
+
+
+def test_incident_list_order_and_uncertain(tmp_path) -> None:
+    database = Database(tmp_path / "incidents-list.db")
+    database.save_incident(
+        {
+            "incident_id": "INC-A",
+            "created_at": "2026-09-18 10:00:00",
+            "status": "uncertain",
+            "root_cause": None,
+            "confidence": 0.0,
+        }
+    )
+    database.save_incident(
+        {
+            "incident_id": "INC-B",
+            "created_at": "2026-09-18 11:00:00",
+            "status": "ok",
+            "root_cause": {"cause_id": "oom", "title": "应用内存溢出（OOM）"},
+            "confidence": 0.9,
+        }
+    )
+    rows = database.list_incidents(limit=10)
+    assert [row["id"] for row in rows] == ["INC-B", "INC-A"]
+    assert rows[1]["root_cause"] == ""
+    assert rows[1]["status"] == "uncertain"
+    database.close()
+
+
+def test_incident_same_id_overwrites(tmp_path) -> None:
+    database = Database(tmp_path / "incidents-overwrite.db")
+    base = {
+        "incident_id": "INC-SAME",
+        "created_at": "2026-09-18 10:00:00",
+        "status": "uncertain",
+        "root_cause": None,
+        "confidence": 0.0,
+    }
+    database.save_incident(base)
+    database.save_incident(
+        {**base, "status": "ok", "confidence": 0.8, "root_cause": {"cause_id": "disk_full", "title": "磁盘不足"}}
+    )
+    rows = database.list_incidents()
+    assert len(rows) == 1
+    assert rows[0]["status"] == "ok"
+    database.close()
