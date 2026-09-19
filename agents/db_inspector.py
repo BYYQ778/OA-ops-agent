@@ -35,10 +35,11 @@ def _exec_sql(host: str, port: int, user: str, password: str, sql: str, database
     """
     执行 MySQL 查询（通过 mysql 命令行客户端）。
     如果目标不在本机，调用方应通过 SSH 执行。
+    参数以 argv 数组传入且 shell=False（防命令注入）。
     """
     mysql_cmd = "mysql" if not IS_WINDOWS else "mysql.exe"
 
-    cmd_parts = [
+    args = [
         mysql_cmd,
         f"-h{host}",
         f"-P{port}",
@@ -46,20 +47,16 @@ def _exec_sql(host: str, port: int, user: str, password: str, sql: str, database
         f"-p{password}",
         "-N",       # 跳过列名
         "-B",       # 批量模式（Tab 分隔）
-        "-e", sql,
     ]
     if database:
-        cmd_parts.insert(-2, database)
-
-    cmd = " ".join(cmd_parts)
-    # 隐藏密码的命令用于日志
-    safe_cmd = cmd.replace(password, "***")
+        args.append(database)
+    args += ["-e", sql]
 
     import subprocess
     try:
         result = subprocess.run(
-            cmd,
-            shell=True,
+            args,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=15,
@@ -85,18 +82,16 @@ def _exec_redis(host: str, port: int, password: str, command: str) -> str:
     """通过 redis-cli 执行 Redis 命令"""
     redis_cmd = "redis-cli" if not IS_WINDOWS else "redis-cli.exe"
 
-    cmd_parts = [redis_cmd, "-h", host, "-p", str(port)]
+    args = [redis_cmd, "-h", host, "-p", str(port)]
     if password:
-        cmd_parts.extend(["-a", password])
-    cmd_parts.extend(command.split())
-
-    cmd = " ".join(cmd_parts)
+        args.extend(["-a", password])
+    args.extend(command.split())
 
     import subprocess
     try:
         result = subprocess.run(
-            cmd,
-            shell=True,
+            args,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=10,
@@ -483,16 +478,23 @@ def _exec_sqlcmd(host: str, port: int, user: str, password: str, sql: str, datab
     """通过 sqlcmd 执行 SQL Server 查询"""
     sqlcmd_cmd = "sqlcmd" if not IS_WINDOWS else "sqlcmd.exe"
 
-    cmd = (
-        f'{sqlcmd_cmd} -S {host},{port} -U {user} -P {password} '
-        f'-d {database} -h -1 -W -s "|" -Q "{sql}"'
-    )
+    args = [
+        sqlcmd_cmd,
+        "-S", f"{host},{port}",
+        "-U", user,
+        "-P", password,
+        "-d", database,
+        "-h", "-1",
+        "-W",
+        "-s", "|",
+        "-Q", sql,
+    ]
 
     import subprocess
     try:
         result = subprocess.run(
-            cmd,
-            shell=True,
+            args,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=15,
@@ -532,12 +534,12 @@ def _exec_sqlplus(host: str, port: int, user: str, password: str, sql: str, serv
         with open(sql_file, "w", encoding="utf-8") as f:
             f.write(f"SET PAGESIZE 0 FEEDBACK OFF HEADING OFF LINESIZE 500;\n{sql}\nEXIT;\n")
 
-        cmd = f'{sqlplus_cmd} -S {connect_str} @{sql_file}'
+        args = [sqlplus_cmd, "-S", connect_str, f"@{sql_file}"]
         import subprocess
         try:
             result = subprocess.run(
-                cmd,
-                shell=True,
+                args,
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=15,

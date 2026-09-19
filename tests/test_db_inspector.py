@@ -141,8 +141,10 @@ def test_exec_sql_builds_batch_command_with_database(monkeypatch) -> None:
     monkeypatch.setattr(subprocess, "run", runner)
 
     assert db._exec_sql("db01", 3307, "ops", "s3cret", "SELECT 1", database="oa") == "8.0.36"
-    assert runner.call_args.args[0] == "mysql -hdb01 -P3307 -uops -ps3cret -N -B oa -e SELECT 1"
-    assert runner.call_args.kwargs["shell"] is True
+    assert runner.call_args.args[0] == [
+        "mysql", "-hdb01", "-P3307", "-uops", "-ps3cret", "-N", "-B", "oa", "-e", "SELECT 1",
+    ]
+    assert runner.call_args.kwargs["shell"] is False
     assert runner.call_args.kwargs["timeout"] == 15
     assert runner.call_args.kwargs["encoding"] == "utf-8"
 
@@ -153,7 +155,10 @@ def test_exec_sql_windows_uses_exe_and_gbk(monkeypatch) -> None:
     monkeypatch.setattr(subprocess, "run", runner)
 
     assert db._exec_sql("127.0.0.1", 3306, "root", "p", "SELECT VERSION()") == "5.7.44"
-    assert runner.call_args.args[0].startswith("mysql.exe -h127.0.0.1 -P3306 -uroot -pp -N -B -e")
+    assert runner.call_args.args[0] == [
+        "mysql.exe", "-h127.0.0.1", "-P3306", "-uroot", "-pp", "-N", "-B", "-e", "SELECT VERSION()",
+    ]
+    assert runner.call_args.kwargs["shell"] is False
     assert runner.call_args.kwargs["encoding"] == "gbk"
 
 
@@ -194,11 +199,14 @@ def test_exec_redis_builds_command_with_optional_password(monkeypatch) -> None:
     monkeypatch.setattr(subprocess, "run", runner)
 
     assert db._exec_redis("redis01", 6379, "s3cret", "INFO memory") == "PONG"
-    assert runner.call_args.args[0] == "redis-cli -h redis01 -p 6379 -a s3cret INFO memory"
+    assert runner.call_args.args[0] == [
+        "redis-cli", "-h", "redis01", "-p", "6379", "-a", "s3cret", "INFO", "memory",
+    ]
+    assert runner.call_args.kwargs["shell"] is False
     assert runner.call_args.kwargs["timeout"] == 10
 
     assert db._exec_redis("redis01", 6379, "", "PING") == "PONG"
-    assert runner.call_args.args[0] == "redis-cli -h redis01 -p 6379 PING"
+    assert runner.call_args.args[0] == ["redis-cli", "-h", "redis01", "-p", "6379", "PING"]
 
 
 def test_exec_redis_falls_back_to_stderr_and_maps_errors(monkeypatch) -> None:
@@ -497,9 +505,11 @@ def test_exec_sqlcmd_builds_command_and_maps_login_error(monkeypatch) -> None:
     monkeypatch.setattr(subprocess, "run", runner)
 
     assert db._exec_sqlcmd("10.0.0.10", 1433, "sa", "bad", "SELECT 1") == "__ERROR__: 登录失败，请检查用户名和密码"
-    assert runner.call_args.args[0] == (
-        'sqlcmd.exe -S 10.0.0.10,1433 -U sa -P bad -d master -h -1 -W -s "|" -Q "SELECT 1"'
-    )
+    assert runner.call_args.args[0] == [
+        "sqlcmd.exe", "-S", "10.0.0.10,1433", "-U", "sa", "-P", "bad",
+        "-d", "master", "-h", "-1", "-W", "-s", "|", "-Q", "SELECT 1",
+    ]
+    assert runner.call_args.kwargs["shell"] is False
     assert runner.call_args.kwargs["encoding"] == "gbk"
 
 
@@ -605,7 +615,7 @@ def test_exec_sqlplus_writes_query_file_and_cleans_up(tmp_path, monkeypatch) -> 
     captured = {}
 
     def fake_run(cmd, **kwargs):
-        sql_path = Path(cmd.split(" @", 1)[1])
+        sql_path = Path(cmd[3][1:])
         captured["cmd"] = cmd
         captured["path"] = sql_path
         captured["content"] = sql_path.read_text(encoding="utf-8")
@@ -616,7 +626,8 @@ def test_exec_sqlplus_writes_query_file_and_cleans_up(tmp_path, monkeypatch) -> 
     out = db._exec_sqlplus("db-ora01", 1521, "system", "Ora#2026", "SELECT 1 FROM dual", "orcl")
 
     assert out == "VERSION:Oracle Database 19c"
-    assert "sqlplus -S system/Ora#2026@db-ora01:1521/orcl @" in captured["cmd"]
+    assert captured["cmd"][:3] == ["sqlplus", "-S", "system/Ora#2026@db-ora01:1521/orcl"]
+    assert captured["cmd"][3].startswith("@")
     assert captured["content"] == (
         "SET PAGESIZE 0 FEEDBACK OFF HEADING OFF LINESIZE 500;\nSELECT 1 FROM dual\nEXIT;\n"
     )
@@ -630,7 +641,7 @@ def test_exec_sqlplus_defaults_to_orcl_service(tmp_path, monkeypatch) -> None:
 
     db._exec_sqlplus("127.0.0.1", 1521, "system", "p", "SELECT 1")
 
-    assert "@127.0.0.1:1521/orcl" in runner.call_args.args[0]
+    assert runner.call_args.args[0][2] == "system/p@127.0.0.1:1521/orcl"
     assert list(tmp_path.iterdir()) == []
 
 
@@ -662,6 +673,67 @@ def test_exec_sqlplus_timeout_and_missing_client_still_cleanup(tmp_path, monkeyp
     assert db._exec_sqlplus("ora01", 1521, "system", "p", "SELECT 1") == (
         "__ERROR__: sqlplus 未安装，请安装 Oracle Instant Client"
     )
+
+
+# ---------- 命令注入回归（argv 数组 + shell=False） ----------
+
+
+def test_db_inspector_source_never_uses_shell() -> None:
+    """防回潮：执行器源码不得再出现 shell=True。"""
+    import inspect
+    assert "shell=True" not in inspect.getsource(db)
+
+
+def test_exec_sql_host_metacharacters_stay_in_single_argv(monkeypatch) -> None:
+    monkeypatch.setattr(db, "IS_WINDOWS", False)
+    runner = Mock(return_value=_proc(stdout="ok"))
+    monkeypatch.setattr(subprocess, "run", runner)
+
+    assert db._exec_sql("db01; touch /tmp/pwned", 3306, "root", "p", "SELECT 1") == "ok"
+
+    args = runner.call_args.args[0]
+    assert args == [
+        "mysql", "-hdb01; touch /tmp/pwned", "-P3306", "-uroot", "-pp", "-N", "-B", "-e", "SELECT 1",
+    ]
+    assert runner.call_args.kwargs["shell"] is False
+
+
+def test_exec_redis_host_metacharacters_stay_in_single_argv(monkeypatch) -> None:
+    monkeypatch.setattr(db, "IS_WINDOWS", False)
+    runner = Mock(return_value=_proc(stdout="PONG"))
+    monkeypatch.setattr(subprocess, "run", runner)
+
+    db._exec_redis("redis01&del *", 6379, "p", "PING")
+
+    args = runner.call_args.args[0]
+    assert args == ["redis-cli", "-h", "redis01&del *", "-p", "6379", "-a", "p", "PING"]
+    assert runner.call_args.kwargs["shell"] is False
+
+
+def test_exec_sqlcmd_host_metacharacters_stay_in_single_argv(monkeypatch) -> None:
+    monkeypatch.setattr(db, "IS_WINDOWS", True)
+    runner = Mock(return_value=_proc(stdout="1"))
+    monkeypatch.setattr(subprocess, "run", runner)
+
+    db._exec_sqlcmd("srv; whoami", 1433, "sa", "p", "SELECT 1")
+
+    args = runner.call_args.args[0]
+    assert args[:3] == ["sqlcmd.exe", "-S", "srv; whoami,1433"]
+    assert runner.call_args.kwargs["shell"] is False
+
+
+def test_exec_sqlplus_credentials_stay_in_single_argv(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(db, "IS_WINDOWS", False)
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    runner = Mock(return_value=_proc(stdout=""))
+    monkeypatch.setattr(subprocess, "run", runner)
+
+    db._exec_sqlplus("host;id", 1521, "sys", "p", "SELECT 1")
+
+    args = runner.call_args.args[0]
+    assert args[:3] == ["sqlplus", "-S", "sys/p@host;id:1521/orcl"]
+    assert args[3].startswith("@")
+    assert runner.call_args.kwargs["shell"] is False
 
 
 def test_oracle_status_requires_password_and_error_hint(monkeypatch) -> None:
