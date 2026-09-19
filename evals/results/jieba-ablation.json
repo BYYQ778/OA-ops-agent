@@ -1,0 +1,19 @@
+{
+  "dev_items": 88,
+  "results": {
+    "jieba": {
+      "recall_at_k": 0.9333333333333333,
+      "mrr": 0.7982222222222224,
+      "ndcg_at_k": 0.8317030751898696,
+      "refusal_rate_unanswerable": 0.8461538461538461,
+      "false_refusal_rate": 0.05333333333333334
+    },
+    "bigram": {
+      "recall_at_k": 0.88,
+      "mrr": 0.7522222222222223,
+      "ndcg_at_k": 0.7834558465592004,
+      "refusal_rate_unanswerable": 0.8461538461538461,
+      "false_refusal_rate": 0.08
+    }
+  }
+}

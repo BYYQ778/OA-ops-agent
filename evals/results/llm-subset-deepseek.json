@@ -1,0 +1,725 @@
+{
+  "meta": {
+    "timestamp": "2026-09-17T20:32:35",
+    "subset": "E:\\YunweiAgent\\oa-ops-agent-rag-evaluation\\evals\\dataset\\llm_subset_v1.jsonl",
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "records": 30
+  },
+  "summary": {
+    "counts": {
+      "total": 30,
+      "answerable": 22,
+      "unanswerable": 8
+    },
+    "system_refusal_rate_unanswerable": 1.0,
+    "gate_refusal_count_unanswerable": 3,
+    "llm_refusal_count_unanswerable": 5,
+    "grounded_answer_rate": 0.7727272727272727,
+    "false_refusal_system_rate": 0.18181818181818182,
+    "tool_accuracy": 1.0,
+    "tool_ok": 25,
+    "tool_total": 25,
+    "avg_steps": 3.88,
+    "failure_rate": 0.0,
+    "latency_ms": {
+      "count": 30,
+      "mean": 3930.02,
+      "p50": 4609.3,
+      "p95": 6365.8,
+      "max": 7088.3
+    }
+  },
+  "records": [
+    {
+      "qid": "q004",
+      "question": "出现大面积打不开页面时，从哪一层开始定位最省时间？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "OA系统应用架构与故障分级说明.md"
+      ],
+      "answer_excerpt": "出现大面积打不开页面时，建议从接入层开始定位最省时间。\n\n根据《OA系统应用架构与故障分级说明.md》，推荐定位顺序为接入层、应用层、依赖层、系统资源：先看 oa-lb01 上 Nginx 是否正常、5xx 比例是否抬升；再确认应用进程与端口存活；随后核对数据库连接与缓存命中；最后排查系统资源。其中明确提到\"页面打不开：先看接入层与门户节点\"，并强调该口径能最快划清故障边界，避免一开始就陷入单机细节 [参考资料3]。\n\n此外，《Tomc",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 6365.8,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "OA系统应用架构与故障分级说明.md",
+        "Tomcat服务502与503错误处置指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q005",
+      "question": "故障期间进展通报的频率和要求是什么？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "OA系统应用架构与故障分级说明.md"
+      ],
+      "answer_excerpt": "根据《生产故障应急响应流程.md》[参考资料1]，故障期间进展通报的频率和要求如下：\n\n- 一线值班发现故障后 **5 分钟内**发出首条通报，内容包括现象、影响面、已采取措施；\n- **15 分钟未定位**的升级至值班主管，**30 分钟未止损**的升级至运维负责人；\n- **P0 故障每 15 分钟同步一次进展**，直至恢复。\n\n此外，根据《生产故障应急响应流程.md》[参考资料2]，故障期间沟通以电话与应急群为准，重要结论必须书面",
+      "routes": [
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 2582.5,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "生产故障应急响应流程.md",
+        "生产故障应急响应流程.md"
+      ],
+      "grounded": false,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q018",
+      "question": "502 与 503 的本质区别是什么？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "Tomcat服务502与503错误处置指南.md"
+      ],
+      "answer_excerpt": "根据《Tomcat服务502与503错误处置指南.md》，502 与 503 的本质区别可以从故障指向和触发原因两方面理解：\n\n**一、故障指向不同**\n\n- **502**：指向**上游未监听、拒绝连接，或上游处理中断并断开**。典型日志关键字为 `Connection refused`（上游未监听或拒绝连接）和 `upstream prematurely closed connection`（上游处理中断并断开）[参考资料2]。\n-",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 6116.5,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "Tomcat服务502与503错误处置指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q020",
+      "question": "浏览器报 502 但静态资源能正常打开，该怎么定位？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "Tomcat服务502与503错误处置指南.md"
+      ],
+      "answer_excerpt": "根据《Tomcat服务502与503错误处置指南.md》，浏览器看到 502 Bad Gateway 而静态资源仍可访问，说明接入层本身正常 [参考资料1]。定位时可参考以下资料：\n\n1. **先看接入层日志特征**：检查 error.log 是否出现 `connect() failed (111: Connection refused) while connecting to upstream`（多指上游端口未监听或拒绝连接），或 `",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 5350.2,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "Tomcat服务502与503错误处置指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q025",
+      "question": "上游处理超过 proxy_read_timeout 会返回什么错误？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "Tomcat服务502与503错误处置指南.md"
+      ],
+      "answer_excerpt": "根据《Tomcat服务502与503错误处置指南.md》，上游处理时间超过 proxy_read_timeout（默认 60 秒）会触发中断，属于 502 错误的常见原因之一 [参考资料1]。",
+      "routes": [
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 2495.7,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "Tomcat服务502与503错误处置指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q029",
+      "question": "日志出现 java.lang.OutOfMemoryError，第一步怎么确认类型？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "JVM内存溢出OOM应急处置手册.md"
+      ],
+      "answer_excerpt": "根据《JVM内存溢出OOM应急处置手册.md》，第一步确认溢出类型的方法是：使用命令 `grep -i \"OutOfMemoryError\" /opt/tomcat/logs/catalina.out`，区分堆与元空间 [参考资料1]。\n\n该手册同时说明，内存溢出主要分两类：堆内存溢出（Java heap space）与元空间溢出（Metaspace），前者多与对象堆积有关，后者多与类加载有关 [参考资料2]。",
+      "routes": [
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 2699.3,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "JVM内存溢出OOM应急处置手册.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q035",
+      "question": "文件太大又不能直接删除时，怎么安全清空正在写入的日志？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "服务器磁盘空间不足处置指南.md"
+      ],
+      "answer_excerpt": "根据《服务器磁盘空间不足处置指南.md》[参考资料1]，对正在写入、不能直接删除的日志，安全清空方式是：\n\n**使用 truncate 清空，不要用 rm。**\n\n具体做法（以 catalina.out 为例）：\n\n```\ntruncate -s 0 /opt/tomcat/logs/catalina.out\n```\n\n该指南明确说明：不要用 rm，避免进程句柄不释放继续占用空间。\n\n另外，该指南在应急清理中还提到：删除 /var/lo",
+      "routes": [
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 2932.4,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "服务器磁盘空间不足处置指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q045",
+      "question": "报 1040 Too many connections，怎么快速恢复业务？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "MySQL数据库故障排查手册.md"
+      ],
+      "answer_excerpt": "根据《MySQL数据库故障排查手册.md》，1040 Too many connections 表示当前连接数已达 max_connections，新连接会被直接拒绝。快速恢复业务的做法是：先用 `mysqladmin -uroot -p processlist` 观察当前连接情况，再临时提高上限 [参考资料1]。\n\n同时，根据《MySQL慢查询与连接数问题处置指南.md》，连接数异常与慢查询常互为因果——慢查询长期占用连接，会把连接数",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 4322.8,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "MySQL数据库故障排查手册.md",
+        "MySQL慢查询与连接数问题处置指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q050",
+      "question": "线上语句越跑越慢，怎么按总耗时排出最多的 20 条？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "MySQL慢查询与连接数问题处置指南.md"
+      ],
+      "answer_excerpt": "根据《MySQL慢查询与连接数问题处置指南.md》[参考资料1]，按总耗时排序取前 20 条的命令为：\n\n```\nmysqldumpslow -s t -t 20 /var/log/mysql/slow.log\n```\n\n该命令属于快速统计方式，按总耗时排序取前 20 条。若需更细粒度分析，可使用 `pt-query-digest /var/log/mysql/slow.log`，输出按响应时间占比排序的报告。分析时重点关注 Query",
+      "routes": [
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 2832.1,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "MySQL慢查询与连接数问题处置指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q060",
+      "question": "写入报 OOM command not allowed，处置顺序是什么？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "Redis缓存故障应急处置手册.md"
+      ],
+      "answer_excerpt": "根据《Redis缓存故障应急处置手册.md》，写入报 `OOM command not allowed` 时的处置顺序如下：\n\n**第一步：逐项排查**\n\n按手册 §3 的排查表逐项检查 [参考资料2]：\n\n| 排查项 | 命令 | 说明 |\n| --- | --- | --- |\n| 内存用量 | INFO memory | 对比 used_memory 与 maxmemory |\n| 淘汰策略 | CONFIG GET maxmem",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 5773.2,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "Redis缓存故障应急处置手册.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q063",
+      "question": "用 redis-cli CLIENT LIST 排查长连接，重点看哪几个字段？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "Redis缓存故障应急处置手册.md"
+      ],
+      "answer_excerpt": "根据《Redis缓存故障应急处置手册.md》，用 `redis-cli CLIENT LIST` 排查长连接时，重点看 **addr、age、idle** 这三个字段，关注其中明显异常的长连接 [参考资料1]。",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 2705.8,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "Redis缓存故障应急处置手册.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q069",
+      "question": "被拒写之后，除了调整上限还应顺手检查哪些健康指标？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "Redis缓存故障应急处置手册.md",
+        "Redis内存与持久化问题排查指南.md"
+      ],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [],
+      "latency_ms": 26.0,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": true,
+      "llm_refused": false
+    },
+    {
+      "qid": "q072",
+      "question": "监听断了，客户端报 ORA-12541，怎么恢复？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "Oracle数据库日常故障处置手册.md"
+      ],
+      "answer_excerpt": "根据《Oracle数据库日常故障处置手册.md》[参考资料1]，客户端报 ORA-12541: TNS no listener，说明监听未启动，执行 `lsnrctl start` 即可恢复。\n\n恢复后建议按以下步骤确认：\n\n1. 查看监听：`lsnrctl status`，确认监听器与实例的注册状态正常；\n2. 若服务名未注册，先 `lsnrctl reload`，或在数据库内执行 `ALTER SYSTEM REGISTER;`；\n",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 4258.1,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "Oracle数据库日常故障处置手册.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q078",
+      "question": "客户端报 ORA-00257，最常见原因是什么、先做什么？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "Oracle表空间与归档日志问题处理指南.md"
+      ],
+      "answer_excerpt": "根据《Oracle表空间与归档日志问题处理指南.md》，ORA-00257 的完整报错为 \"archiver error. Connect internal only, until freed\"，最常见原因是**归档区写满**，会导致数据库挂起，此时普通业务账号已无法连接，属于最高优先级的处置场景 [参考资料3]。\n\n应先做的是：按最高优先级处置该场景，尽快释放归档空间（如清理/转储归档日志），使数据库恢复可用 [参考资料3]。\n\n补充",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb"
+      ],
+      "latency_ms": 5157.3,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "Oracle表空间与归档日志问题处理指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q080",
+      "question": "查询报 ORA-01652，临时段扩不开怎么处理？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "Oracle表空间与归档日志问题处理指南.md"
+      ],
+      "answer_excerpt": "根据《Oracle表空间与归档日志问题处理指南.md》和《Oracle数据库日常故障处置手册.md》，ORA-01652 表示临时段无法扩展，常见诱因是临时表空间不足或存在大排序 [参考资料1][参考资料4]。处置步骤如下：\n\n1. **查看临时段占用**：执行 `SELECT * FROM v$tempseg_usage;` [参考资料4]。\n2. **扩容临时表空间**，例如 [参考资料4]：\n```\nALTER TABLESPAC",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 5458.0,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "Oracle表空间与归档日志问题处理指南.md",
+        "Oracle数据库日常故障处置手册.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q085",
+      "question": "SQL Server 报 9002 事务日志已满，怎么应急？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "SQLServer数据库故障排查手册.md"
+      ],
+      "answer_excerpt": "根据《SQLServer数据库故障排查手册.md》，错误号 9002 的消息摘要为 \"The transaction log for database is full\"，常见原因是日志长期未备份、大事务，处置方向是**立即做日志备份或扩容** [参考资料2]。\n\n该手册将事务日志写满（9002）列为 SQL Server 常见故障的四类之一，并给出了相应的排查路径与处置顺序，适用于值班人员的第一轮定位 [参考资料1]。\n\n如需执行日志备",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 5097.0,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "SQLServer数据库故障排查手册.md",
+        "SQLServer备份与还原操作指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q092",
+      "question": "误删数据要回到上午 10 点，STOPAT 怎么写？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "SQLServer备份与还原操作指南.md"
+      ],
+      "answer_excerpt": "根据《SQLServer备份与还原操作指南.md》[参考资料1]，还原到时间点的写法如下：\n\n```sql\nRESTORE LOG oa_flow_new\n  FROM DISK = 'D:\\backup\\oa_flow_log_20260914_1015.trn'\n  WITH STOPAT = '2026-09-14T10:05:00', RECOVERY;\n```\n\n其中 `STOPAT` 参数用于指定回退到的时间点，示例中回退到",
+      "routes": [
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 3077.2,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "SQLServer备份与还原操作指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q094",
+      "question": "手里的 .bak 文件如何确认完整可用？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "SQLServer备份与还原操作指南.md"
+      ],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [],
+      "latency_ms": 123.7,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": true,
+      "llm_refused": false
+    },
+    {
+      "qid": "q101",
+      "question": "浏览器里输域名打不开、直接输 IP 正常，先查什么？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "DNS解析故障处置指南.md"
+      ],
+      "answer_excerpt": "根据《DNS解析故障处置指南.md》，\"输域名打不开、直接输 IP 正常\"属于典型的 DNS 解析问题，建议按「客户端、链路、服务器、记录」四段逐步收敛来定位 [参考资料3]。\n\n先核对是否命中该指南的常见现象，例如浏览器提示 DNS_PROBE_FINISHED_NXDOMAIN 或无法找到服务器、命令行 ping 内网域名报 Name or service not known、同一域名在不同区域解析结果不一致、应用日志出现 Unkn",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 4609.3,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "DNS解析故障处置指南.md",
+        "SSL证书过期与配置问题处置指南.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q108",
+      "question": "ss -lntp 看不到端口监听，接下来怎么分层排查？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "服务器端口与服务访问检查手册.md"
+      ],
+      "answer_excerpt": "根据《服务器端口与服务访问检查手册.md》，ss -lntp 用于查看 TCP 监听（-l 监听态、-n 数字端口、-t TCP、-p 进程），老系统可用 netstat -tulnp 兜底，重点关注 LISTEN 行的绑定地址与进程名 [参考资料1]。当 ss -lntp 看不到端口监听时，可按以下分层排查：\n\n**1. 进程层**\n先用 ps -ef 查看进程是否存在，确认应用进程是否已启动 [参考资料5]。\n\n**2. 端口层**",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 7088.3,
+      "failure": null,
+      "refused": false,
+      "citations": [
+        "服务器端口与服务访问检查手册.md"
+      ],
+      "grounded": true,
+      "gate_refused": false,
+      "llm_refused": false
+    },
+    {
+      "qid": "q114",
+      "question": "SSH 换成非标端口并禁止 root 直登，具体怎么改？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "服务器安全基线配置规范.md"
+      ],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb"
+      ],
+      "latency_ms": 6157.7,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": false,
+      "llm_refused": true
+    },
+    {
+      "qid": "q123",
+      "question": "巡检怎么用 journalctl 快速过滤昨天的错误日志？",
+      "answerable": true,
+      "expect_refusal": false,
+      "gold_docs": [
+        "系统巡检操作手册.md"
+      ],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb"
+      ],
+      "latency_ms": 5342.5,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": false,
+      "llm_refused": true
+    },
+    {
+      "qid": "q016",
+      "question": "OA 系统和钉钉的集成对接怎么配置？",
+      "answerable": false,
+      "expect_refusal": true,
+      "gold_docs": [],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [],
+      "latency_ms": 67.4,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": true,
+      "llm_refused": false
+    },
+    {
+      "qid": "q071",
+      "question": "Redis Cluster 槽位迁移期间业务会受影响吗？",
+      "answerable": false,
+      "expect_refusal": true,
+      "gold_docs": [],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [],
+      "latency_ms": 56.3,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": true,
+      "llm_refused": false
+    },
+    {
+      "qid": "q084",
+      "question": "Oracle RAC 一个节点被驱逐出集群，如何恢复？",
+      "answerable": false,
+      "expect_refusal": true,
+      "gold_docs": [],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [],
+      "latency_ms": 54.3,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": true,
+      "llm_refused": false
+    },
+    {
+      "qid": "q096",
+      "question": "SQL Server 列存储索引适合什么业务场景？",
+      "answerable": false,
+      "expect_refusal": true,
+      "gold_docs": [],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 5235.7,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": false,
+      "llm_refused": true
+    },
+    {
+      "qid": "q112",
+      "question": "内网启用 IPv6 双栈后部分设备不通，怎么排查？",
+      "answerable": false,
+      "expect_refusal": true,
+      "gold_docs": [],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb"
+      ],
+      "latency_ms": 6077.0,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": false,
+      "llm_refused": true
+    },
+    {
+      "qid": "q043",
+      "question": "服务器内存条出现 ECC 报错，需要立即更换吗？",
+      "answerable": false,
+      "expect_refusal": true,
+      "gold_docs": [],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb"
+      ],
+      "latency_ms": 4987.9,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": false,
+      "llm_refused": true
+    },
+    {
+      "qid": "q083",
+      "question": "Oracle Data Guard 备库延迟越来越大，怎么定位？",
+      "answerable": false,
+      "expect_refusal": true,
+      "gold_docs": [],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 5194.8,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": false,
+      "llm_refused": true
+    },
+    {
+      "qid": "q095",
+      "question": "SQL Server AlwaysOn 自动故障转移失败，如何处理？",
+      "answerable": false,
+      "expect_refusal": true,
+      "gold_docs": [],
+      "answer_excerpt": "抱歉，知识库中未找到相关信息，请补充相关文档后重试。",
+      "routes": [
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "search_kb",
+        "answer"
+      ],
+      "latency_ms": 5655.8,
+      "failure": null,
+      "refused": true,
+      "citations": [],
+      "grounded": false,
+      "gate_refused": false,
+      "llm_refused": true
+    }
+  ],
+  "markdown": "LLM 端到端子集（真实 Agent：LangGraph + 云端 DeepSeek；先检索门控，后回答级拒答契约）：\n\n| 指标 | 数值 |\n|---|---|\n| 子集规模 | 30 条（可回答 22 / 无证据 8） |\n| 系统级无证据拒答率 | 100.0%（门控 3 + 回答级 5 / 8） |\n| 有依据回答率（引对 gold） | 77.3% |\n| 可回答条目误拒（系统级） | 18.2% |\n| 工具选择准确率（首跳=检索） | 100.0%（25/25，门控直拒不参与） |\n| 平均推理步数 | 3.9 |\n| 失败率 | 0.0% |\n| 端到端延迟 mean / p95 | 3930 ms / 6366 ms |\n\n| qid | 结果 | 引用 | 路由 | 秒 |\n|---|---|---|---|---|\n| q004 | 有依据回答 | OA系统应用架构与故障分级说明.md、Tomcat服务502与503错误处置指南 | search_kb>search_kb>search_kb>search_kb>answer | 6.4 |\n| q005 | 回答(引用不符) | 生产故障应急响应流程.md、生产故障应急响应流程.md | search_kb>answer | 2.6 |\n| q018 | 有依据回答 | Tomcat服务502与503错误处置指南.md | search_kb>search_kb>search_kb>answer | 6.1 |\n| q020 | 有依据回答 | Tomcat服务502与503错误处置指南.md | search_kb>search_kb>search_kb>answer | 5.4 |\n| q025 | 有依据回答 | Tomcat服务502与503错误处置指南.md | search_kb>answer | 2.5 |\n| q029 | 有依据回答 | JVM内存溢出OOM应急处置手册.md | search_kb>answer | 2.7 |\n| q035 | 有依据回答 | 服务器磁盘空间不足处置指南.md | search_kb>answer | 2.9 |\n| q045 | 有依据回答 | MySQL数据库故障排查手册.md、MySQL慢查询与连接数问题处置指南.md | search_kb>search_kb>search_kb>answer | 4.3 |\n| q050 | 有依据回答 | MySQL慢查询与连接数问题处置指南.md | search_kb>answer | 2.8 |\n| q060 | 有依据回答 | Redis缓存故障应急处置手册.md | search_kb>search_kb>search_kb>search_kb>answer | 5.8 |\n| q063 | 有依据回答 | Redis缓存故障应急处置手册.md | search_kb>search_kb>answer | 2.7 |\n| q069 | 拒答 | - | - | 0.0 |\n| q072 | 有依据回答 | Oracle数据库日常故障处置手册.md | search_kb>search_kb>answer | 4.3 |\n| q078 | 有依据回答 | Oracle表空间与归档日志问题处理指南.md | search_kb>search_kb>search_kb>search_kb>search_kb | 5.2 |\n| q080 | 有依据回答 | Oracle表空间与归档日志问题处理指南.md、Oracle数据库日常故障处置手 | search_kb>search_kb>search_kb>answer | 5.5 |\n| q085 | 有依据回答 | SQLServer数据库故障排查手册.md、SQLServer备份与还原操作指南 | search_kb>search_kb>search_kb>search_kb>answer | 5.1 |\n| q092 | 有依据回答 | SQLServer备份与还原操作指南.md | search_kb>answer | 3.1 |\n| q094 | 拒答 | - | - | 0.1 |\n| q101 | 有依据回答 | DNS解析故障处置指南.md、SSL证书过期与配置问题处置指南.md | search_kb>search_kb>answer | 4.6 |\n| q108 | 有依据回答 | 服务器端口与服务访问检查手册.md | search_kb>search_kb>search_kb>search_kb>answer | 7.1 |\n| q114 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>search_kb | 6.2 |\n| q123 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>search_kb | 5.3 |\n| q016 | 拒答 | - | - | 0.1 |\n| q071 | 拒答 | - | - | 0.1 |\n| q084 | 拒答 | - | - | 0.1 |\n| q096 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>answer | 5.2 |\n| q112 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>search_kb | 6.1 |\n| q043 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>search_kb | 5.0 |\n| q083 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>answer | 5.2 |\n| q095 | 拒答 | - | search_kb>search_kb>search_kb>search_kb>answer | 5.7 |"
+}

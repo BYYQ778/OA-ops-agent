@@ -1127,3 +1127,72 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
   （run 35193433016）
 
 回退: 全部改动在本 worktree/分支；回退 = git checkout f87ac88 或继续用主目录
+
+═══════════════════════════════════════════
+【2026-09-17 — v3 第 3 周：RAG/Agent 评测体系（feat/rag-evaluation 分支，进行中）】
+
+一、背景
+  第 2 周混合检索链落地后，按六周计划建立可复现量化评测：≥100 条评测集、
+  阈值校准、新旧对比报告与图表；验收：Recall@5 提升 ≥10pp、引用覆盖率 ≥90%、
+  无证据拒答率 ≥85%。
+
+二、交付（本 worktree）
+  · evals/：语料 24 篇（合成、公开安全，覆盖 OA/Tomcat/资源/四数据库/网络/安全流程）、
+    评测集 qa_v1.jsonl 128 条（108 可答 + 20 无证据；dev 88 / holdout 40 分层冻结；
+    171 个原文锚点；strict 校验 0 错 0 警）
+  · evals/dataset.py（schema+校验）、metrics.py（Recall/MRR/NDCG/引用 span/拒答/延迟）、
+    pipelines.py（旧版行为重建 + 新版 Hybrid 适配）、runner.py（全量编排）、report.py（报告+图表）
+  · scripts/：validate_eval_set.py / run_eval.py / calibrate_thresholds.py / gen_report.py /
+    run_llm_subset.py（LLM 端到端子集 30 条）
+  · utils/retrieval.py：证据门升级为「分层门控」——单通道强证据（dense≥0.89 或
+    bm25≥10.25）或双通道互证（dense≥0.60 且 bm25≥7.75）；默认行为未变（joint 缺省关闭）
+  · config.yaml：阈值冻结为校准值；README 配置段同步
+  · docs/reports/rag-eval-report.md + assets/（4 张图表，脚本自动生成）
+
+三、实跑结果（同一语料/同一嵌入/同一硬件；全量 128 条）
+  · Recall@5 74.1% → 94.4%（+20.4pp，达标 ≥10pp）；MRR 0.609→0.807；NDCG 0.639→0.841
+  · 引用覆盖率 74.1% → 98.1%（达标 ≥90%；holdout 97.0%）
+  · 无证据拒答率 0.0% → 75.0%（dev 84.6% / holdout 57.1%；目标 85% 未达——见发现 c）
+  · 误拒率 3.7%；延迟为纯检索耗时（见发现 d）
+
+四、验证
+  · 单测 759 passed（712 基线 + 47 新增）；ruff（含严格范围）全绿；pyright 0 errors
+  · 评测产物：results/*.json（holdout 终评 + 校准网格）；报告可一键复现
+
+五、发现与踩坑
+  a. 评测脚本反复 build_index 会向同一 Chroma 目录重复写入（documents 翻倍、分数
+     失真）——已修：重建前清空目录 + 用例；历史扫描数据已用干净索引复核
+  b. BM25 原始分远超直觉（正例中位 ~17）：阈值网格最初设 0~0.8 全不可行，校准需
+     覆盖 4~25 量程；且 jieba 分词下才有此分布（bigram 降级分布不同）
+  c. 近域负例（K8s/钉钉/IPv6/RAC/AlwaysOn 等）与正例在 dense/bm25 上存在重叠：
+     10% 误拒预算内，单层 OR 门控拒答率仅 69.2%；分层互证门控提升至 84.6%（dev）、
+     整体（含 holdout）75.0%，仍未达 85%。改进路径：重排序评分门 / LLM 回答级
+     拒答（子集将实测回答级拒答）
+  d. 延迟测量受共享桌面负载影响大（游戏运行期间 CPU 繁忙）：keep-index 复测
+     mean 222→293ms；安静环境参考 16.4→26.9ms（同代码）；报告已注明口径
+  e. 子集索引需与生产 Agent 同 collection 名（oa_knowledge_base）
+  f. config.yaml 含 ${...} 模板占位，patch 工具的 YAML 校验会拒绝写入——改配置用
+     脚本替换；行尾为 LF（勿写死 CRLF）
+
+六、提交（feat/rag-evaluation，基于 cf1b3c7）
+  见 git log（骨架 → 语料/评测集 → 指标 → 管线 → 运行器/校准 → 分层门控 → 子集
+  运行器 → 报告）；已推送（2026-09-17；远端 CI 全绿 run 35223665459）
+
+回退: 全部改动在本 worktree/分支；回退 = git checkout cf1b3c7
+
+───────────────────────────────────────────
+【2026-09-17 晚 · 第 3 周补记：LLM 端到端子集实跑（云端 DeepSeek，用户已授权）】
+- 30 条（22 可答 + 8 无证据）真实 Agent 全链路（LangGraph，provider=deepseek）：
+  · 系统级无证据拒答率 100%（检索门控 3 + 回答级 5）——达 ≥85% 目标（云端配置）
+  · 有依据回答率 77.3%（17/22；4 例误拒 + 1 例引用错文档）
+  · 工具选择准确率 100%（首跳均 search_kb）；平均推理步数 3.9（偏高）
+  · 端到端延迟 mean 3.9s / P95 6.4s；失败率 0
+- 发现: ① DeepSeek 不支持 with_structured_output(response_format) → 自动回退
+  文本 JSON 解析（设计内三级回退，功能正常）；② 路由器倾向重复检索直至步数上限
+  （多为 4-5 步）——路由提示词系按本地 qwen3:8b 调优，云端行为差异待本地对比；
+  ③ 回答阶段出现 2 例可答误拒（q114/q123）——从严契约 + 循环上下文所致，
+  已列为改进项；④ 云端子集数字不代表本地 Ollama 行为（对比跑待做）
+- 脚本: scripts/run_llm_subset.py --provider deepseek（结果 results/llm-subset-deepseek.json）
+- 分词器消融（dev，冻结阈值）: jieba recall@5 93.3%/MRR 0.798/误拒 5.3% vs bigram 降级
+  88.0%/0.752/8.0% → 建议 jieba 升格正式依赖（一行改动，待评审）；结果存
+  results/jieba-ablation.json

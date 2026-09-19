@@ -130,6 +130,72 @@ def test_gate_boundary_inclusive() -> None:
     assert apply_evidence_gate(None, 0.3, 0.35, 0.3) is True
 
 
+def test_gate_joint_both_moderate_passes() -> None:
+    assert apply_evidence_gate(0.6, 8.0, 0.9, 11.0, 0.6, 8.0) is True
+
+
+def test_gate_joint_requires_both_channels() -> None:
+    assert apply_evidence_gate(0.62, 7.9, 0.9, 11.0, 0.6, 8.0) is False
+    assert apply_evidence_gate(0.59, 8.1, 0.9, 11.0, 0.6, 8.0) is False
+
+
+def test_gate_joint_inactive_by_default() -> None:
+    assert apply_evidence_gate(0.7, 9.0, 0.9, 11.0) is False
+
+
+def test_gate_single_strong_still_passes_with_joint_configured() -> None:
+    assert apply_evidence_gate(0.95, 1.0, 0.9, 11.0, 0.6, 8.0) is True
+    assert apply_evidence_gate(0.1, 12.0, 0.9, 11.0, 0.6, 8.0) is True
+
+
+def test_config_reads_joint_thresholds() -> None:
+    config = RetrievalConfig.from_mapping(
+        {
+            "thresholds": {
+                "min_dense_similarity": 0.9,
+                "min_bm25_score": 11.0,
+                "joint_dense_similarity": 0.6,
+                "joint_bm25_score": 8.0,
+            }
+        }
+    )
+    assert config.joint_dense_similarity == 0.6
+    assert config.joint_bm25_score == 8.0
+
+
+def test_retrieve_passes_joint_thresholds(monkeypatch) -> None:
+    import importlib
+
+    captured = {}
+
+    def fake_gate(dense_top, bm25_top, min_dense, min_bm25, joint_dense=None, joint_bm25=None):
+        captured.update(
+            min_dense=min_dense, min_bm25=min_bm25, joint_dense=joint_dense, joint_bm25=joint_bm25
+        )
+        return True
+
+    module = importlib.import_module("utils.retrieval")
+    monkeypatch.setattr(module, "apply_evidence_gate", fake_gate)
+    config = RetrievalConfig(
+        min_dense_similarity=0.9,
+        min_bm25_score=11.0,
+        joint_dense_similarity=0.6,
+        joint_bm25_score=8.0,
+    )
+    retriever = HybridRetriever(
+        dense_search=lambda query, k: [("a", "text", {"source": "a.md"}, 0.7)],
+        corpus_fn=lambda: (1, [("a", "text", {"source": "a.md"})]),
+        config=config,
+    )
+    retriever.retrieve("查询")
+    assert captured == {
+        "min_dense": 0.9,
+        "min_bm25": 11.0,
+        "joint_dense": 0.6,
+        "joint_bm25": 8.0,
+    }
+
+
 # ========== RetrievalConfig ==========
 
 def test_config_from_mapping_with_defaults() -> None:

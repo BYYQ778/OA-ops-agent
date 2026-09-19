@@ -119,8 +119,12 @@ knowledge_base:
     rerank: false              # quality 预设可开 true（需单独下载重排序模型）
     rerank_model: BAAI/bge-reranker-v2-m3
     thresholds:
-      min_dense_similarity: 0.35   # 余弦相似度下限（第 3 周评测集校准）
-      min_bm25_score: 0.30         # BM25 原始分下限（同上）
+      # 第 3 周评测校准（dev 网格 + holdout 冻结）——分层证据门：
+      # 单通道强证据：dense>=0.89 或 bm25>=10.25；双通道互证：dense>=0.60 且 bm25>=7.75
+      min_dense_similarity: 0.89
+      min_bm25_score: 10.25
+      joint_dense_similarity: 0.60
+      joint_bm25_score: 7.75
       refuse_message: "抱歉，知识库中未找到相关信息，请补充相关文档后重试。"
 
   # 切块策略（RAG 2.0：标题/段落/页级语义切块）

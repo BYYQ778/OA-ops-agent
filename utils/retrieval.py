@@ -101,18 +101,32 @@ def apply_evidence_gate(
     bm25_top: Optional[float],
     min_dense_similarity: float,
     min_bm25_score: float,
+    joint_dense_similarity: Optional[float] = None,
+    joint_bm25_score: Optional[float] = None,
 ) -> bool:
-    """证据阈值门：任一可用通道达到其阈值即视为证据充分；两通道都不可用则拒答。
+    """证据阈值门（分层）：单通道强证据或双通道互证均视为证据充分；两通道都弱则拒答。
 
-    规则: dense 通道看余弦相似度（≥ min_dense_similarity），BM25 通道看原始分
-    （≥ min_bm25_score，第 3 周评测集校准）；只有一个通道有数据时由该通道裁决。
+    规则:
+    - 单通道强证据：dense 余弦相似度 ≥ min_dense_similarity，或 BM25 原始分
+      ≥ min_bm25_score（第 3 周评测集校准）；只有一个通道有数据时由该通道裁决；
+    - 双通道互证（可选）：两者都低于强阈值时，若 dense ≥ joint_dense_similarity
+      且 bm25 ≥ joint_bm25_score 也视为证据充分——对近域无关问题更稳健。
     """
     checks: List[bool] = []
     if dense_top is not None:
         checks.append(dense_top >= min_dense_similarity)
     if bm25_top is not None:
         checks.append(bm25_top >= min_bm25_score)
-    return any(checks)
+    if any(checks):
+        return True
+    if (
+        joint_dense_similarity is not None
+        and joint_bm25_score is not None
+        and dense_top is not None
+        and bm25_top is not None
+    ):
+        return dense_top >= joint_dense_similarity and bm25_top >= joint_bm25_score
+    return False
 
 
 def format_citations(hits: Sequence[RetrievalHit]) -> str:
@@ -156,6 +170,8 @@ class RetrievalConfig:
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     min_dense_similarity: float = 0.35
     min_bm25_score: float = 0.30
+    joint_dense_similarity: Optional[float] = None
+    joint_bm25_score: Optional[float] = None
     refuse_message: str = DEFAULT_REFUSE_MESSAGE
 
     @classmethod
@@ -171,6 +187,10 @@ class RetrievalConfig:
             cfg.min_dense_similarity = float(thresholds["min_dense_similarity"])
         if thresholds.get("min_bm25_score") is not None:
             cfg.min_bm25_score = float(thresholds["min_bm25_score"])
+        if thresholds.get("joint_dense_similarity") is not None:
+            cfg.joint_dense_similarity = float(thresholds["joint_dense_similarity"])
+        if thresholds.get("joint_bm25_score") is not None:
+            cfg.joint_bm25_score = float(thresholds["joint_bm25_score"])
         if thresholds.get("refuse_message"):
             cfg.refuse_message = str(thresholds["refuse_message"])
         return cfg
@@ -295,7 +315,12 @@ class HybridRetriever:
         debug["fused_count"] = len(ordered)
 
         sufficient = bool(ordered) and apply_evidence_gate(
-            dense_top, bm25_top, cfg.min_dense_similarity, cfg.min_bm25_score
+            dense_top,
+            bm25_top,
+            cfg.min_dense_similarity,
+            cfg.min_bm25_score,
+            cfg.joint_dense_similarity,
+            cfg.joint_bm25_score,
         )
         if not sufficient:
             return RetrievalResult(
