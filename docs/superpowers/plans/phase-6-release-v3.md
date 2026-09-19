@@ -37,11 +37,11 @@ README / 架构 / 变更 / API / 安全文档齐备；演示 GIF 与 3~5 分钟�
 - [x] B4 docs/API.md（从 app.openapi() 核对）+ docs/SECURITY.md
 - [x] B5 演示素材（演示数据准备 → GIF → 演示视频 → 社交预览图）
 - [x] B6 求职材料 → Obsidian（v3.0 简历与面试材料 + 老题库版本标注）
-- [ ] C1 推送 release 分支 → PR → CI → 合并 master
-- [ ] C2 绿色版重建（备份 data/config → PyInstaller → 恢复 → 实测）
-- [ ] C3 三形态回归 + 发布前检查清单
-- [ ] C4 tag v3.0.0 + Release（含附件上传探测）
-- [ ] C5 仓库门面（description / topics / Discussions / issue 模板 / 社交预览）
+- [x] C1 推送 release 分支 → PR → CI → 合并 master（PR #6 → 398eefb，CI 双绿）
+- [x] C2 绿色版重建（PyInstaller 15 分钟 → zip 1.06GB/8234 文件 → 冻结冒烟 + GUI 实测 + 用户数据兼容）
+- [x] C3 三形态回归 + 发布前检查清单（927 passed / CI 全绿 / 敏感扫描 0 / pip-audit 1 已知项→v3.0.1 / Docker 由 CI 覆盖）
+- [x] C4 tag v3.0.0（beb01dd）+ Release 发布（附件 zip + SHA256SUMS；uploads.github.com 通路实测可用）
+- [x] C5 仓库门面（description / topics / Discussions / issue+PR 模板已设；社交预览图已备 docs/assets/social-preview.png，需在 GitHub 设置页手动上传）
 - [ ] D 收尾（第 6 周总结 → Obsidian；微信通知；技能/记忆沉淀）
 
 ## 验收标准

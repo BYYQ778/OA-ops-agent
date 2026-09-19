@@ -1320,3 +1320,55 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
   observability-security→incident-rca；各 PR 触发 run 全绿）
 
 回退: 全部改动在本 worktree/分支；UI 另有 tag ui-before-security；回退 = git checkout f250434
+
+
+═══════════════════════════════════════════
+【2026-09-19 — v3.0.0 发布：第 6 周交付收口（release/v3.0.0）】
+═══════════════════════════════════════════
+
+一、PR 链合并（六周计划全部并入 master）
+  #1~#5 逐级重定向合并（1ae1ec4→685cfef）；#6 交付收口（398eefb）。远端 master 由 v2.4.1
+  追平至 v3.0.0（含此前未推送的 v2.5.0 全部 17 个提交）。合并期冲突仅 d49a0fc 收尾 docs
+  的 2 个文档文件（已人工合并，两侧条目均保留）；master 各次合并 CI 全绿。
+
+二、第 6 周交付物（release/v3.0.0，10 个提交）
+  a. README 重写：前 30 秒六要素（问题→GIF→架构图→RAG 评测→RCA 示例→一键启动），数字全实测；
+     5 张 mermaid 架构图本地渲染验证通过
+  b. ARCHITECTURE.md / CHANGELOG.md / docs/API.md（63 端点 + v1 实测示例）/ docs/SECURITY.md
+  c. 演示素材 docs/assets/：GIF（4.3MB）+ 74 秒演示视频（2.1MB）+ 截图×3 + 社交预览图，
+     全部 v3.0.0 实机录制（Ollama qwen3:8b 真实问答 35 秒）
+  d. 版本号统一 3.0.0（pyproject/uv.lock/服务/健康接口/前端/桌面壳/CLI）；品牌名统一
+     「OA 智能运维 Agent」（侧边栏短名「OA 智能运维」，避免 136px 容器溢出）
+
+三、绿色版重建
+  PyInstaller 6.21（env_new，约 15 分钟）→ app/ 外置同步 → zip 1.06GB / 8234 文件（raw 1.90GB）；
+  jieba 词典随 hooks-contrib 冻结生效；老 dist 数据备份 dist/_oa_backup；旧 config 另存
+  config.yaml.v25.bak；桌面快捷方式指向不变。
+
+四、验收实测
+  a. 冻结冒烟（--backend 无头）：就绪 14 秒；导入（KG 抽取 12 实体）/检索/根因/指标/首页全通过
+  b. GUI 双击实测：窗口渲染正常（VLM 核验），仪表盘实时数据 + 本机巡检运行
+  c. 用户历史数据兼容：3 文档 + KG 89 实体/639 边，读取正常
+  d. 927 passed（全离线）+ Ruff/Pyright + hermes verify ok:true；源码/桌面/绿色三形态回归完成
+
+五、发布
+  tag v3.0.0（beb01dd）已推送；Release 附件 zip + SHA256SUMS（sha256 a041d9c4…61bb8）；
+  GitHub 门面：description/16 topics/Discussions/issue+PR 模板。
+
+六、发布前检查
+  敏感信息扫描 0 泄漏；pip-audit 1 条已知通告（pypdf2 3.0.1 DoS，官方修复线在 pypdf——
+  列入 v3.0.1 迁移）；Docker 冒烟由 CI docker-core 覆盖全绿。
+
+七、踩坑记录
+  a. git.exe 参数中的 MSYS 路径 /e/xxx 被转成 E:\e\xxx（临时 worktree 建歪到 E:\e\ 下）——
+     给 git 传路径用 E:/ 形式，勿用 /e/
+  b. Playwright 视频录制需 playwright install ffmpeg（与 imageio-ffmpeg 是两码事）
+  c. 演示 KB 仅 6 篇时证据门误拒：阈值按 24 篇语料校准，BM25 分布随语料规模漂移——
+     评测/演示务必用全量语料
+  d. 冻结版首跑 KG 实体抽取约 20 秒/块（Ollama 可用时启用，无 Ollama 自动降级）
+
+八、已知项（v3.0.1 候选）
+  ① 本机巡检 wmic 依赖；② pypdf2→pypdf；③ OTLP 真链路未实测；④ 桌面壳窗口标题旧名；
+  ⑤ jieba 未入锁（冻结版已含）；⑥ 社交预览图需 GitHub 设置页手动上传
+
+回退: 已发布版本；回退 = 恢复 dist/_oa_backup 旧数据 + checkout tag v2.5.0（本地）

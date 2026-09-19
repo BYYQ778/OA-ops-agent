@@ -845,3 +845,23 @@ Phase 6: 全链路 E2E 验证
 - 推送与 CI: **已完成**（2026-09-18，push run 35318040465 双绿：927 passed / TOTAL 81% +
   docker-core 冒烟；PR #5 已开）；六周计划 PR 链 #1~#5 已全部开通（堆叠式）
 - 待办: 第 6 周 release/v3.0.0（绿色版重建 + 文档/演示材料；先按 #1→#5 顺序合并 PR）
+
+
+═══════════════════════════════════════════
+【2026-09-19 — v3.0.0 发布（第 6 周：交付收口，release/v3.0.0）】
+═══════════════════════════════════════════
+- 状态: 六周优化计划全部完成并发布。GitHub master = v3.0.0（tag beb01dd 已推送）；Release
+  「v3.0.0 — OA 智能根因诊断平台」附 OA运维Agent-v3.0.0-win64.zip（1.06GB）+ SHA256SUMS.txt
+  （sha256 a041d9c4…61bb8）。PR #1~#6 全部合并（1ae1ec4→398eefb）；远端 master 由 v2.4.1
+  追平至 v3.0.0；uploads.github.com 通路实测可用。
+- 绿色版: dist\OA运维Agent 已重建为 v3.0.0（业务代码在 app\，更新走 scripts\更新绿色版代码.bat；
+  桌面快捷方式不变）；用户历史数据已恢复并实测兼容；旧 config 存
+  dist\OA运维Agent\config.yaml.v25.bak（旧版为 provider: deepseek）。备份目录 dist\_oa_backup。
+- 交付物: README（前 30 秒六要素）/ ARCHITECTURE.md / CHANGELOG.md / docs/API.md /
+  docs/SECURITY.md / docs/assets/（GIF + 74 秒视频 + 截图×3 + 社交预览图）。
+- 求职材料: Obsidian 运维库「OA运维Agent_v3.0_简历与面试材料_2026-09-19.md」（简历三档 +
+  项目介绍稿 + 16 道新增问答 + 老题库版本标注）。
+- 已知项（v3.0.1 候选）: ① 本机巡检 wmic 依赖（新 Windows 磁盘/内存无数据）；② pypdf2→pypdf
+  迁移（通告 + 弃用警告）；③ OTLP 真链路未实测；④ 桌面壳窗口标题仍为旧名；⑤ jieba 未入锁
+  （冻结版已含词典，源码版缺省降级 bigram）。
+- 社交预览图需在 GitHub 仓库设置页手动上传（API 不支持）：docs/assets/social-preview.png。
