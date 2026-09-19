@@ -18,7 +18,7 @@ def create_system_router(
         kb_status = get_kb_status()
         return {
             "status": "ok",
-            "version": "2.5.0",
+            "version": "3.0.0",
             "kb_state": kb_status.get("state", "loading"),
             "kb_error": kb_status.get("error"),
         }

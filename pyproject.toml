@@ -1,6 +1,6 @@
 [project]
 name = "oa-ops-agent"
-version = "2.5.0"
+version = "3.0.0"
 description = "OA system inspection, diagnostics, and knowledge-base assistant"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
