@@ -23,12 +23,14 @@ import random
 import time
 from datetime import datetime
 from typing import Optional
+from utils.config import get_app_root
 
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI
 
 from utils.logger import get_logger
+from utils.prompt_safety import UNTRUSTED_DATA_GUARD
 from utils.database import db
 
 logger = get_logger(__name__)
@@ -242,7 +244,7 @@ INSPECTION_SYSTEM_PROMPT = """你是一名资深OA系统运维工程师，负责
    ========================================
    总结: [简要总结，如存在异常则给出优先级建议]
 
-请务必调用全部5个工具后再生成报告。"""
+请务必调用全部5个工具后再生成报告。""" + UNTRUSTED_DATA_GUARD
 
 
 class InspectionAgent:
@@ -357,7 +359,7 @@ class InspectionAgent:
             timestamp: 巡检时间戳
             report: 巡检报告内容
         """
-        log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "inspection_logs")
+        log_dir = os.path.join(get_app_root(), "data", "inspection_logs")
         os.makedirs(log_dir, exist_ok=True)
 
         log_file = os.path.join(log_dir, f"inspection_{datetime.now().strftime('%Y%m%d')}.log")

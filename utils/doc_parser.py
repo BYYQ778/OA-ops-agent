@@ -151,7 +151,7 @@ def parse_document(file_path: str, use_mineru: bool = None) -> str:
     """
     通用文档解析入口：根据文件后缀自动选择解析器。
 
-    支持格式：.pdf / .docx / .pptx / .html / .htm / .txt / 图片格式
+    支持格式：.pdf / .docx / .pptx / .html / .htm / .txt / .md / 图片格式
 
     Args:
         file_path: 文档文件路径
@@ -184,14 +184,14 @@ def parse_document(file_path: str, use_mineru: bool = None) -> str:
         raw_text = parse_pptx(file_path)
     elif ext in (".htm", ".html"):
         raw_text = parse_html(file_path)
-    elif ext == ".txt":
+    elif ext in (".txt", ".md", ".markdown"):
         raw_text = parse_txt(file_path)
     elif ext in SUPPORTED_IMAGE_EXTS:
         raw_text = parse_image(file_path)
     else:
         raise ValueError(
             f"不支持的文件格式: {ext}"
-            f"（支持 .pdf / .docx / .pptx / .html / .txt / 图片格式）"
+            f"（支持 .pdf / .docx / .pptx / .html / .txt / .md / 图片格式）"
         )
 
     return clean_text(raw_text)
@@ -258,6 +258,11 @@ def split_text(text: str, chunk_size: int = 500, overlap: int = 50) -> list:
     Returns:
         文本块列表
     """
+    if chunk_size <= 0:
+        raise ValueError("chunk_size 必须大于 0")
+    if overlap < 0 or overlap >= chunk_size:
+        raise ValueError("overlap 必须满足 0 <= overlap < chunk_size")
+
     if len(text) <= chunk_size:
         return [text]
 
@@ -279,6 +284,7 @@ def split_text(text: str, chunk_size: int = 500, overlap: int = 50) -> list:
                 end = start + len(chunk)
 
         chunks.append(chunk.strip())
-        start = end - overlap  # 下一块的起始位置，向后重叠
+        # 自然边界可能使当前块短于 overlap，仍须保证游标前进。
+        start = max(start + 1, end - overlap)
 
     return chunks

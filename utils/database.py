@@ -7,6 +7,8 @@ SQLite 持久化层，管理巡检记录、告警历史、日志分析记录。
 - inspection_records: 巡检历史（每次巡检的5项检测结果）
 - alert_history: 告警记录（触发条件、通知状态）
 - log_analysis_records: 日志分析历史
+- conversations: 对话会话（标题、更新时间、消息数）
+- conversation_messages: 对话消息（role/content/顺序）
 
 使用方式：
     from utils.database import db
@@ -19,10 +21,11 @@ import atexit
 import sqlite3
 import json
 import threading
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
-from utils.config import config
+from utils.config import config, get_app_root
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -34,31 +37,43 @@ class Database:
     _instance = None
     _lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls, db_path: os.PathLike[str] | str | None = None):
+        if db_path is not None:
+            instance = super().__new__(cls)
+            instance._initialized = False
+            return instance
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, db_path: os.PathLike[str] | str | None = None):
         if self._initialized:
             return
         self._initialized = True
+        manages_process_lifecycle = db_path is None
 
-        db_path = config.get("database.sqlite_path", "data/oa_ops.db")
-        if not os.path.isabs(db_path):
-            base = os.path.dirname(os.path.dirname(__file__))
-            db_path = os.path.join(base, db_path)
+        if db_path is None:
+            configured_path = Path(config.get("database.sqlite_path", "data/oa_ops.db"))
+            data_dir = os.environ.get("OA_DATA_DIR")
+            if data_dir:
+                db_path = Path(data_dir) / configured_path.name
+            elif configured_path.is_absolute():
+                db_path = configured_path
+            else:
+                db_path = Path(get_app_root()) / configured_path
+        db_path = Path(db_path).resolve()
 
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self._db_path = db_path
+        self._db_path = str(db_path)
         self._conn_local = threading.local()
         logger.info(f"数据库初始化: {db_path}")
         self._init_tables()
 
-        # 注册退出时自动清理
-        atexit.register(self.close_all)
+        # 默认全局数据库随进程退出清理；显式路径实例由调用方管理生命周期。
+        if manages_process_lifecycle:
+            atexit.register(self.close_all)
 
     @property
     def _conn(self) -> sqlite3.Connection:
@@ -131,6 +146,30 @@ class Database:
 
                 CREATE INDEX IF NOT EXISTS idx_analysis_time
                     ON log_analysis_records(analysis_time);
+                -- 对话会话表
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id TEXT PRIMARY KEY,               -- 对话 ID（uuid4 字符串）
+                    title TEXT NOT NULL DEFAULT '新对话',
+                    created_at TEXT DEFAULT (datetime('now','localtime')),
+                    updated_at TEXT DEFAULT (datetime('now','localtime')),
+                    message_count INTEGER DEFAULT 0
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_conversations_updated
+                    ON conversations(updated_at DESC);
+
+                -- 对话消息表
+                CREATE TABLE IF NOT EXISTS conversation_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversation_id TEXT NOT NULL,
+                    role TEXT NOT NULL,                -- user / assistant
+                    content TEXT NOT NULL,
+                    seq INTEGER NOT NULL DEFAULT 0,    -- 消息顺序（从0开始）
+                    created_at TEXT DEFAULT (datetime('now','localtime'))
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_msg_conversation
+                    ON conversation_messages(conversation_id, seq);
             """)
             conn.commit()
             logger.info("数据库表初始化完成")
@@ -381,12 +420,94 @@ class Database:
             (since, limit)
         )
         return [dict(row) for row in cursor.fetchall()]
+    # ========== 对话历史（持久化）==========
 
+    def create_conversation(self, title: str = "新对话", conversation_id: str = None) -> str:
+        """新建对话会话，返回对话 ID。conversation_id 为空时自动生成 uuid4。"""
+        import uuid
+        conv_id = conversation_id or uuid.uuid4().hex
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (conv_id, title, now, now)
+            )
+            self._conn.commit()
+        return conv_id
+
+    def save_message(self, conversation_id: str, role: str, content: str) -> int:
+        """保存一条对话消息；同时更新会话的 updated_at 与 message_count。"""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COALESCE(MAX(seq), -1) + 1 AS next_seq "
+                "FROM conversation_messages WHERE conversation_id = ?",
+                (conversation_id,)
+            ).fetchone()
+            seq = int(row["next_seq"]) if row else 0
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor = self._conn.execute(
+                "INSERT INTO conversation_messages (conversation_id, role, content, seq, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (conversation_id, role, content, seq, now)
+            )
+            self._conn.execute(
+                "UPDATE conversations SET updated_at = ?, message_count = message_count + 1 "
+                "WHERE id = ?",
+                (now, conversation_id)
+            )
+            self._conn.commit()
+            return cursor.lastrowid
+
+    def get_conversation_messages(self, conversation_id: str, limit: int = 200) -> List[Dict]:
+        """获取某对话的全部消息（按 seq 升序）。"""
+        cursor = self._conn.execute(
+            "SELECT id, role, content, seq, created_at FROM conversation_messages "
+            "WHERE conversation_id = ? ORDER BY seq ASC LIMIT ?",
+            (conversation_id, limit)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def list_conversations(self, limit: int = 50) -> List[Dict]:
+        """对话列表：按最近更新倒序，附带首条用户消息预览。"""
+        cursor = self._conn.execute(
+            """SELECT c.id, c.title, c.created_at, c.updated_at, c.message_count,
+                      (SELECT m.content FROM conversation_messages m
+                       WHERE m.conversation_id = c.id AND m.role = 'user'
+                       ORDER BY m.seq ASC LIMIT 1) AS preview
+               FROM conversations c
+               ORDER BY c.updated_at DESC LIMIT ?""",
+            (limit,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def delete_conversation(self, conversation_id: str) -> bool:
+        """删除对话及其全部消息，返回是否删除成功。"""
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM conversation_messages WHERE conversation_id = ?",
+                (conversation_id,)
+            )
+            cursor = self._conn.execute(
+                "DELETE FROM conversations WHERE id = ?", (conversation_id,)
+            )
+            self._conn.commit()
+            return cursor.rowcount > 0
+
+    def rename_conversation(self, conversation_id: str, title: str) -> bool:
+        """重命名对话标题。"""
+        with self._lock:
+            cursor = self._conn.execute(
+                "UPDATE conversations SET title = ? WHERE id = ?",
+                (title, conversation_id)
+            )
+            self._conn.commit()
+            return cursor.rowcount > 0
     # ========== 工具方法 ==========
 
     def get_db_stats(self) -> Dict:
         """获取数据库统计信息"""
-        tables = ["inspection_records", "alert_history", "log_analysis_records"]
+        tables = ["inspection_records", "alert_history", "log_analysis_records",
+                  "conversations", "conversation_messages"]
         stats = {}
         for table in tables:
             cursor = self._conn.execute(f"SELECT COUNT(*) as cnt FROM {table}")
@@ -412,14 +533,14 @@ class Database:
 
     def close_all(self):
         """强制关闭所有连接并 checkpoint WAL（进程退出时调用）"""
-        if hasattr(self._conn_local, "conn") and self._conn_local.conn:
+        had_connection = hasattr(self._conn_local, "conn") and self._conn_local.conn is not None
+        if had_connection:
             try:
                 self._conn_local.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 self._conn_local.conn.close()
             except Exception:
                 pass
             self._conn_local.conn = None
-        logger.info("数据库资源已释放")
 
 
 # 全局单例

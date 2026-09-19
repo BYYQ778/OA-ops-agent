@@ -15,6 +15,7 @@ from typing import List, Dict
 
 from utils.config import config
 from utils.logger import get_logger
+from utils.prompt_safety import UNTRUSTED_DATA_GUARD
 
 logger = get_logger(__name__)
 
@@ -43,7 +44,7 @@ REPORT_SYSTEM_PROMPT = """你是一名资深运维架构师，负责对服务器
 - 实事求是，基于数据说话
 - 操作步骤必须具体、可直接执行
 - 中文输出，技术术语保留英文
-- 如果所有项正常，也要给出预防性建议"""
+- 如果所有项正常，也要给出预防性建议""" + UNTRUSTED_DATA_GUARD
 
 
 def generate_ai_report(inspection_results: List[Dict]) -> str:

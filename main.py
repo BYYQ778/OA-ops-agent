@@ -1,5 +1,5 @@
 """
-OA运维多智能Agent巡检问答系统 - 主入口 v2.4.1
+OA运维多智能Agent巡检问答系统 - 主入口 v2.5.0
 ============================================
 启动方式:
     python main.py              # 启动Web界面（完整功能）
@@ -42,7 +42,7 @@ atexit.register(_cleanup)
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
-        description="OA运维多智能Agent巡检问答系统 v2.4.1",
+        description="OA运维多智能Agent巡检问答系统 v2.5.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -158,7 +158,7 @@ def run_demo_mode():
     print("可用功能: 离线巡检 / 正则日志分析 / 诊断工具箱")
     print("限制: 无LLM智能汇总 / 无知识库问答\n")
     from ui.server import run_server
-    run_server(host="127.0.0.1", port=7860)
+    run_server(host="127.0.0.1", port=7860, enable_background_services=False)
 
 
 def main():
@@ -171,7 +171,7 @@ def main():
 
     print(f"""
 ╔══════════════════════════════════════════════════╗
-║     OA运维多智能Agent巡检问答系统 v2.4.1           ║
+║     OA运维多智能Agent巡检问答系统 v2.5.0           ║
 ║  基于 FastAPI + LangChain + LangGraph + KG + Chroma ║
 ╚══════════════════════════════════════════════════╝
 """)

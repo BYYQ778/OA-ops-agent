@@ -5,10 +5,13 @@ OA运维助手 — FastAPI Web 服务端
 所有 agent 模块代码完全不动，通过 API 端点调用。
 """
 
-import sys, os
+import os
+import sys
+from pathlib import Path
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, Request, Form, UploadFile, File
+from fastapi import APIRouter, FastAPI, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -16,7 +19,6 @@ import uvicorn
 
 from agents.inspection_agent import InspectionAgent, run_unified_inspection
 from agents.log_analysis_agent import LogAnalysisAgent, analyze_log_content
-from agents.knowledge_agent import KnowledgeBaseAgent
 from agents.ssl_monitor import check_cert_expiry, batch_check_certs
 from agents.network_diag import ping_host, check_tcp_port, dns_resolve, traceroute_host, http_health_check
 from agents.db_inspector import check_mysql_status, check_redis_status, show_mysql_slow_queries, check_mssql_status, check_oracle_status
@@ -26,14 +28,112 @@ from utils.config import config as app_config
 from utils.database import db
 from utils.scheduler import InspectionScheduler
 from utils.dashboard import dashboard_manager
+from ui.routers.system import create_system_router
 
 logger = get_logger(__name__)
 
 # ---- FastAPI App ----
-app = FastAPI(title="OA 运维助手", version="2.3")
+from contextlib import asynccontextmanager
+
+
+def _ensure_ollama_running() -> bool:
+    """provider=ollama 时检测本地 Ollama，未运行则自动拉起（与 scripts/启动.bat 第3步一致）。
+
+    返回是否就绪；任何失败只告警不抛出（无 Ollama 的机器优雅降级，
+    问答走既有 Connection error 回退逻辑）。
+    """
+    import time
+    import shutil as _shutil
+    import subprocess as _subprocess
+    import urllib.request as _urlreq
+
+    base = app_config.get("llm.ollama.base_url", "http://localhost:11434/v1")
+    version_url = base.rstrip("/v1").rstrip("/") + "/api/version"
+    # 强制绕过系统代理（历史坑：代理会干扰 localhost 探测）
+    _opener = _urlreq.build_opener(_urlreq.ProxyHandler({}))
+
+    def _reachable() -> bool:
+        try:
+            with _opener.open(version_url, timeout=2) as r:
+                return r.status == 200
+        except Exception:  # noqa: BLE001
+            return False
+
+    if _reachable():
+        logger.info("Ollama 服务已在运行 (%s)", base)
+        return True
+
+    exe = _shutil.which("ollama")
+    if exe is None:
+        for _p in (
+            r"E:\Ollama\ollama.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe"),
+            r"C:\Program Files\Ollama\ollama.exe",
+        ):
+            if os.path.isfile(_p):
+                exe = _p
+                break
+    if exe is None:
+        logger.warning(
+            "provider=ollama 但 Ollama 未运行且找不到 ollama.exe（11434 无响应），"
+            "本地 LLM 不可用；如需使用请安装并启动 Ollama"
+        )
+        return False
+
+    logger.info("Ollama 未运行，自动启动: %s serve", exe)
+    try:
+        flags = 0
+        if sys.platform == "win32":
+            flags = _subprocess.DETACHED_PROCESS | _subprocess.CREATE_NO_WINDOW
+        _subprocess.Popen(
+            [exe, "serve"],
+            stdout=_subprocess.DEVNULL,
+            stderr=_subprocess.DEVNULL,
+            creationflags=flags,
+            close_fds=True,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Ollama 自动启动失败: %s", e)
+        return False
+
+    for _ in range(40):  # 最多等 20 秒
+        time.sleep(0.5)
+        if _reachable():
+            logger.info("Ollama 已就绪（自动启动成功）")
+            return True
+    logger.warning("Ollama 启动超时（20s），如持续失败请手动运行 ollama serve")
+    return False
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """服务启动时：后台拉起 Ollama（如配置）+ 预热知识库引擎（均不阻塞启动）。"""
+    if not app.state.enable_background_services:
+        yield
+        return
+    if app_config.get("llm.provider", "ollama") == "ollama":
+        _threading.Thread(target=_ensure_ollama_running, daemon=True, name="ollama-ensure").start()
+    _prewarm_kb()
+    yield
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+legacy_router = APIRouter()
+
+
+def create_app(enable_background_services: bool | None = None) -> FastAPI:
+    """Create an application while allowing tests/demo mode to disable model startup."""
+    if enable_background_services is None:
+        enable_background_services = os.environ.get("OA_ENABLE_BACKGROUND_STARTUP", "1") != "0"
+    application = FastAPI(title="OA 运维助手", version="2.5.0", lifespan=_lifespan)
+    application.state.enable_background_services = enable_background_services
+
+    application.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+    application.include_router(create_system_router(Path(BASE_DIR), lambda: _kb_state))
+    application.include_router(legacy_router)
+    return application
+
+
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 # ---- 全局状态 ----
@@ -41,7 +141,7 @@ scheduler = InspectionScheduler()
 
 # ============ 页面路由 ============
 
-@app.get("/", response_class=HTMLResponse)
+@legacy_router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     mode = app_config.get("inspection.mode", "simulated")
     mode_label = {"ssh": "SSH远程", "local": "本机", "auto": "SSH优先", "simulated": "模拟"}.get(mode, mode)
@@ -49,12 +149,13 @@ async def index(request: Request):
     import time
     template = templates.get_template("index.html")
     html = template.render(
-        version="2.3",
+        version="2.5.0",
         cache_buster=str(int(time.time())),
         scheduler_status=sched_status,
         is_running=scheduler.is_running,
     )
     return HTMLResponse(html)
+
 
 
 # ============ 巡检 API ============
@@ -66,18 +167,18 @@ def _inspect_with_dashboard():
     return result
 
 
-@app.post("/api/inspect/run")
+@legacy_router.post("/api/inspect/run")
 async def api_inspect():
     result = _inspect_with_dashboard()
     return {"result": result}
 
 
-@app.post("/api/inspect/start")
+@legacy_router.post("/api/inspect/start")
 async def api_inspect_start(interval: int = Form(...)):
     ok = scheduler.start(task_func=_inspect_with_dashboard, interval=interval)
     return {"ok": ok, "msg": "已启动" if ok else "已在运行中"}
 
-@app.post("/api/inspect/stop")
+@legacy_router.post("/api/inspect/stop")
 async def api_inspect_stop():
     ok = scheduler.stop()
     mode = app_config.get("inspection.mode", "simulated")
@@ -87,12 +188,12 @@ async def api_inspect_stop():
         "status": f"调度器: {'运行中' if scheduler.is_running else '已停止'} | 模式: {mode_label} | 间隔: {scheduler.interval}秒"
     }
 
-@app.post("/api/inspect/adjust")
+@legacy_router.post("/api/inspect/adjust")
 async def api_inspect_adjust(interval: int = Form(...)):
     ok = scheduler.adjust_interval(interval)
     return {"ok": ok, "msg": f"间隔已调整: {interval}秒" if ok else "巡检未运行"}
 
-@app.get("/api/inspect/status")
+@legacy_router.get("/api/inspect/status")
 async def api_inspect_status():
     mode = app_config.get("inspection.mode", "simulated")
     mode_label = {"ssh": "SSH远程", "local": "本机", "auto": "SSH优先", "simulated": "模拟"}.get(mode, mode)
@@ -103,7 +204,7 @@ async def api_inspect_status():
         "status": f"调度器: {'运行中' if scheduler.is_running else '已停止'} | 模式: {mode_label} | 间隔: {scheduler.interval}秒"
     }
 
-@app.get("/api/inspect/history")
+@legacy_router.get("/api/inspect/history")
 async def api_inspect_history(days: int = 7):
     try:
         summary = db.get_inspection_summary(days)
@@ -112,7 +213,7 @@ async def api_inspect_history(days: int = 7):
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/api/db/overview")
+@legacy_router.get("/api/db/overview")
 async def api_db_overview():
     try:
         return db.get_db_stats()
@@ -122,7 +223,7 @@ async def api_db_overview():
 
 # ============ 日志分析 API ============
 
-@app.post("/api/log/analyze")
+@legacy_router.post("/api/log/analyze")
 async def api_log_analyze(log_text: str = Form("")):
     if not log_text.strip():
         return {"result": "请输入需要分析的日志内容"}
@@ -130,7 +231,7 @@ async def api_log_analyze(log_text: str = Form("")):
     return {"result": result}
 
 
-@app.post("/api/log/ocr")
+@legacy_router.post("/api/log/ocr")
 async def api_log_ocr(file: UploadFile = File(...)):
     """上传截图 → OCR 识别 → 自动分析"""
     from utils.ocr import extract_text_from_bytes
@@ -151,12 +252,12 @@ async def api_log_ocr(file: UploadFile = File(...)):
 
 # ============ SSL 证书 API ============
 
-@app.post("/api/ssl/check")
+@legacy_router.post("/api/ssl/check")
 async def api_ssl_check(domain: str = Form(...)):
     result = check_cert_expiry.invoke({"domain": domain})
     return {"result": result}
 
-@app.post("/api/ssl/batch")
+@legacy_router.post("/api/ssl/batch")
 async def api_ssl_batch(domains: str = Form(...)):
     result = batch_check_certs.invoke({"domains_text": domains})
     return {"result": result}
@@ -164,53 +265,53 @@ async def api_ssl_batch(domains: str = Form(...)):
 
 # ============ 网络诊断 API ============
 
-@app.post("/api/net/ping")
+@legacy_router.post("/api/net/ping")
 async def api_ping(host: str = Form(...)):
     return {"result": ping_host.invoke({"host": host})}
 
-@app.post("/api/net/port")
+@legacy_router.post("/api/net/port")
 async def api_port(host_port: str = Form(...)):
     return {"result": check_tcp_port.invoke({"host_port": host_port})}
 
-@app.post("/api/net/dns")
+@legacy_router.post("/api/net/dns")
 async def api_dns(domain: str = Form(...)):
     return {"result": dns_resolve.invoke({"domain": domain})}
 
-@app.post("/api/net/trace")
+@legacy_router.post("/api/net/trace")
 async def api_trace(host: str = Form(...)):
     return {"result": traceroute_host.invoke({"host": host})}
 
-@app.post("/api/net/http")
+@legacy_router.post("/api/net/http")
 async def api_http(url: str = Form(...)):
     return {"result": http_health_check.invoke({"url": url})}
 
 
 # ============ 数据库 API ============
 
-@app.post("/api/db/mysql")
+@legacy_router.post("/api/db/mysql")
 async def api_mysql(host: str = Form("127.0.0.1"), port: int = Form(3306),
                     user: str = Form("root"), password: str = Form("")):
     config_text = f"host={host} port={port} user={user} password={password}"
     return {"result": check_mysql_status.invoke({"config_text": config_text})}
 
-@app.post("/api/db/mysql/slow")
+@legacy_router.post("/api/db/mysql/slow")
 async def api_mysql_slow(host: str = Form("127.0.0.1"), port: int = Form(3306),
                          user: str = Form("root"), password: str = Form("")):
     config_text = f"host={host} port={port} user={user} password={password} limit=20"
     return {"result": show_mysql_slow_queries.invoke({"config_text": config_text})}
 
-@app.post("/api/db/redis")
+@legacy_router.post("/api/db/redis")
 async def api_redis(host: str = Form("127.0.0.1"), port: int = Form(6379), password: str = Form("")):
     config_text = f"host={host} port={port} password={password}"
     return {"result": check_redis_status.invoke({"config_text": config_text})}
 
-@app.post("/api/db/mssql")
+@legacy_router.post("/api/db/mssql")
 async def api_mssql(host: str = Form("127.0.0.1"), port: int = Form(1433),
                     user: str = Form("sa"), password: str = Form("")):
     config_text = f"host={host} port={port} user={user} password={password}"
     return {"result": check_mssql_status.invoke({"config_text": config_text})}
 
-@app.post("/api/db/oracle")
+@legacy_router.post("/api/db/oracle")
 async def api_oracle(host: str = Form("127.0.0.1"), port: int = Form(1521),
                      user: str = Form("system"), password: str = Form(""), service: str = Form("orcl")):
     config_text = f"host={host} port={port} user={user} password={password} service={service}"
@@ -219,17 +320,17 @@ async def api_oracle(host: str = Form("127.0.0.1"), port: int = Form(1521),
 
 # ============ 安全基线 API ============
 
-@app.post("/api/sec/ssh")
+@legacy_router.post("/api/sec/ssh")
 async def api_sec_ssh(): return {"result": audit_ssh_config.invoke({})}
-@app.post("/api/sec/login")
+@legacy_router.post("/api/sec/login")
 async def api_sec_login(): return {"result": check_failed_logins.invoke({})}
-@app.post("/api/sec/firewall")
+@legacy_router.post("/api/sec/firewall")
 async def api_sec_fw(): return {"result": audit_firewall_rules.invoke({})}
-@app.post("/api/sec/ports")
+@legacy_router.post("/api/sec/ports")
 async def api_sec_ports(): return {"result": check_listening_ports.invoke({})}
-@app.post("/api/sec/cron")
+@legacy_router.post("/api/sec/cron")
 async def api_sec_cron(): return {"result": audit_cron_jobs.invoke({})}
-@app.post("/api/sec/all")
+@legacy_router.post("/api/sec/all")
 async def api_sec_all():
     result = (
         "=" * 55 + "\n  全量安全基线审计报告\n" + "=" * 55 + "\n\n" +
@@ -242,7 +343,7 @@ async def api_sec_all():
 
 # ============ 实时监控仪表盘 API ============
 
-@app.get("/api/dashboard/metrics")
+@legacy_router.get("/api/dashboard/metrics")
 async def api_dashboard_metrics():
     """返回最新一次巡检的结构化指标，仪表盘首次加载和手动刷新时调用"""
     metrics = dashboard_manager.get_latest()
@@ -251,7 +352,7 @@ async def api_dashboard_metrics():
     return metrics
 
 
-@app.get("/api/dashboard/stream")
+@legacy_router.get("/api/dashboard/stream")
 async def api_dashboard_stream():
     """
     SSE 实时推送端点。
@@ -287,16 +388,42 @@ async def api_dashboard_stream():
     )
 
 
-@app.get("/api/dashboard/history")
+@legacy_router.get("/api/dashboard/history")
 async def api_dashboard_history(minutes: int = 60):
     """返回最近 N 分钟的时间序列数据，供趋势图表使用"""
     timeline = dashboard_manager.get_history(minutes)
     return {"timeline": timeline}
 
 
+def _save_api_key_to_env(api_key: str) -> bool:
+    """把 API Key 写入 .env 文件（不回写 config.yaml 明文），并注入当前进程环境。"""
+    try:
+        from utils.config import PROJECT_ROOT
+        env_file = os.path.join(PROJECT_ROOT, ".env")
+        lines = []
+        if os.path.exists(env_file):
+            with open(env_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        found = False
+        for i, line in enumerate(lines):
+            if line.strip().startswith("OA_LLM_API_KEY="):
+                lines[i] = f"OA_LLM_API_KEY={api_key}\n"
+                found = True
+                break
+        if not found:
+            lines.append(f"OA_LLM_API_KEY={api_key}\n")
+        with open(env_file, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+        os.environ["OA_LLM_API_KEY"] = api_key  # 热切换立即生效
+        logger.info("API Key 已写入 .env（config.yaml 保持占位符）")
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("API Key 写入 .env 失败: %s", e)
+        return False
+
 # ============ 系统配置 API ============
 
-@app.post("/api/config/save")
+@legacy_router.post("/api/config/save")
 async def api_config_save(
     provider: str = Form(...),
     api_key: str = Form(""),
@@ -322,15 +449,22 @@ async def api_config_save(
         updates["llm.model"] = model or "deepseek-chat"
         updates["llm.base_url"] = base_url or "https://api.deepseek.com/v1"
         if api_key:
-            updates["llm.api_key"] = api_key
+            # 安全：明文 Key 只写 .env，config.yaml 保持 ${OA_LLM_API_KEY:} 占位符
+            if not _save_api_key_to_env(api_key):
+                return {"ok": False, "error": "API Key 写入 .env 失败，未保存配置"}
 
     # 持久化到 config.yaml
     if not app_config.update_file(updates):
         return {"ok": False, "error": "配置文件写入失败，请检查 config.yaml 是否被占用"}
 
-    # 热切换：重置知识库 agent，下次问答自动用新配置重建
-    global _kb_agent
-    _kb_agent = None
+    # 热切换：重置知识库引擎状态，后台按新配置重新预热
+    global _kb_agent, _kb_generation, _kb_init_generation
+    with _kb_lock:
+        _kb_agent = None
+        _kb_generation += 1              # 使进行中的旧预热线程结果作废
+        _kb_init_generation = None
+        _kb_state.update(state="loading", error=None)
+    _prewarm_kb()
 
     logger.info(f"LLM 配置已热切换: provider={provider}, model={model or updates.get('llm.model', updates.get('llm.ollama.model', ''))}")
     return {
@@ -342,45 +476,122 @@ async def api_config_save(
 
 # ============ 知识库 API（需 LLM 初始化后可用）============
 
-# 知识库 Agent 需要嵌入模型，延迟初始化
+# 知识库 Agent 需要嵌入模型（首次加载约 20~40 秒）。
+# 启动时后台预热 + 线程安全懒加载 + 就绪状态机。
+import threading as _threading
+
 _kb_agent = None
+_kb_lock = _threading.Lock()
+_kb_generation = 0            # 热切换代数：用于丢弃按旧配置构建的过期实例
+_kb_init_generation = None    # 正在初始化的代数；None = 空闲
+_kb_state = {"state": "loading", "error": None}   # loading | ready | unavailable
+
+
+def _build_kb_agent():
+    """按 provider 路由构建 KnowledgeBaseAgent；未配置时返回 (None, 原因)。"""
+    from agents.knowledge_agent import KnowledgeBaseAgent
+
+    provider = app_config.get("llm.provider", "ollama")
+    if provider == "ollama":
+        api_key = "ollama"
+        base_url = app_config.get("llm.ollama.base_url", "http://localhost:11434/v1")
+        model = app_config.get("llm.ollama.model", "qwen3:8b")
+    else:
+        api_key = app_config.get("llm.api_key", "")
+        base_url = app_config.get("llm.base_url", "")
+        model = app_config.get("llm.model", "")
+        if not api_key:
+            return None, "未配置 LLM API Key（请在 .env 中设置 OA_LLM_API_KEY）"
+    kb = KnowledgeBaseAgent(llm_api_key=api_key, llm_base_url=base_url, llm_model=model)
+    return kb, None
+
 
 def get_kb_agent():
-    global _kb_agent
-    if _kb_agent is None:
-        try:
-            provider = app_config.get("llm.provider", "ollama")
-            if provider == "ollama":
-                api_key = "ollama"
-                base_url = app_config.get("llm.ollama.base_url", "http://localhost:11434/v1")
-                model = app_config.get("llm.ollama.model", "qwen3:8b")
-            else:
-                api_key = app_config.get("llm.api_key", "")
-                base_url = app_config.get("llm.base_url", "")
-                model = app_config.get("llm.model", "")
-                if not api_key:
-                    return None
-            from agents.knowledge_agent import KnowledgeBaseAgent
-            _kb_agent = KnowledgeBaseAgent(llm_api_key=api_key, llm_base_url=base_url, llm_model=model)
-        except Exception as e:
-            return None
-    return _kb_agent
+    """线程安全获取 KB Agent（多线程同时请求只会初始化一次）。
 
-@app.post("/api/kb/ask")
+    返回 None 的三种情形：
+      - 另一线程正在初始化（state=loading，端点应返回"初始化中"提示）
+      - 初始化失败 / 模型不可用（state=unavailable）
+      - LLM 未配置（state=unavailable）
+    """
+    global _kb_agent, _kb_init_generation
+    if _kb_agent is not None:
+        return _kb_agent
+    with _kb_lock:
+        if _kb_agent is not None:            # double-check
+            return _kb_agent
+        if _kb_state.get("state") == "unavailable":
+            # 粘性不可用：初始化失败后不再随请求重试（避免每次请求都阻塞 20~40s），
+            # 仅通过配置热切换或重启应用恢复
+            return None
+        if _kb_init_generation is not None:  # 已有线程在初始化（20~40s）
+            return None
+        _kb_init_generation = _kb_generation
+        _kb_state.update(state="loading", error=None)
+        gen = _kb_generation
+    kb = None
+    try:
+        kb, err = _build_kb_agent()
+        with _kb_lock:
+            if gen == _kb_generation:
+                if kb is None:
+                    _kb_state.update(state="unavailable", error=err or "知识库引擎初始化失败")
+                else:
+                    _kb_agent = kb
+                    _kb_state.update(state="ready", error=None)
+            else:
+                # 热切换已重置：丢弃按旧配置构建的实例，释放资源
+                if kb is not None:
+                    try:
+                        kb.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                kb = None
+    except Exception as e:
+        logger.error("知识库Agent初始化失败: %s", e)
+        with _kb_lock:
+            if gen == _kb_generation:
+                _kb_state.update(state="unavailable", error=str(e))
+        return None
+    finally:
+        with _kb_lock:
+            if _kb_init_generation == gen:
+                _kb_init_generation = None
+    if kb is None or gen != _kb_generation:
+        return None
+    logger.info("知识库引擎初始化完成（ready）")
+    return kb
+
+
+def _prewarm_kb():
+    """后台线程预热 KB Agent（不阻塞服务启动）。"""
+    _threading.Thread(target=get_kb_agent, daemon=True, name="kb-prewarm").start()
+
+
+def _kb_not_ready():
+    """KB 未就绪时的统一状态与提示文案。返回 (state, msg)。"""
+    if _kb_state.get("state") == "unavailable":
+        return "unavailable", "知识库引擎不可用：" + (_kb_state.get("error") or "请检查 LLM 配置")
+    return "loading", "知识库引擎正在初始化（首次加载嵌入模型约 20~40 秒），请稍候…"
+
+@legacy_router.post("/api/kb/ask")
 async def api_kb_ask(question: str = Form(...)):
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪，请确认嵌入模型已下载且 LLM 配置正确"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     return {"result": kb.query(question)}
 
-@app.post("/api/kb/import")
+@legacy_router.post("/api/kb/import")
 async def api_kb_import(file: UploadFile = File(...)):
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪，请确认嵌入模型已下载且 LLM 配置正确"}
-    # 保存上传文件到临时目录
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
+    # 保存上传文件到临时目录（文件名净化，防止路径穿越）
     os.makedirs("data/uploads", exist_ok=True)
-    file_path = os.path.join("data/uploads", file.filename)
+    safe_name = os.path.basename(file.filename or "upload.bin")
+    file_path = os.path.join("data/uploads", safe_name)
     with open(file_path, "wb") as f:
         content = await file.read()
         f.write(content)
@@ -393,38 +604,53 @@ async def api_kb_import(file: UploadFile = File(...)):
         pass
     return {"result": result}
 
-@app.get("/api/kb/list")
+@legacy_router.get("/api/kb/list")
 async def api_kb_list():
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     return {"result": kb.list_documents()}
 
-@app.get("/api/kb/stats")
+@legacy_router.get("/api/kb/stats")
 async def api_kb_stats():
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     return {"result": kb.get_stats()}
 
-@app.post("/api/kb/delete")
+@legacy_router.get("/api/kb/document/{doc_name}")
+async def api_kb_document(doc_name: str):
+    """获取指定文档的完整内容。"""
+    kb = get_kb_agent()
+    if kb is None:
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
+    # URL 解码
+    from urllib.parse import unquote
+    return {"result": kb.get_document_text(unquote(doc_name))}
+
+@legacy_router.post("/api/kb/delete")
 async def api_kb_delete(doc_name: str = Form(...)):
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     return {"result": kb.delete_document(doc_name)}
 
-@app.post("/api/kb/clear")
+@legacy_router.post("/api/kb/clear")
 async def api_kb_clear():
     kb = get_kb_agent()
     if kb is None:
-        return {"result": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"state": state, "result": msg}
     return {"result": kb.clear_knowledge_base()}
 
 
 # ============ 对话 Chat API (v2.4) ============
 
-@app.post("/api/kb/chat")
+@legacy_router.post("/api/kb/chat")
 async def api_kb_chat(
     message: str = Form(...),
     conversation_id: str = Form("default"),
@@ -438,12 +664,39 @@ async def api_kb_chat(
     """
     kb = get_kb_agent()
     if kb is None:
-        return {"answer": "知识库引擎未就绪，请确认嵌入模型已加载且 LLM 配置正确"}
+        state, msg = _kb_not_ready()
+        return {"answer": msg, "state": state, "conversation_id": conversation_id}
     answer = kb.chat(message, conversation_id=conversation_id)
     return {"answer": answer, "conversation_id": conversation_id}
 
+@legacy_router.post("/api/kb/chat/stream")
+async def api_kb_chat_stream(
+    message: str = Form(...),
+    conversation_id: str = Form("default"),
+):
+    """SSE 流式问答：逐 token 推送最终回答。"""
+    import json as _json
 
-@app.post("/api/kb/chat/clear")
+    kb = get_kb_agent()
+
+    async def event_gen():
+        if kb is None:
+            state, msg = _kb_not_ready()
+            yield f"data: {_json.dumps({'error': msg, 'state': state}, ensure_ascii=False)}\n\n"
+            return
+        try:
+            gen = kb.chat(message, conversation_id=conversation_id, stream=True)
+            for chunk in gen:
+                yield f"data: {_json.dumps({'delta': chunk}, ensure_ascii=False)}\n\n"
+            yield f"data: {_json.dumps({'done': True, 'conversation_id': conversation_id}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            logger.warning(f"流式问答异常: {e}")
+            yield f"data: {_json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@legacy_router.post("/api/kb/chat/clear")
 async def api_kb_chat_clear(conversation_id: str = Form("default")):
     """清除指定对话的历史记录。"""
     kb = get_kb_agent()
@@ -453,18 +706,45 @@ async def api_kb_chat_clear(conversation_id: str = Form("default")):
     return {"ok": True, "conversation_id": conversation_id}
 
 
-@app.get("/api/kb/chat/history")
+@legacy_router.get("/api/kb/chat/history")
 async def api_kb_chat_history(conversation_id: str = "default"):
     """获取对话历史。"""
-    kb = get_kb_agent()
-    if kb is None:
-        return {"messages": []}
-    return {"messages": kb.get_conversation(conversation_id)}
+    rows = db.get_conversation_messages(conversation_id)
+    return {"messages": [{"role": r["role"], "content": r["content"]} for r in rows]}
+
+@legacy_router.get("/api/kb/conversations")
+async def api_kb_conversations(limit: int = 50):
+    """对话列表（按最近更新倒序）。"""
+    return {"conversations": db.list_conversations(limit)}
+
+
+@legacy_router.post("/api/kb/conversation")
+async def api_kb_conversation_create():
+    """新建对话，返回新对话 ID。"""
+    conv_id = db.create_conversation("新对话")
+    return {"ok": True, "conversation_id": conv_id, "title": "新对话"}
+
+
+@legacy_router.post("/api/kb/conversation/delete")
+async def api_kb_conversation_delete(conversation_id: str = Form(...)):
+    """删除对话及其全部消息。"""
+    ok = db.delete_conversation(conversation_id)
+    return {"ok": ok, "conversation_id": conversation_id}
+
+
+@legacy_router.post("/api/kb/conversation/rename")
+async def api_kb_conversation_rename(
+    conversation_id: str = Form(...),
+    title: str = Form(...),
+):
+    """重命名对话标题。"""
+    ok = db.rename_conversation(conversation_id, title.strip() or "新对话")
+    return {"ok": ok, "conversation_id": conversation_id, "title": title}
 
 
 # ============ 批量问答 API (v2.4) ============
 
-@app.post("/api/kb/batch-ask")
+@legacy_router.post("/api/kb/batch-ask")
 async def api_kb_batch_ask(questions: str = Form("")):
     """
     批量处理多个问题（最多 20 题并行）。
@@ -474,7 +754,8 @@ async def api_kb_batch_ask(questions: str = Form("")):
     """
     kb = get_kb_agent()
     if kb is None:
-        return {"results": [], "error": "知识库引擎未就绪"}
+        state, msg = _kb_not_ready()
+        return {"results": [], "error": msg, "state": state}
 
     question_list = [q.strip() for q in questions.split("\n") if q.strip()]
     if not question_list:
@@ -526,7 +807,7 @@ def _get_kg_store():
     return kb.kg_store
 
 
-@app.post("/api/kg/search")
+@legacy_router.post("/api/kg/search")
 async def api_kg_search(query: str = Form(...), entity_type: str = Form(None)):
     """搜索知识图谱中的实体（按名称/描述）。"""
     store = _get_kg_store()
@@ -544,7 +825,7 @@ async def api_kg_search(query: str = Form(...), entity_type: str = Form(None)):
     }
 
 
-@app.post("/api/kg/explore")
+@legacy_router.post("/api/kg/explore")
 async def api_kg_explore(node_id: str = Form(...), depth: int = Form(2)):
     """提取以指定节点为中心的子图（供可视化）。"""
     store = _get_kg_store()
@@ -557,7 +838,7 @@ async def api_kg_explore(node_id: str = Form(...), depth: int = Form(2)):
     return {"subgraph": subgraph}
 
 
-@app.post("/api/kg/path")
+@legacy_router.post("/api/kg/path")
 async def api_kg_path(source: str = Form(...), target: str = Form(...)):
     """查找两个实体之间的最短路径。"""
     store = _get_kg_store()
@@ -572,7 +853,7 @@ async def api_kg_path(source: str = Form(...), target: str = Form(...)):
     return {"path": result["path"], "length": result["length"], "nodes": result.get("nodes", []), "edges": result.get("edges", [])}
 
 
-@app.get("/api/kg/stats")
+@legacy_router.get("/api/kg/stats")
 async def api_kg_stats():
     """获取知识图谱统计信息。"""
     store = _get_kg_store()
@@ -588,7 +869,7 @@ async def api_kg_stats():
 
 # ============ 运维命令大全 API ============
 
-@app.get("/api/commands")
+@legacy_router.get("/api/commands")
 async def api_commands():
     """
     返回运维常用命令大全数据。
@@ -602,10 +883,24 @@ async def api_commands():
     try:
         with open(commands_path, "r", encoding="utf-8") as f:
             content = f.read()
-        # 提取 JS 对象: OPS_COMMANDS = { ... };
-        start = content.index("{")
-        end = content.rindex("}") + 1
-        js_obj = content[start:end]
+        # 提取 JS 对象: OPS_COMMANDS = { ... }（文件顶部 const 声明）
+        # 按大括号配对截取第一个完整对象，避免把文件里后续的搜索工具函数
+        # 也切进 JSON 导致 "Extra data" 解析失败
+        first_brace = content.index("{")
+        depth = 0
+        end = None
+        for pos in range(first_brace, len(content)):
+            char = content[pos]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    end = pos + 1
+                    break
+        if end is None:
+            raise ValueError("命令数据中未找到完整的 OPS_COMMANDS 对象")
+        js_obj = content[first_brace:end]
         # 移除 JS 注释 (只移除行首 // 注释,避免误删 URL 中的 //)
         js_obj = re.sub(r'^\s*//.*$', '', js_obj, flags=re.MULTILINE)
         js_obj = re.sub(r'/\*.*?\*/', '', js_obj, flags=re.DOTALL)
@@ -620,8 +915,10 @@ async def api_commands():
 
 # ============ 启动入口 ============
 
-def run_server(host: str = "127.0.0.1", port: int = 7860):
-    uvicorn.run(app, host=host, port=port, log_level="info")
+app = create_app()
+
+def run_server(host: str = "127.0.0.1", port: int = 7860, enable_background_services: bool | None = None):
+    uvicorn.run(create_app(enable_background_services), host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":

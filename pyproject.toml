@@ -1,0 +1,90 @@
+[project]
+name = "oa-ops-agent"
+version = "2.5.0"
+description = "OA system inspection, diagnostics, and knowledge-base assistant"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "apscheduler>=3.10.0,<4",
+  "beautifulsoup4>=4.12.0",
+  "fastapi>=0.115.0",
+  "httpx>=0.27.0",
+  "jinja2>=3.1.0",
+  "langchain>=1.0.0,<2",
+  "langchain-community>=0.4.0,<1",
+  "langchain-openai>=1.0.0,<2",
+  "langgraph>=1.0.0,<2",
+  "lxml>=5.0.0",
+  "networkx>=3.2",
+  "numpy>=1.26.0",
+  "openai>=2.0.0,<3",
+  "paramiko>=3.0",
+  "pypdf2>=3.0.0",
+  "python-docx>=1.0.0",
+  "python-multipart>=0.0.12",
+  "python-pptx>=0.6.0",
+  "pyyaml>=6.0",
+  "requests>=2.28",
+  "scikit-learn>=1.3.0",
+  "tiktoken>=0.5.0",
+  "uvicorn>=0.30.0",
+]
+
+[project.optional-dependencies]
+rag = [
+  "chromadb>=1.0.0",
+  "langchain-chroma>=1.0.0",
+  "langchain-huggingface>=1.0.0",
+  "sentence-transformers>=5.0.0",
+]
+ocr = [
+  "cnocr>=2.3,<3",
+  "pillow>=10.0",
+  "rapidocr>=3.4",
+]
+desktop = ["pywebview>=5.0"]
+
+[dependency-groups]
+dev = [
+  "cryptography>=43.0",
+  "pre-commit>=4.0",
+  "pyright>=1.1.390",
+  "pytest>=8.3",
+  "pytest-cov>=6.0",
+  "pytest-socket>=0.7.0",
+  "ruff>=0.9",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --disable-socket --allow-unix-socket"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+  "allow_hosts(hosts): permit loopback hosts for in-process ASGI test clients",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["agents", "ui", "utils"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = ["data", "dist"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82", "W605"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+include = ["ui/routers", "tests"]
+exclude = ["data", "dist"]
+venvPath = "."
+venv = ".venv"
+reportMissingImports = "warning"
+reportMissingTypeStubs = false

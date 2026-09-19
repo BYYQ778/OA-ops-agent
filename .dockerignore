@@ -42,4 +42,22 @@ Thumbs.db
 
 
 # Git
-.git/
+.git
+
+# Test/quality outputs and local caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage*
+coverage.xml
+coverage.json
+coverage-*.json
+coverage-*.xml
+htmlcov/
+.uv-cache/
+.worktrees/
+data/knowledge_graph/
+data/desktop.log
+data/backend.log
+data/webview_profile/
+.hermes/

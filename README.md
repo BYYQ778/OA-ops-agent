@@ -1,16 +1,17 @@
-# OA Ops Agent
+﻿# OA Ops Agent v2.5.0
 
 基于 LangChain + RAG + Chroma 的 OA 系统智能运维助手，支持自动巡检、日志分析、知识库问答和 AI 报告生成。
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Quality](https://github.com/BYYQ778/OA-ops-agent/actions/workflows/quality.yml/badge.svg)](https://github.com/BYYQ778/OA-ops-agent/actions/workflows/quality.yml)
 
 ## 功能
 
 - **实时监控仪表盘** — SSE 实时推送 + 5 状态卡片 + Chart.js 趋势图 + 告警时间线 + 终端日志控制台
 - **巡检监控** — 自动检测端口、服务、磁盘、内存，支持 Local/SSH/Simulated 三种模式，定时调度 + 历史查询
 - **日志分析** — 上传或粘贴运维日志，正则匹配 10 种常见故障（502/503/OOM/磁盘满等），输出排查建议
-- **知识库问答** — 多轮对话 Chatbot + Agentic RAG 多步推理 + 知识图谱探索，支持单题/批量(20题并行)
+- **知识库问答** — 多轮对话 Chatbot + Agentic RAG 多步推理 + 知识图谱探索，SSE 流式输出 + 对话历史持久化（会话列表/切换/删除/自动标题），支持单题/批量(20题并行)
 - **AI 报告** — 巡检完成后自动生成预警分析与改进策略，支持 Ollama 本地离线 / DeepSeek 云端两种后端
 - **诊断工具箱** — SSL 证书过期检测、网络诊断（Ping/端口/DNS/路由/HTTP）、数据库巡检（MySQL/MSSQL/Oracle/Redis）、安全基线审计
 - **OCR 识别** — 知识库支持导入截图/扫描件自动 OCR；日志分析支持上传报错截图识别后分析
@@ -20,6 +21,29 @@
 
 **无需 API Key，开箱即用。** 默认使用本地离线模式（Ollama），所有数据不出本机。
 
+
+### 桌面版（推荐，体验最佳）
+
+双击桌面上的 **「OA运维Agent」** 快捷方式（或运行 `scripts/启动桌面版.bat`），即可像原生软件一样打开应用窗口：
+
+- 无浏览器标签页、无控制台黑框（基于 PyWebView + Edge WebView2）
+- 启动画面自动等待服务就绪后进入主界面（首次加载嵌入模型约 20~40 秒）
+- 关闭窗口即退出服务，端口自动释放，无残留进程
+- 再次双击自动复用已在运行的服务，不会重复启动后端
+- 日志：`data/desktop.log`（桌面壳）、`data/backend.log`（后端）
+
+> 换机器/重新生成快捷方式：运行 `scripts/生成图标.py` 生成图标，然后右键 `scripts/启动桌面版.bat` → 发送到 → 桌面快捷方式。
+
+### 绿色版（免装 Python，可分发给同事）
+
+运行 `scripts/打包绿色版.bat`（或 `python -m PyInstaller oa_agent.spec --noconfirm --clean`）生成 `dist\OA运维Agent\` 绿色版：
+
+- `OA运维Agent.exe` 双击即开，**无需安装 Python / 依赖 / Ollama**
+- 内置离线嵌入模型与 OCR 模型（完全离线可用）
+- 业务代码外置在 exe 同目录 `app/`：以后更新代码只需跑 `scripts/更新绿色版代码.bat` 覆盖 `app/` 后重启，无需重新打包（`app/` 误删时自动回退内置副本）
+- 首次运行自动生成 `config.yaml` / `.env.example`：把 `.env.example` 复制为 `.env` 填入 `OA_LLM_API_KEY` 即可启用知识库/LLM（或改 `config.yaml` 用 Ollama）
+- 数据（知识库/对话/巡检/日志）在 exe 同目录 `data/`，整个文件夹可整体拷贝分发
+- 桌面快捷方式已指向绿色版 exe
 ### 方式一：Windows 一键启动（推荐）
 
 双击项目根目录 `scripts/启动.bat`，脚本会自动：
@@ -48,6 +72,30 @@ python main.py
 ```
 
 启动后访问 **http://127.0.0.1:7860**。
+
+### 本地开发与验证
+
+项目使用 `uv.lock` 固定开发和 CI 依赖。默认安装为完整 core 服务，但不会安装体积较大的 RAG、OCR 或桌面依赖：
+
+```bash
+# core + 开发工具（CI 默认）
+uv sync --locked --dev
+
+# 完整源码运行环境（RAG + OCR + 桌面）
+uv sync --locked --all-extras --dev
+
+# 质量检查
+uv run ruff check .
+uv run ruff check --select E,F,I,W ui/routers tests
+uv run pyright
+uv run pytest --cov --cov-report=term-missing
+uv run python -m compileall -q agents ui utils main.py desktop_app.py
+uv run pre-commit run --all-files
+```
+
+测试和轻量容器可设置 `OA_ENABLE_BACKGROUND_STARTUP=0`，防止应用启动时探测 Ollama 或预热嵌入模型。设置 `OA_DATA_DIR` 可将默认 SQLite 数据文件隔离到指定目录。测试禁止外部网络连接，不下载模型；API 测试允许事件循环所需的本机回环通信。
+
+工程基线进展（2026-09-17 本地实测）：pytest **594 passed**（完全离线，不连接外部服务）；覆盖率如实统计 agents/ui/utils——全库 **75.4%**（目标 ≥60%）、核心模块 **93–100%**（目标 ≥80%）本地达标。全库 Ruff（语法级）+ 新 Router/测试严格范围（E/F/I/W）通过；Pyright 0 errors（当前范围：新 Router 与测试）。**远端 CI、Docker 构建与绿色版尚未实际运行验收——测试通过不等于已发布 v3.0。** 详见 [阶段验收记录](docs/superpowers/plans/phase-1-acceptance.md)。
 
 ### 方式三：Docker
 
@@ -172,7 +220,7 @@ oa-ops-agent/
 │   ├── ocr.py                 # 图片文字识别
 │   └── alert.py               # 告警通知
 └── ui/
-    ├── server.py              # FastAPI 服务端（47个API端点，含 Chat + KG + 批量问答）
+    ├── server.py              # FastAPI 服务端（55个API端点，含 Chat + KG + 批量问答）
     ├── templates/index.html   # 纯HTML前端（8页面侧边栏）
     └── static/
         ├── style.css          # 样式
@@ -211,6 +259,9 @@ A: 可以。安装 Python 3.11+ 和 Ollama，将 `inspection.mode` 改为 `ssh` 
 
 **Q: 如何修改默认密码？**
 A: v2.3 暂未启用 Web 登录认证。如需启用，可在 `.env` 中设置 `OA_AUTH_PASSWORD=你的新密码`，并在 `ui/server.py` 中添加认证中间件。
+
+**Q: 启动画面要等一会儿才进入主界面？**
+A: 桌面版会等待本地嵌入模型加载完成（首次约 20~40 秒，之后 3~5 秒）。等待超过 8 秒时可点「跳过等待，直接进入」，知识库功能在后台就绪后自动可用。
 
 ## License
 

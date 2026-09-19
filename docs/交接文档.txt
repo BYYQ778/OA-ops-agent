@@ -1,10 +1,10 @@
-OA运维多智能Agent巡检问答系统 - 交接文档 v2.4
+OA运维多智能Agent巡检问答系统 - 交接文档 v2.5.0
 =================================================
-创建: 2026-05-07（v1.0）→ 最后更新: 2026-07-10（v2.4 知识图谱 + Agentic RAG + 多格式解析）
-版本: v2.4
+创建: 2026-05-07（v1.0）→ 最后更新: 2026-08-04（v2.5.0 对话历史持久化 + SSE流式输出 + 知识问答UI重构）
+版本: v2.5.0
 状态: GitHub开源已发布、可演示、可部署、本机离线运行
 仓库: https://github.com/BYYQ778/OA-ops-agent
-最后更新: 2026-07-10 — v2.4 知识图谱构建/Agentic RAG(LangGraph ReAct)/多格式解析(PPTX+HTML+MinerU)
+最后更新: 2026-08-16 — UI 现代化（导航/诊断工具箱 SVG 图标 + 数据库网格 + 开发热刷新）
 
 ═══════════════════════════════════════════════════════════
 一、项目概述
@@ -17,7 +17,9 @@ OA运维多智能Agent巡检问答系统，面向运维实习生的智能运维�
   实时监控仪表盘 → SSE推送 + 5状态卡片 + Chart.js趋势图 + 告警时间线 + 日志控制台
   巡检Agent → 端口/Nginx/OA服务/磁盘/内存 五项检测
   日志分析Agent → 10+正则规则自动识别故障
-  知识库Agent → 多轮对话 Chatbot + Agentic RAG + 知识图谱多步推理 + 批量问答(20题)
+  知识库Agent → 多轮对话 Chatbot + Agentic RAG + 知识图谱多步推理 + 批量问答(20题) + SSE流式输出
+  对话历史 → SQLite 持久化 + 会话列表/新建/切换/删除/自动标题
+  SSE流式输出 → 问答逐 token 流式渲染（/api/kb/chat/stream）
   知识图谱 → LLM实体提取(5种类型) + NetworkX图谱存储 + 节点搜索/路径发现/子图探索
   Agentic RAG → LangGraph ReAct Agent，向量检索+图谱推理多步决策
   多格式解析 → PDF/Word/PPT/HTML/TXT/图片 + MinerU多模态(可选) + OCR
@@ -34,11 +36,11 @@ OA运维多智能Agent巡检问答系统，面向运维实习生的智能运维�
 虚拟环境: E:\YunweiAgent\oa-ops-agent\env_new
 Python:    3.11.9
 端口:      7860
-数据库:    SQLite → data/oa_ops.db
+数据库:    SQLite → data/oa_ops.db（5表：巡检/告警/日志分析/对话/对话消息）
 配置:      config.yaml（主配置）+ .env（敏感信息）
 认证:      v2.3 FastAPI 未接入登录认证（旧 Gradio 版 admin/admin123 已随框架移除）
 巡检模式:  local（本机 Windows 真实检测）
-Git:       已初始化，12次提交（master）
+Git:       已初始化，15次提交（master，HEAD=v2.5.0/3af9f42）
 
 ═══════════════════════════════════════════════════════════
 三、v2.0 MVP 全部改造清单（12项）
@@ -103,7 +105,7 @@ Git:       已初始化，12次提交（master）
    - Ollama离线部署指南.md
 
 ═══════════════════════════════════════════════════════════
-四、项目文件结构（v2.4）
+四、项目文件结构（v2.5.0）
 ═══════════════════════════════════════════════════════════
 
 oa-ops-agent/
@@ -125,7 +127,7 @@ oa-ops-agent/
 │   ├── inspection_agent.py      # 巡检Agent（模拟+LLM汇总）
 │   ├── inspection_real.py       # 真实巡检（SSH+本机Local）
 │   ├── log_analysis_agent.py    # 日志分析（10+正则规则）
-│   ├── knowledge_agent.py       # 知识库RAG + Agentic RAG + KG
+│   ├── knowledge_agent.py       # 知识库RAG + Agentic RAG + KG + SSE流式
 │   ├── entity_extractor.py      # [v2.4] LLM 实体提取
 │   ├── kg_builder.py            # [v2.4] 知识图谱构建编排
 │   ├── ai_reporter.py           # AI报告生成（预警+策略）
@@ -135,7 +137,7 @@ oa-ops-agent/
 │   └── security_audit.py        # [v2.1] 安全基线检查
 │
 ├── ui/                          # [v2.3] FastAPI + 纯HTML/CSS/JS
-│   ├── server.py                # FastAPI服务端（44个API端点）
+│   ├── server.py                # FastAPI服务端（53个API端点，含对话管理+流式）
 │   ├── templates/index.html     # 纯HTML前端（8页面侧边栏）
 │   └── static/
 │       ├── style.css            # 企业级CSS设计系统
@@ -143,7 +145,7 @@ oa-ops-agent/
 │
 ├── utils/                       # 基础设施（11个）
 │   ├── config.py                # 配置加载器
-│   ├── database.py              # SQLite 数据库（3表）
+│   ├── database.py              # SQLite 数据库（5表）
 │   ├── dashboard.py             # [v2.3] 实时仪表盘数据管理
 │   ├── alert.py                 # 告警通知（邮件/钉钉/企微）
 │   ├── scheduler.py             # 定时调度
@@ -203,6 +205,8 @@ oa-ops-agent/
 ✅ 图谱探索 API（v2.4 已完成 — /api/kg/search/explore/path/stats）
 ✅ 批量问答（v2.4 已完成 — /api/kb/batch-ask 最多 20 题并行）
 ✅ 多格式文档解析（v2.4 已完成 — PPTX/HTML + MinerU 可选）
+✅ 对话历史持久化（v2.5.0 已完成 — SQLite 会话表 + 会话列表/切换/删除/自动标题）
+✅ SSE 流式输出（v2.5.0 已完成 — /api/kb/chat/stream + 前端逐 token 渲染）
 ☐ HTTPS 支持
 ☐ Linux 本机巡检支持
 ☐ 前端迁移 React/Vue（当前为 FastAPI + 纯HTML/CSS/JS）
@@ -571,3 +575,203 @@ Phase 6: 全链路 E2E 验证
 - 前端改造为 Chatbot 对话气泡界面，支持多轮追问
 - config 新增 chat_max_turns(10) / chat_max_history(30)
 - API 端点总计: 39 → 47
+
+
+═══════════════════════════════════════════
+【2026-08-04 — v2.5.0 对话历史持久化 + SSE流式输出 + 知识问答UI重构】
+═══════════════════════════════════════════
+
+一、对话历史持久化（SQLite）
+  - utils/database.py 新增 conversations / conversation_messages 两表 + 6 个方法
+    create_conversation / save_message / get_conversation_messages / list_conversations / delete_conversation / rename_conversation
+  - agents/knowledge_agent.py chat() 改造：DB 懒加载 + 每条消息落库 + 首条消息自动标题
+  - 新增 API: GET /api/kb/conversations, POST /api/kb/conversation(/delete/rename)
+  - 前端: 知识问答页两栏布局（会话列表可折叠 + 响应式降级），支持新建/切换/删除
+
+二、SSE 流式输出
+  - answer_node 改 llm.stream() + LangGraph StreamWriter（stream_mode=custom 消费）
+  - 新增 POST /api/kb/chat/stream（text/event-stream，delta/done/error 事件）
+  - 前端 chatSend 改 fetch + ReadableStream 逐 token 渲染
+  - 降级: LLM 不可用自动回退检索模式
+
+三、前端工程优化
+  - 统一 API 请求封装（30s 超时 + 错误归一化 + Toast 提示）
+  - 深色主题对比度修复（硬编码颜色 → CSS 变量，!important 16→10）
+  - 聊天气泡/会话项/折叠动画样式重做，两栏等高
+
+四、安全
+  - 移除 config.yaml 硬编码 DeepSeek API Key → ${OA_LLM_API_KEY:} .env 注入
+  - 重写 Git 历史清除已提交的密钥（未推送到远程）
+
+五、版本号
+  - 统一为 v2.5.0（main.py / server.py / README）
+  - 提交: 3af9f42，标签: v2.5.0，API 端点 47 → 53
+═══════════════════════════════════════════
+【2026-08-05 — 桌面版：PyWebView 原生窗口（双击即开）】
+═══════════════════════════════════════════
+
+一、桌面化改造
+  - 新增 desktop_app.py — PyWebView 桌面壳（Windows 底层 Edge WebView2）
+    · 自动启动后端 main.py；端口复用（服务已在运行时直接开窗）
+    · 启动画面轮询 /api/health，就绪后自动载入主界面
+    · 关闭窗口 = 优雅退出（停止后端、释放端口、无残留进程）
+    · 日志: data/desktop.log（桌面壳）/ data/backend.log（后端，UTF-8）
+  - ui/server.py 新增 /api/health 健康检查端点
+  - 新增 scripts/启动桌面版.bat + 桌面快捷方式「OA运维Agent」
+  - 新增 oa_agent.ico 应用图标 + scripts/生成图标.py（可重新生成/换图）
+  - requirements.txt 新增 pywebview>=5.0
+
+二、安全修复
+  - config.yaml 明文 DeepSeek Key 回退为 OA_LLM_API_KEY 环境变量注入（.env）
+
+三、体验
+  - 无控制台黑框（pythonw）、无浏览器标签页，观感接近原生桌面软件
+  - 首次启动加载嵌入模型约 20~40 秒（启动画面有等待提示）
+  - 二次双击自动复用已运行服务，不重复启动后端
+  - 健康检查绕过系统代理，端口占用时先等待确认再复用（防误判）
+
+四、验证（自测全通过）
+  - 启动→就绪→页面渲染（HTML/CSS/JS + SSE 实时推送全部加载）✅
+  - 关闭窗口→优雅退出→端口释放→无残留进程 ✅
+  - 二次双击复用→仅 1 个后端进程、2 个窗口正常 ✅
+═══════════════════════════════════════════
+【2026-08-05 晚 — 绿色版打包（PyInstaller）】
+═══════════════════════════════════════════
+
+一、交付物
+  - dist\OA运维Agent\ 绿色版（OA运维Agent.exe + _internal，约 1.7GB）
+    · 免装 Python/依赖/Ollama，双击即开，内置离线模型，可整体拷贝分发
+    · 桌面快捷方式已指向绿色版 exe
+  - 重新打包: scripts\打包绿色版.bat（或 python -m PyInstaller oa_agent.spec）
+
+二、关键技术点
+  - 进程隔离：GUI 主进程 + 后端 --backend 子进程（避免 WebView2 与 torch/onnxruntime 原生库冲突）
+  - 冻结路径兼容：utils/config.py get_app_root()，logger/database/knowledge_agent/inspection_agent 统一数据目录到 exe 同目录
+  - 前端离线化：Chart.js / vis-network 下载到 ui/static/vendor/，移除 Google Fonts
+  - 离线模型：嵌入模型 + OCR 模型打进 _internal/models/hf（HF_HOME 指向），知识库/OCR 完全离线可用
+  - spec 坑位记录：
+    · excludes 不可含 unittest（torch/sklearn/numpy 顶层依赖，排除会导致 0xc0000409 原生崩溃）
+    · chromadb 必须 collect_all（动态导入 telemetry 等，否则 No module named chromadb.telemetry.product.posthog）
+    · cnocr/cnstd/rapidocr 需 collect_data（yaml/onnx/字典）+ collect_submodules
+    · 中文路径/exe 名不影响打包（已验证），subsystem 也不影响
+
+三、首次运行说明（分发必读）
+  - 把 .env.example 复制为 .env 填 OA_LLM_API_KEY（DeepSeek）或改 config.yaml provider=ollama
+  - 数据目录 exe 同目录 data/，日志 desktop.log / backend.log
+
+四、验证（自测全通过）
+  - 启动→就绪→页面渲染（本地 vendor JS）→仪表盘 SSE ✅
+  - 知识库：导入样例文档（12块+148实体进图谱）→ 问答（DeepSeek 引用文档回答）✅
+  - 关闭窗口→优雅退出→端口释放→无残留 ✅
+
+═══════════════════════════════════════════════════════════
+【2026-08-07 — 绿色版 OCR 专项验证与修复】
+═══════════════════════════════════════════════════════════
+
+一、验证方式
+  绿色版 exe --backend 启动 → POST /api/log/ocr 上传中英文测试截图。
+
+二、修复前问题（3 个）
+  1. No module named 'matplotlib'
+     · cnstd.yolov7.plots 模块级 import matplotlib，spec excludes 不能排除
+  2. [WinError 183] ...AppData\Roaming\cnocr\2.3
+     · cnocr 默认识别模型未内置，运行期下载到 APPDATA 离线失败
+  3. type <class 'bytes'> is not supported now
+     · RapidOCR v4 后端 ocr() 不支持 bytes（/api/log/ocr 上传场景）
+
+三、修复内容
+  · oa_agent.spec: excludes 移除 matplotlib + collect_all；内置 msyh.ttc 字体；
+    使用说明.txt 入 datas
+  · utils/ocr.py: 显式指定 rapidocr 内置 ch_PP-OCRv4 检测/识别 ONNX；
+    显式 font_path；extract_text_from_bytes 转 ndarray
+
+四、验证结果
+  · 绿色版 /api/log/ocr ✅ 识别 502 Bad Gateway / upstream timed out / 中文行，
+    日志分析自动输出 502 排查建议
+  · 源码模式 extract_text / extract_text_from_bytes 回归 ✅
+  · 体积 1.69GB → 1.72GB
+
+五、遗留
+  · 无（OCR 冻结版已专项验证通过；知识库导入需 LLM 配置，与 OCR 无关）
+
+═══════════════════════════════════════════════════════════
+【2026-08-07 — 安全加固】
+═══════════════════════════════════════════════════════════
+
+一、修复
+  · 提示词注入：新增 utils/prompt_safety.py，10 个 system prompt 接入防注入指令，
+    RAG/日志/实体提取的不可信内容用 wrap_untrusted 包装为数据块
+  · 命令注入 RCE：network_diag 改 shell=False + 参数数组 + _is_safe_host 校验
+  · 上传路径穿越：api_kb_import 文件名 basename 净化
+  · API Key 明文：/api/config/save 改写入 .env
+
+二、遗留建议
+  · API 认证（auth.enabled 已配置未实现）
+  · SSRF/内网探测缓解（127.0.0.1 绑定已缓解）
+  · scan_log_file 目录限制、HTTPS
+
+
+═══════════════════════════════════════════
+【2026-08-13 — 启动体验修复（模型就绪同步）】
+═══════════════════════════════════════════
+- 桌面版启动画面等待 kb_state∈{ready,unavailable} 才进入主界面
+  （/api/health 上报状态；等 8 秒后可点"跳过等待"直接进入）
+- 后端 KB 引擎启动即后台预热（lifespan 线程）+ 线程安全状态机
+  + unavailable 粘性（失败不随请求重试）+ 热切换重预热
+- 前端 2s 轮询就绪状态：知识问答页状态文本 + 知识库页横幅 +
+  未就绪拦截提问
+- 环境修复: env_new tokenizers 0.23.1→0.22.2（transformers 5.8.0
+  约束无 0.23.0 稳定版；原版本致 sentence_transformers 导入失败）
+- 详细见 维护日志.txt 2026-08-13 条目
+
+
+═══════════════════════════════════════════
+【2026-08-13 — 方案A：免重打包更新架构】
+═══════════════════════════════════════════
+- 绿色版新增 app/ 外置业务代码目录（main.py/ui/agents/utils），
+  desktop_app.py 启动时插入 sys.path 最前压过 PYZ 冻结副本
+- 以后更新代码：改源码 → 跑 scripts/更新绿色版代码.bat → 重启应用，
+  无需 PyInstaller 重打包（业务代码层面）
+- PYZ 保留冻结副本兜底（app/ 误删时回退）
+- 启动器 desktop_app.py 改动仍需重打包（scripts/打包绿色版.bat，
+  已含数据备份/恢复 + 自动同步 app/）
+- 详细见 维护日志.txt 2026-08-13 条目
+
+═══════════════════════════════════════════
+【2026-09-17 — v3.0 六周优化计划：第 1 周工作区与进度】
+═══════════════════════════════════════════
+- 六周计划（GPT 制定）执行记录与验收: worktree 内
+  docs/superpowers/plans/2026-09-16-v3-execution.md、phase-1-acceptance.md
+- 工作区: 独立 worktree E:\YunweiAgent\oa-ops-agent-quality-baseline
+  （分支 chore/quality-baseline；uv 环境 .venv=Python 3.12.13；
+  uv 缓存 E:\YunweiAgent\.uv-cache）。主目录保持 master 不动。
+- 第 1 周已交付: pyproject+uv.lock、CI quality.yml、pre-commit、
+  pytest 套件（126 → 594 用例，全库覆盖率 75.4%、分支 74.6%）、
+  system 路由拆分、Docker 现代化、端点/模块测试补全、/api/commands 修复、
+  裸 pytest/CI 导入路径修复（pythonpath=["."]）、hermes verify 本地通过(ok:true)、
+  env_new 源码 + 桌面 --backend 真实运行回归
+- 第 1 周提交（worktree 分支 chore/quality-baseline）: 860af8b（基线）→
+  55657a1 → 72ee8f2 → 120c587 → d83f09f → d99536c → d0aa18c（首推于此；
+  此后追加 docs 提交见 git log）
+- 推送与 CI（2026-09-17）: 分支已推送 GitHub，**远端 CI 首跑全绿**
+  （run 35193433016：quality 全步骤 + docker-core 构建与容器冒烟；
+  594 passed / 远端 TOTAL 75%，与本地一致）。本地 master 领先
+  origin/master 17 个提交（含 v2.5.0 桌面版全部工作，尚未推送）。
+- 推送通路（重要）: github.com:443 直连被重置（DNS 返回 IP 不可达；
+  改 hosts 需管理员权限）。现用部署密钥 `~/.ssh/oa_deploy`（仓库
+  Deploy Key，仅本仓库写权限）+ SSH over 443；remote `ssh-origin` =
+  git@github.com:BYYQ778/OA-ops-agent.git；`~/.ssh/config` 已配
+  github.com → ssh.github.com:443。推送：`git push ssh-origin <branch>`。
+- 遗留事项（详见 维护日志.txt 2026-09-17 条目「发现」a–f）:
+  P1 长耗时 KB 操作阻塞事件循环（建议第 2 周改线程池/同步端点）；
+  P2 本机巡检依赖 wmic（新版 Windows 已移除）导致磁盘/内存「无数据」；
+  P3 日志规则未覆盖 Oracle/SQL Server 错误码（第 3 周评测时补）；
+  P3 db_inspector 审计准确性 3 处 + inspection_real 解析脆弱点
+  （「发现」e/f，建议随第 4 周诊断能力一并修）；
+  信息 starlette TestClient 缓冲流式响应（已以直驱 body_iterator 绕过）
+- 环境提示: 该 worktree 由自动化工具创建，.pytest_cache 与
+  系统 Temp\pytest-of-YY 被 ACL 锁死；跑 pytest 需重定向
+  TMPDIR 与 cache_dir（命令示例见 Hermes 技能 oa-ops-agent
+  references/v3-workbench.md）
+- 桌面/绿色回归: env_new（3.11.9，全依赖）完好，可直接跑 worktree 源码；
+  绿色版 dist 产物在主目录，未被本次改动触及

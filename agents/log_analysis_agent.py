@@ -32,6 +32,7 @@ from langchain.tools import tool
 from langchain_openai import ChatOpenAI
 
 from utils.logger import get_logger
+from utils.prompt_safety import UNTRUSTED_DATA_GUARD, wrap_untrusted
 
 logger = get_logger(__name__)
 
@@ -350,7 +351,7 @@ LOG_ANALYSIS_SYSTEM_PROMPT = """你是一名资深OA系统运维工程师，擅�
 - 如果日志中没有匹配到已知故障模式，告知用户并建议提供更完整的日志
 - 对于"严重"级别的故障，语气应强调紧迫性
 - 排查建议是标准化的，实际执行时需结合具体环境调整
-"""
+""" + UNTRUSTED_DATA_GUARD
 
 
 class LogAnalysisAgent:
@@ -411,7 +412,7 @@ class LogAnalysisAgent:
         try:
             result = self.agent.invoke({
                 "messages": [
-                    {"role": "user", "content": f"请分析以下OA系统日志内容:\n\n{log_text[:8000]}"}
+                    {"role": "user", "content": "请分析以下OA系统日志内容:\n\n" + wrap_untrusted(log_text[:8000], '日志内容')}
                 ]
             })
             messages = result.get("messages", [])

@@ -26,6 +26,7 @@ from typing import List, Dict
 from langchain.tools import tool
 
 from utils.logger import get_logger
+from utils.prompt_safety import UNTRUSTED_DATA_GUARD
 from utils.config import config
 
 logger = get_logger(__name__)
@@ -360,7 +361,7 @@ SSL_SYSTEM_PROMPT = """你是一名SSL/TLS证书管理专家，负责帮助运�
 注意事项:
 - 证书过期是线上故障的常见原因，语气应体现紧急性
 - 给出的操作命令应具体、可直接执行
-- 区分测试环境和生产环境的处理优先级"""
+- 区分测试环境和生产环境的处理优先级""" + UNTRUSTED_DATA_GUARD
 
 
 class SSLCertMonitor:

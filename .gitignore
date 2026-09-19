@@ -51,3 +51,25 @@ server_out.log
 
 # Internal docs (not for public release)
 OA运维Agent项目全流程文档*.docx
+data/inspection_logs/
+data/knowledge_graph/
+
+# 桌面版运行时数据
+data/desktop.log
+data/backend.log
+data/webview_profile/
+.hermes/
+
+# Tests, coverage, linters and type checkers
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+coverage-*.json
+coverage-*.xml
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.hypothesis/
