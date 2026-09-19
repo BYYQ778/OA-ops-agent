@@ -303,3 +303,41 @@ def test_build_reranker_respects_config() -> None:
     built = agent._build_reranker()
     assert built is not None
     assert callable(built)
+
+
+# ========== 结构化检索（/api/v1/rag/query 数据面） ==========
+
+
+def test_retrieve_returns_structured_hits() -> None:
+    hits = [
+        RetrievalHit(
+            id="c1",
+            text="磁盘空间不足处置：清理过期日志",
+            metadata={"source": "磁盘指南", "chunk_uid": "u1"},
+            dense_similarity=0.82,
+        ),
+    ]
+    agent = _make_agent(retriever=_FakeRetriever(RetrievalResult(hits=hits, refused=False, query="磁盘满")))
+    outcome = agent.retrieve("磁盘满", top_k=3)
+    assert outcome["available"] is True
+    assert outcome["refused"] is False
+    assert outcome["hits"][0]["source"] == "磁盘指南"
+    assert abs(outcome["hits"][0]["score"] - 0.82) < 1e-9
+    assert outcome["citations"] == ["《磁盘指南》"]
+    assert "磁盘空间不足处置" in outcome["context"]
+
+
+def test_retrieve_refused_and_unavailable() -> None:
+    agent = _make_agent(retriever=_FakeRetriever(_refused()))
+    outcome = agent.retrieve("xx")
+    assert outcome["available"] is True
+    assert outcome["refused"] is True
+    assert outcome["refuse_message"]
+    assert outcome["citations"] == []
+    assert outcome["context"] == ""
+
+    agent2 = _make_agent(retriever=None)
+    outcome2 = agent2.retrieve("xx")
+    assert outcome2["available"] is False
+    assert outcome2["hits"] == []
+    assert outcome2["citations"] == []

@@ -1196,3 +1196,62 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
 - 分词器消融（dev，冻结阈值）: jieba recall@5 93.3%/MRR 0.798/误拒 5.3% vs bigram 降级
   88.0%/0.752/8.0% → 建议 jieba 升格正式依赖（一行改动，待评审）；结果存
   results/jieba-ablation.json
+
+───────────────────────────────────────────
+【2026-09-18 — v3 第 4 周：智能根因诊断（feat/incident-rca，worktree 4）】
+───────────────────────────────────────────
+一、目标与范围
+  巡检/日志/告警 → 标准化事件 → 关联 → 检索知识库与历史故障 → 候选根因 →
+  证据验证排序 → 只读诊断报告；≥30 标准案例、Top-1 ≥80%；新增 /api/v1 接口
+  （incidents/rag/evals/metrics），/api/kb/* 兼容层与旧前端不动。
+
+二、新增模块（全部离线可测；CI core 不加载模型）
+  · utils/incident_models.py   IncidentEvent/Evidence/CandidateCause/DiagnosisReport
+                              （证据纪律写入模型：ok 需根因+≥2 条证据+建议；只读硬校验）
+  · agents/incident_rules.py   日志/巡检/告警 → 23 类候选根因信号（纯正则，含
+                              Oracle/SQLServer 错误码）
+  · agents/incident_agent.py   只读管线：证据组装/多源互证/排序决策（<2 证据或
+                              低于 0.6 分 → 明确 uncertain，不强凑）；LLM 叙述可选受限
+  · agents/incident_kb.py      HybridRetriever 适配器（refused 透传）+ 历史故障读取
+  · utils/metrics.py           最小指标注册表（Prometheus 文本）
+  · ui/routers/incidents.py    /api/v1 路由（analyze/get/list、rag/query、evals/latest、metrics）
+  · evals/incident_cases.py、evals/incident_runner.py  案例加载校验与评测统计
+  · scripts/validate_incident_cases.py、scripts/run_incident_eval.py
+
+三、存量改造
+  · utils/database.py          新增 incidents 表 + save/get/list（完整报告 JSON）
+  · agents/knowledge_agent.py  新增公开 retrieve()（结构化检索，不跑 LLM）
+  · agents/log_analysis_agent.py  补 Oracle 表空间/快照过旧、SQL Server 事务日志规则（原 P3 遗留 d）
+  · ui/templates/index.html    日志页/巡检页「一键根因分析」+ 只读诊断弹窗（tag ui-before-rca）
+  · ui/server.py               create_app 挂载 /api/v1 incidents 路由（kb_agent_factory 可注入）
+
+四、缺陷修复（第 1 周 e/f 清单，测试固化更新为正确行为）
+  · security_audit.check_listening_ports：ss -tlnp 地址列解析修复（公网端口不再被
+    误归入仅本地）；Windows 补 [::1] 回环识别
+  · security_audit.audit_cron_jobs：死分支修复（无任务时显式「未发现」提示）
+  · db_inspector.check_oracle_status：NOARCHIVELOG 不再误报 ✅（🔴 + 开启归档建议）
+  · inspection_real.check_nginx：PID 取第 2 列（原 parts[-1] 打印 "PID: K"）
+  · inspection_real.check_oa_service：内存取第 5 列（支持缺单位列）
+  · inspection_real.run_ssh_inspection：auto 模式 SSH+local 全失败返回明确错误
+    （mode=auto、合并两路原因、不伪造模拟数据）——原「行为待确认」按「诚实失败」定案；
+    调用方 inspection_agent 兼容展示连接失败报告
+
+五、案例与实跑（2026-09-18）
+  · 案例集 evals/cases/incidents_v1.jsonl：35 条（dev 25 / holdout 10；30 条可诊断
+    + 5 条应判不确定）；锚点与信号校验全过
+  · 实跑（复用第 3 周语料 222 块；诊断侧放开门 0.45/5.0，问答冻结阈值不受影响）:
+    Top-1 30/30（100%，dev 25/25 + holdout 5/5）；不确定判定 5/5；报告违规 0；
+    知识库引用覆盖 31/35；平均 198ms/条
+  · 口径声明：合成案例集（非生产数据）；详见 docs/reports/incident-rca-report.md
+
+六、测试与验证
+  · 857 passed（全离线）+ ruff 严格范围（ui/routers+tests）全绿 + pyright 全范围 0 错
+  · 运行验证：env_new 起服务（:7862）→ UI 一键入口 DOM 断言 + 截图 + GLM-4V 目检
+    （日志页确定/不确定流程、巡检页真实跑通）
+
+七、提交（feat/incident-rca，基于 9b3c5c5）
+  见 git log（计划 → 模型 → 规则 → 管线 → 存储 → 检索接入 → 案例/实跑 → API →
+  前端 → 缺陷修复 → 文档）；**已推送（2026-09-18，ssh-origin 直通）：远端 CI 双绿
+  run 35309448459（quality 857 passed / TOTAL 80% + docker-core 冒烟）**
+
+回退: 全部改动在本 worktree/分支；UI 另有 tag ui-before-rca；回退 = git checkout 9b3c5c5

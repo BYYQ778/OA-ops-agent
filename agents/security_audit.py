@@ -358,28 +358,34 @@ def check_listening_ports() -> str:
         if not line:
             continue
 
-        # 提取端口号
+        # 提取端口与本机监听地址（第 4 周修复：ss -tlnp 的本机地址不是行首第二个字段，
+        # 旧正则失配后公网端口被误归入「仅本地监听」且不触发危险告警）
         if IS_WINDOWS:
+            # Windows netstat: "TCP  0.0.0.0:135  0.0.0.0:0  LISTENING  pid"
             port_match = re.search(r':(\d+)\s+', line)
-        else:
-            port_match = re.search(r':(\d+)\s+', line)
-
-        if port_match:
+            if port_match is None:
+                continue
             port = port_match.group(1)
-            service = known_services.get(port, "")
+            listen_addr = "0.0.0.0"
+            if "127.0.0.1" in line or "[::1]" in line:
+                listen_addr = "127.0.0.1"
+        else:
+            # ss -tlnp:  "LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(...)"
+            # netstat:   "tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN ..."
+            token_match = re.search(r'(?:^|\s)(\S+):(\d+)(?:\s|$)', line)
+            if token_match is None:
+                continue
+            port = token_match.group(2)
+            listen_addr = token_match.group(1).strip("[]") or "*"
 
-            if IS_WINDOWS:
-                listen_addr = "0.0.0.0"  # Windows netstat 不直接显示
-                if "127.0.0.1" in line:
-                    listen_addr = "127.0.0.1"
-            else:
-                addr_match = re.search(r'^\S+\s+(\S+):', line)
-                listen_addr = addr_match.group(1) if addr_match else "?"
-
-            if listen_addr in ("0.0.0.0", "::", "*"):
-                public_ports.append((port, service, line[:120]))
-            else:
-                local_ports.append((port, service, line[:120]))
+        service = known_services.get(port, "")
+        if listen_addr in ("0.0.0.0", "::", "*"):
+            public_ports.append((port, service, line[:120]))
+        elif listen_addr in ("127.0.0.1", "::1", "localhost"):
+            local_ports.append((port, service, line[:120]))
+        else:
+            # 具体网卡地址（如 10.20.1.5:3306）：外部可达，按公网侧处理
+            public_ports.append((port, service, line[:120]))
 
     if public_ports:
         lines.append("🌐 公网可访问端口（监听 0.0.0.0）:")
@@ -448,6 +454,8 @@ def audit_cron_jobs() -> str:
             "/var/spool/cron/",
         ]
 
+        found_cron = False
+
         for path in cron_paths:
             if os.path.isdir(path):
                 try:
@@ -458,6 +466,7 @@ def audit_cron_jobs() -> str:
                                 with open(fpath, "r") as f:
                                     content = f.read().strip()
                                 if content:
+                                    found_cron = True
                                     lines.append(f"📋 {fpath}:")
                                     job_lines = [l.strip() for l in content.split("\n")
                                                  if l.strip() and not l.strip().startswith("#")]
@@ -476,6 +485,7 @@ def audit_cron_jobs() -> str:
                     with open(path, "r") as f:
                         content = f.read().strip()
                     if content:
+                        found_cron = True
                         lines.append(f"📋 {path}:")
                         job_lines = [l.strip() for l in content.split("\n")
                                      if l.strip() and not l.strip().startswith("#")]
@@ -488,12 +498,13 @@ def audit_cron_jobs() -> str:
         # 当前用户的 crontab
         user_cron = _local_cmd("crontab -l 2>/dev/null")
         if user_cron and "no crontab" not in user_cron.lower():
+            found_cron = True
             lines.append("📋 当前用户 crontab:")
             for job in user_cron.strip().split("\n"):
                 job = job.strip()
                 if job and not job.startswith("#"):
                     lines.append(f"  {job[:150]}")
-        elif not lines or len(lines) <= 3:
+        if not found_cron:
             lines.append("✅ 未发现 crontab 任务")
 
     lines.append("")

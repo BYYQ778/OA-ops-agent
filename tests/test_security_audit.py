@@ -405,9 +405,9 @@ def test_listening_ports_without_output(monkeypatch) -> None:
     assert "安全建议" not in report
 
 
-def test_listening_ports_ss_format_masks_exposed_database(monkeypatch) -> None:
-    """已知缺陷（随交付汇报）：ss -tlnp 的地址列不是行首第二个字段，地址正则失配后
-    listen_addr 退化为 "?"，0.0.0.0:3306/6379 被错误归入「仅本地监听」且不触发危险告警。"""
+def test_listening_ports_ss_format_flags_exposed_database(monkeypatch) -> None:
+    """第 4 周修复：ss -tlnp 的本机地址不是行首第二个字段，旧正则失配后公网端口
+    被误归入「仅本地监听」；现按「地址:端口」字段解析：0.0.0.0 公网告警、127.0.0.1 本地。"""
     output = "\n".join([
         "State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process",
         'LISTEN 0      128    0.0.0.0:22      0.0.0.0:*     users:(("sshd",pid=1234,fd=3))',
@@ -419,9 +419,12 @@ def test_listening_ports_ss_format_masks_exposed_database(monkeypatch) -> None:
 
     report = security.check_listening_ports.invoke({})
 
+    assert "🌐 公网可访问端口（监听 0.0.0.0）:" in report
+    assert "  ⚠️ 端口 22 (SSH)" in report
+    assert "  ⚠️ 端口 3306 (MySQL)" in report
+    assert "      🔴 危险: 数据库端口暴露在公网！请配置防火墙限制来源IP" in report
     assert "🔒 本地监听端口（仅 127.0.0.1）:" in report
-    assert "🌐 公网可访问端口" not in report
-    assert "🔴 危险" not in report
+    assert "  ✅ 端口 6379 (Redis)" in report
 
 
 # ---------- audit_cron_jobs ----------
@@ -544,9 +547,9 @@ def test_cron_jobs_linux_reports_permission_problems(monkeypatch) -> None:
     assert "oa-subdir" not in report
 
 
-def test_cron_jobs_linux_without_entries_skips_empty_notice(monkeypatch) -> None:
-    """已知缺陷（随交付汇报）：头部固定 5 行使 `len(lines) <= 3` 恒为假，
-    「✅ 未发现 crontab 任务」分支不可达。"""
+def test_cron_jobs_linux_without_entries_reports_no_tasks(monkeypatch) -> None:
+    """第 4 周修复：旧分支 `len(lines) <= 3` 恒为假不可达；
+    现在无任何任务时显式提示「✅ 未发现 crontab 任务」。"""
     monkeypatch.setattr(security, "IS_WINDOWS", False)
     monkeypatch.setattr(security, "os", _fake_os(lambda _path: False, lambda _path: False, lambda _path: []))
     monkeypatch.setattr(security, "_local_cmd", Mock(return_value=""))
@@ -554,7 +557,7 @@ def test_cron_jobs_linux_without_entries_skips_empty_notice(monkeypatch) -> None
     report = security.audit_cron_jobs.invoke({})
 
     assert "Crontab 定时任务审计" in report
-    assert "未发现 crontab 任务" not in report
+    assert "✅ 未发现 crontab 任务" in report
 
 
 # ---------- SecurityAuditor ----------

@@ -7,6 +7,7 @@ SQLite 持久化层，管理巡检记录、告警历史、日志分析记录。
 - inspection_records: 巡检历史（每次巡检的5项检测结果）
 - alert_history: 告警记录（触发条件、通知状态）
 - log_analysis_records: 日志分析历史
+- incidents: 根因诊断报告（完整 JSON + 摘要列，第 4 周）
 - conversations: 对话会话（标题、更新时间、消息数）
 - conversation_messages: 对话消息（role/content/顺序）
 
@@ -129,6 +130,25 @@ class Database:
                     ON alert_history(alert_time);
                 CREATE INDEX IF NOT EXISTS idx_alert_notified
                     ON alert_history(notified);
+
+                -- 根因诊断记录表（第 4 周）
+                CREATE TABLE IF NOT EXISTS incidents (
+                    id TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL,
+                    service TEXT DEFAULT '',
+                    host TEXT DEFAULT '',
+                    status TEXT NOT NULL,
+                    root_cause TEXT DEFAULT '',
+                    root_title TEXT DEFAULT '',
+                    confidence REAL DEFAULT 0,
+                    source TEXT DEFAULT '',
+                    report_json TEXT NOT NULL,
+                    events_json TEXT DEFAULT '[]',
+                    created_db TEXT DEFAULT (datetime('now','localtime'))
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_incidents_created
+                    ON incidents(created_at);
 
                 -- 日志分析记录表
                 CREATE TABLE IF NOT EXISTS log_analysis_records (
@@ -420,6 +440,72 @@ class Database:
             (since, limit)
         )
         return [dict(row) for row in cursor.fetchall()]
+
+    # ========== 根因诊断记录（第 4 周）==========
+
+    def save_incident(self, report: Dict, service: str = "", host: str = "", source: str = "") -> str:
+        """保存根因诊断报告。
+
+        Args:
+            report: DiagnosisReport.model_dump(mode="json") 产生的字典
+            service/host: 关联服务与主机（可选，用于列表展示）
+            source: 入口来源（api / ui / eval）
+
+        Returns:
+            诊断编号 incident_id（同一编号重复保存为覆盖）
+        """
+        incident_id = str(report["incident_id"])
+        root = report.get("root_cause") or {}
+        created_at = str(report.get("created_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        with self._lock:
+            self._conn.execute(
+                """INSERT OR REPLACE INTO incidents
+                   (id, created_at, service, host, status, root_cause, root_title,
+                    confidence, source, report_json, events_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    incident_id,
+                    created_at,
+                    service,
+                    host,
+                    str(report.get("status") or "uncertain"),
+                    str(root.get("cause_id") or ""),
+                    str(root.get("title") or ""),
+                    float(report.get("confidence") or 0.0),
+                    source,
+                    json.dumps(report, ensure_ascii=False),
+                    json.dumps(report.get("events") or [], ensure_ascii=False),
+                ),
+            )
+            self._conn.commit()
+        return incident_id
+
+    def get_incident(self, incident_id: str) -> Optional[Dict]:
+        """按编号取诊断报告（report/events 为解析后的 JSON；不存在返回 None）。"""
+        cursor = self._conn.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,))
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        try:
+            data["report"] = json.loads(data.pop("report_json") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            data["report"] = {}
+        try:
+            data["events"] = json.loads(data.pop("events_json") or "[]")
+        except (json.JSONDecodeError, TypeError):
+            data["events"] = []
+        return data
+
+    def list_incidents(self, limit: int = 50) -> List[Dict]:
+        """诊断记录摘要列表（按生成时间倒序）。"""
+        cursor = self._conn.execute(
+            """SELECT id, created_at, service, host, status, root_cause, root_title, confidence
+               FROM incidents ORDER BY created_at DESC, rowid DESC LIMIT ?""",
+            (limit,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
     # ========== 对话历史（持久化）==========
 
     def create_conversation(self, title: str = "新对话", conversation_id: str = None) -> str:

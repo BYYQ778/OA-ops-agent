@@ -49,6 +49,15 @@ SAMPLE_LOGS = {
     "数据库连接失败": "2026-09-16 10:31:00 [ERROR] Connection refused: database 192.168.1.100:3306",
     "配置解析错误": "2026-09-16 10:32:00 [ERROR] YAML parse error in oa config: mapping values are not allowed",
     "文件句柄耗尽": "2026-09-16 10:33:00 [ERROR] Too many open files: /var/log/oa/app.log",
+    "Oracle表空间不足": (
+        "2026-09-18 09:15:22 [ERROR] ORA-01653: unable to extend table OA.ACT_HIS by 128 in tablespace TS_OA"
+    ),
+    "Oracle快照过旧（UNDO不足）": (
+        "2026-09-18 09:16:40 [ERROR] ORA-01555: snapshot too old: rollback segment number 12"
+    ),
+    "SQLServer事务日志已满": (
+        "2026-09-18 09:17:55 [ERROR] Msg 9002, Level 17: The transaction log for database 'OA_DB' is full"
+    ),
 }
 
 RULE_SEVERITY = {name: severity for _, name, severity, _ in FAULT_RULES}
