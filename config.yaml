@@ -78,6 +78,10 @@ inspection:
     #   port: 22
     #   user: root
     #   password: ${OA_SSH_PASSWORD_2:}
+  # SSH 主机密钥校验（默认拒绝未登记主机：RejectPolicy + 加载 known_hosts）
+  ssh_trust_unknown_hosts: false
+  # 额外 known_hosts 文件路径（可选；系统 ~/.ssh/known_hosts 始终加载）
+  known_hosts_path: ""
 
 # ---- 告警通知 ----
 alert:
@@ -194,7 +198,8 @@ ssl_monitor:
 # ---- 网络诊断 ----
 network_diag:
   ping_timeout: 5               # Ping 超时（秒）
-  # 预设的待检测目标
+  # HTTPS 健康检查是否校验服务端证书（默认开启；自签内网站点需显式设为 false）
+  tls_verify: true  # 预设的待检测目标
   default_targets:
     [
     #    "oa.example.com",

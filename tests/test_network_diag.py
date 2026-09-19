@@ -1,11 +1,14 @@
 """Network tools: no real DNS, sockets or OS commands are used in these tests."""
 
+import io
 import socket
 import ssl
 import subprocess
 import sys
 import urllib.error
+import urllib.request
 from email.message import Message
+from http.client import HTTPMessage
 from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
@@ -386,7 +389,8 @@ class _FakeHttpResponse:
 
 def _install_fake_urlopen(monkeypatch, response=None, error=None) -> Mock:
     opener = Mock(return_value=response) if error is None else Mock(side_effect=error)
-    monkeypatch.setattr(network.urllib.request, "urlopen", opener)
+    monkeypatch.setattr(network, "_open_url", opener)
+    monkeypatch.setattr(network, "_resolve_host_ips", lambda host: ["93.184.216.34"])
     return opener
 
 
@@ -408,6 +412,9 @@ def test_http_health_check_summarizes_healthy_response(monkeypatch) -> None:
     request = opener.call_args.args[0]
     assert request.full_url == "https://oa.example.com"
     assert request.get_header("User-agent") == "OA-Ops-Agent/2.0 Network Health Check"
+    ctx = opener.call_args.args[2]
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    assert ctx.check_hostname is True
 
 
 def test_http_health_check_reports_missing_headers(monkeypatch) -> None:
@@ -492,6 +499,97 @@ def test_http_health_check_reports_ssl_and_unexpected_errors(monkeypatch) -> Non
 
     _install_fake_urlopen(monkeypatch, error=ValueError("响应格式异常"))
     assert "健康检查异常: 响应格式异常" in network.http_health_check.invoke({"url": "https://oa.example.com"})
+
+
+def test_http_health_check_reports_certificate_verification_failure(monkeypatch) -> None:
+    cert_error = ssl.SSLCertVerificationError(1, "certificate verify failed: self-signed certificate")
+    _install_fake_urlopen(monkeypatch, error=cert_error)
+
+    report = network.http_health_check.invoke({"url": "https://oa.example.com"})
+
+    assert "TLS 证书校验失败" in report
+    assert "network_diag.tls_verify: false" in report
+
+    wrapped = urllib.error.URLError(ssl.SSLCertVerificationError(1, "certificate verify failed"))
+    _install_fake_urlopen(monkeypatch, error=wrapped)
+
+    assert "TLS 证书校验失败" in network.http_health_check.invoke({"url": "https://oa.example.com"})
+
+
+def test_http_health_check_tls_verify_can_be_disabled_by_config(monkeypatch) -> None:
+    opener = _install_fake_urlopen(monkeypatch, response=_FakeHttpResponse(200, {}))
+    original_get = network.config.get
+
+    def fake_get(path, default=None):
+        if path == "network_diag.tls_verify":
+            return False
+        return original_get(path, default)
+
+    monkeypatch.setattr(network.config, "get", fake_get)
+
+    report = network.http_health_check.invoke({"url": "https://oa.example.com"})
+
+    assert "跳过 TLS 证书校验" in report
+    ctx = opener.call_args.args[2]
+    assert ctx.check_hostname is False
+    assert ctx.verify_mode == ssl.CERT_NONE
+
+
+def test_http_health_check_blocks_metadata_target(monkeypatch) -> None:
+    opener = _install_fake_urlopen(monkeypatch, response=_FakeHttpResponse(200, {}))
+
+    report = network.http_health_check.invoke({"url": "http://169.254.169.254/latest/meta-data/"})
+
+    assert "不被允许" in report
+    assert "云元数据地址" in report
+    opener.assert_not_called()
+
+
+def test_http_health_check_blocks_link_local_target(monkeypatch) -> None:
+    opener = _install_fake_urlopen(monkeypatch, response=_FakeHttpResponse(200, {}))
+
+    report = network.http_health_check.invoke({"url": "http://[fe80::1]/"})
+
+    assert "不被允许" in report
+    assert "链路本地地址" in report
+    opener.assert_not_called()
+
+
+def test_http_health_check_blocks_hostname_resolving_to_metadata(monkeypatch) -> None:
+    opener = _install_fake_urlopen(monkeypatch, response=_FakeHttpResponse(200, {}))
+    monkeypatch.setattr(network, "_resolve_host_ips", lambda host: ["169.254.169.254"])
+
+    report = network.http_health_check.invoke({"url": "http://metadata.oa.internal/"})
+
+    assert "不被允许" in report
+    opener.assert_not_called()
+
+
+def test_http_health_check_rejects_malformed_url(monkeypatch) -> None:
+    opener = _install_fake_urlopen(monkeypatch, response=_FakeHttpResponse(200, {}))
+
+    report = network.http_health_check.invoke({"url": "https://bad host/路径"})
+
+    assert "URL 不合法" in report
+    opener.assert_not_called()
+
+
+def test_http_health_check_redirect_handler_validates_each_hop(monkeypatch) -> None:
+    monkeypatch.setattr(network, "_resolve_host_ips", lambda host: ["93.184.216.34"])
+    handler = network._SafeRedirectHandler()
+    request = urllib.request.Request("https://oa.example.com/")
+    fp = io.BytesIO()
+    headers = HTTPMessage()
+
+    with pytest.raises(network._RedirectBlockedError) as exc:
+        handler.redirect_request(request, fp, 302, "Found", headers, "http://169.254.169.254/")
+    assert "云元数据地址" in str(exc.value)
+
+    followed = handler.redirect_request(
+        request, fp, 302, "Found", headers, "https://oa.example.com/login"
+    )
+    assert followed is not None
+    assert followed.full_url == "https://oa.example.com/login"
 
 
 class _FakeLlmMessage:

@@ -25,6 +25,7 @@ import subprocess
 import ipaddress
 import re
 import time
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -384,6 +385,112 @@ def traceroute_host(host: str) -> str:
     return "\n".join(lines)
 
 
+#: 云元数据服务地址（SSRF 防护：内网探测是本工具定位，元数据端点必须硬阻断）
+_METADATA_IPS = frozenset({"169.254.169.254", "100.100.100.200", "fd00:ec2::254"})
+
+
+class _RedirectBlockedError(Exception):
+    """重定向目标命中 SSRF 防护规则。"""
+
+    def __init__(self, target: str, reason: str) -> None:
+        super().__init__(f"{reason}: {target}")
+        self.target = target
+        self.reason = reason
+
+
+def _resolve_host_ips(host: str) -> list[str]:
+    """解析主机名的全部 A/AAAA 地址；解析失败返回空列表（由请求侧给出自然错误）。"""
+    try:
+        infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return []
+    ips: list[str] = []
+    for info in infos:
+        addr = str(info[4][0])
+        if addr not in ips:
+            ips.append(addr)
+    return ips
+
+
+def _url_host(url: str) -> str:
+    """提取并校验 URL 主机名；不合法返回空串（仅接受 http/https + IP/域名）。"""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return ""
+    hostname = parsed.hostname.strip()
+    if not hostname or len(hostname) > 253:
+        return ""
+    try:
+        ipaddress.ip_address(hostname)
+        return hostname
+    except ValueError:
+        pass
+    name = hostname[:-1] if hostname.endswith(".") else hostname
+    labels_ok = all(
+        re.fullmatch(r"[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?", label)
+        for label in name.split(".")
+    )
+    return hostname if labels_ok else ""
+
+
+def _forbidden_target_reason(host: str) -> str:
+    """SSRF 防护判定：阻断云元数据/链路本地/组播地址；内网地址按工具定位放行。
+
+    Returns:
+        阻断原因文案（空串 = 允许探测）。
+    """
+    try:
+        candidates = [str(ipaddress.ip_address(host))]
+    except ValueError:
+        candidates = _resolve_host_ips(host)
+    for addr in candidates:
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if getattr(ip, "ipv4_mapped", None) is not None:
+            ip = ip.ipv4_mapped
+        if str(ip) in _METADATA_IPS:
+            return "云元数据地址"
+        if ip.is_link_local:
+            return "链路本地地址"
+        if ip.is_multicast or ip.is_unspecified:
+            return "组播或未指定地址"
+    return ""
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """跟随重定向时逐跳校验目标（受阻目标直接拒绝，最多 3 跳）。"""
+
+    max_redirections = 3
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        host = _url_host(newurl)
+        if not host:
+            raise _RedirectBlockedError(newurl, "重定向目标非法")
+        reason = _forbidden_target_reason(host)
+        if reason:
+            raise _RedirectBlockedError(newurl, reason)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_url(req, timeout, context):
+    """执行 HTTP 请求（模块级便于测试打桩）；重定向经逐跳安全校验。"""
+    handlers: list = [_SafeRedirectHandler()]
+    if context is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=context))
+    opener = urllib.request.build_opener(*handlers)
+    return opener.open(req, timeout=timeout)
+
+
+def _tls_verify_hint() -> list[str]:
+    """证书校验失败的修复指引（错误分支共用）。"""
+    return [
+        "💡 说明: 默认校验服务端证书；自签证书内网站点可在 config.yaml 设置",
+        "   network_diag.tls_verify: false（或改用 SSL 证书检查工具）",
+    ]
+
+
 @tool
 def http_health_check(url: str) -> str:
     """
@@ -402,14 +509,38 @@ def http_health_check(url: str) -> str:
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
 
+    host = _url_host(url)
+    if not host:
+        return f"[错误] URL 不合法（仅支持 http/https + IP/域名）: {url}"
+
+    reason = _forbidden_target_reason(host)
+    if reason:
+        return (
+            f"[错误] 目标地址不被允许（{reason}）: {host}\n"
+            "说明: 云元数据/链路本地地址已硬阻断（SSRF 防护）；内网地址探测请使用 ping/端口检查工具。"
+        )
+
+    verify_tls = bool(config.get("network_diag.tls_verify", True))
+
     lines = [
         "=" * 50,
         "  HTTP 服务健康检查",
         "=" * 50,
         f"URL: {url}",
         f"检测时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        "",
     ]
+    if url.startswith("https://") and not verify_tls:
+        lines.append("⚠️ 已按配置跳过 TLS 证书校验（network_diag.tls_verify=false）")
+    lines.append("")
+
+    import ssl
+    if url.startswith("https://"):
+        ctx = ssl.create_default_context()
+        if not verify_tls:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+    else:
+        ctx = None
 
     try:
         start_time = time.time()
@@ -417,13 +548,7 @@ def http_health_check(url: str) -> str:
             "User-Agent": "OA-Ops-Agent/2.0 Network Health Check"
         })
 
-        # 禁用 SSL 验证仅用于健康检查（生产环境不应忽略）
-        import ssl
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+        with _open_url(req, 10, ctx) as resp:
             elapsed = round((time.time() - start_time) * 1000)
             status_code = resp.status
             content_length = resp.headers.get("Content-Length", "未知")
@@ -461,15 +586,29 @@ def http_health_check(url: str) -> str:
             lines.append("  2. 查看服务日志排查根因")
             lines.append("  3. 检查反向代理（Nginx/HAProxy）状态")
 
+    except _RedirectBlockedError as e:
+        lines.append(f"状态: 🔴 重定向目标已阻断（{e.reason}）: {e.target}")
     except urllib.error.HTTPError as e:
         lines.append(f"状态: 🔴 HTTP {e.code} — {e.reason}")
+        if e.code in (301, 302, 303, 307, 308):
+            location = e.headers.get("Location", "未知") if e.headers else "未知"
+            lines.append(f"重定向未被跟随（受阻或超过 3 跳）: {location}")
     except urllib.error.URLError as e:
-        lines.append(f"状态: 🔴 连接失败 — {e.reason}")
+        if isinstance(e.reason, ssl.SSLCertVerificationError):
+            lines.append(f"状态: 🔴 TLS 证书校验失败 — {str(e.reason)[:100]}")
+            lines.append("")
+            lines.extend(_tls_verify_hint())
+        else:
+            lines.append(f"状态: 🔴 连接失败 — {e.reason}")
+            lines.append("")
+            lines.append("💡 排查建议:")
+            lines.append("  1. 确认 URL 是否正确")
+            lines.append("  2. 检查 DNS 解析是否正常")
+            lines.append("  3. 确认服务器端口是否开放")
+    except ssl.SSLCertVerificationError as e:
+        lines.append(f"状态: 🔴 TLS 证书校验失败 — {str(e)[:100]}")
         lines.append("")
-        lines.append("💡 排查建议:")
-        lines.append("  1. 确认 URL 是否正确")
-        lines.append("  2. 检查 DNS 解析是否正常")
-        lines.append("  3. 确认服务器端口是否开放")
+        lines.extend(_tls_verify_hint())
     except ssl.SSLError as e:
         lines.append(f"状态: 🔴 SSL 握手失败 — {str(e)[:100]}")
     except Exception as e:
