@@ -140,13 +140,13 @@ def create_app(
     """
     if enable_background_services is None:
         enable_background_services = os.environ.get("OA_ENABLE_BACKGROUND_STARTUP", "1") != "0"
-    application = FastAPI(title="OA 运维助手", version="2.5.0", lifespan=_lifespan)
+    application = FastAPI(title="OA 智能运维 Agent", version="3.0.0", lifespan=_lifespan)
     application.state.enable_background_services = enable_background_services
     # 注意：starlette 的 add_middleware 后加的更外层；顺序 = 请求上下文 → 指标 → 认证门 → 路由
     application.add_middleware(AuthGateMiddleware)
     application.add_middleware(MetricsMiddleware)
     application.add_middleware(RequestContextMiddleware)
-    init_default_metrics("2.5.0")
+    init_default_metrics("3.0.0")
     configure_tracing()
 
     application.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
@@ -172,7 +172,7 @@ async def index(request: Request):
     import time
     template = templates.get_template("index.html")
     html = template.render(
-        version="2.5.0",
+        version="3.0.0",
         cache_buster=str(int(time.time())),
         scheduler_status=sched_status,
         is_running=scheduler.is_running,
@@ -185,7 +185,7 @@ async def login_page(request: Request):
     """登录页（第 5 周；认证门对远端未登录页面的跳转目标）。"""
     import time
     template = templates.get_template("login.html")
-    html = template.render(version="2.5.0", cache_buster=str(int(time.time())))
+    html = template.render(version="3.0.0", cache_buster=str(int(time.time())))
     return HTMLResponse(html)
 
 

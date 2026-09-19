@@ -24,7 +24,7 @@ def test_health_reports_kb_state_and_error() -> None:
 
     assert body == {
         "status": "ok",
-        "version": "2.5.0",
+        "version": "3.0.0",
         "kb_state": "unavailable",
         "kb_error": "模型缺失",
     }
