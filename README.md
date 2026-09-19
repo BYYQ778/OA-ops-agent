@@ -1,103 +1,160 @@
-﻿# OA Ops Agent v2.5.0
+﻿# OA 智能运维 Agent · v3.0.0
 
-基于 LangChain + RAG + Chroma 的 OA 系统智能运维助手，支持自动巡检、日志分析、知识库问答和 AI 报告生成。
+> **本地优先的企业 OA 智能运维与根因诊断平台** —— 巡检、日志分析、RAG 知识库问答、智能根因诊断，一站式离线运行。Windows 绿色版免装 Python，数据不出本机。
+>
+> *Local-first AIOps assistant & root-cause diagnosis platform for OA systems. Fully offline (Ollama); Windows portable build included.*
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Quality](https://github.com/BYYQ778/OA-ops-agent/actions/workflows/quality.yml/badge.svg)](https://github.com/BYYQ778/OA-ops-agent/actions/workflows/quality.yml)
+[![Release](https://img.shields.io/github/v/release/BYYQ778/OA-ops-agent?label=release)](https://github.com/BYYQ778/OA-ops-agent/releases)
 
-## 功能
+![演示：导入运维文档 → 带引用问答 → 一键根因诊断](docs/assets/demo.gif)
 
-- **实时监控仪表盘** — SSE 实时推送 + 5 状态卡片 + Chart.js 趋势图 + 告警时间线 + 终端日志控制台
-- **巡检监控** — 自动检测端口、服务、磁盘、内存，支持 Local/SSH/Simulated 三种模式，定时调度 + 历史查询
-- **日志分析** — 上传或粘贴运维日志，正则匹配 10 种常见故障（502/503/OOM/磁盘满等），输出排查建议
-- **知识库问答** — 多轮对话 Chatbot + Agentic RAG 多步推理 + 知识图谱探索，SSE 流式输出 + 对话历史持久化（会话列表/切换/删除/自动标题），支持单题/批量(20题并行)
-- **AI 报告** — 巡检完成后自动生成预警分析与改进策略，支持 Ollama 本地离线 / DeepSeek 云端两种后端
-- **诊断工具箱** — SSL 证书过期检测、网络诊断（Ping/端口/DNS/路由/HTTP）、数据库巡检（MySQL/MSSQL/Oracle/Redis）、安全基线审计
-- **OCR 识别** — 知识库支持导入截图/扫描件自动 OCR；日志分析支持上传报错截图识别后分析
-- **运维命令大全** — 收录 138 条常用运维命令（6 大分类），支持按命令名/功能关键词双向检索，点击卡片展开详情
+---
+
+## 30 秒了解
+
+**解决什么问题？** 中小企业的 OA 系统（Tomcat + MySQL/Oracle/SQL Server 那套）日常出故障时，往往没有专业监控栈：排查靠人肉翻日志、查文档、凭经验。本项目把「**巡检 → 日志/告警 → 知识库 → 根因诊断**」串成一条自动化链路：
+
+- 每条结论**必须带证据**（规则信号 + 知识库引用），证据不足时明确标注「不确定」，**禁止凭空猜根因**；
+- 诊断**只读**：只给分析和建议，不自动执行修复命令；
+- 全链路可本地离线运行（Ollama + 本地嵌入模型），数据不出本机；也可切换云端大模型增强。
+
+**核心能力**
+
+| 能力 | 说明 |
+|---|---|
+| 🧠 **智能根因诊断** | 日志/巡检/告警 → 标准化事件 → 知识库互证 → 根因 + 置信度 + 证据链 + 处置建议；日志/巡检页「一键根因分析」 |
+| 📚 **RAG 2.0 知识库问答** | BM25 + Dense 混合检索 → RRF 融合 → 分层证据门 → 带引用回答（精确到《文档》·章节·chunk）；无证据明确拒答；Agentic RAG 多步推理 |
+| 🔍 **实时监控仪表盘** | SSE 实时推送 + 5 状态卡片 + Chart.js 趋势图 + 告警时间线 + 终端日志控制台 |
+| 🩺 **巡检监控** | 端口/服务/磁盘/内存检测，Local/SSH/Simulated 三种模式，定时调度 + 历史查询 + AI 报告 |
+| 📋 **日志分析** | 10 类常见故障正则规则（502/503/OOM/磁盘满等）纯确定性分析（不依赖 LLM）；支持上传报错截图 OCR 识别 |
+| 🛠 **诊断工具箱** | SSL 证书检测、网络诊断（Ping/端口/DNS/路由/HTTP）、数据库巡检（MySQL/MSSQL/Oracle/Redis）、安全基线审计 |
+| 📈 **可观测与安全** | 结构化 JSON 日志（request-id + 密钥脱敏）、Prometheus 指标、OpenTelemetry 追踪（可选零依赖降级）、Session 登录 + RBAC + 启动安全门禁 |
+
+**架构一览**（详版见 [ARCHITECTURE.md](ARCHITECTURE.md)）：
+
+```mermaid
+flowchart LR
+    subgraph IN["输入"]
+        A1["巡检结果"]
+        A2["日志 / 报错截图"]
+        A3["上传文档 / 告警"]
+    end
+    subgraph CORE["本地处理链（离线可用）"]
+        B1["规则信号引擎<br/>故障模式识别"]
+        B2["RAG 2.0 检索<br/>BM25 + Dense + RRF"]
+        B3["根因诊断管线<br/>互证 · 证据排序 · 只读"]
+    end
+    subgraph OUT["输出"]
+        C1["带引用回答"]
+        C2["诊断报告<br/>根因 · 置信度 · 证据链 · 建议"]
+    end
+    A1 --> B1
+    A2 --> B1
+    A2 --> B2
+    A3 --> B2
+    B1 --> B3
+    B2 --> B3
+    B2 --> C1
+    B3 --> C2
+```
+
+## 实测结果（全部可复现，报告见 `docs/reports/`）
+
+### RAG 2.0 vs 旧版（128 条标注评测集 · 同一语料 / 同一硬件 / 同一嵌入模型）
+
+| 指标 | 旧版（纯向量） | 新版（混合检索） | Δ |
+|---|---|---|---|
+| **Recall@5** | 74.1% | **94.4%** | +20.4pp |
+| MRR | 0.609 | 0.807 | +0.198 |
+| NDCG@5 | 0.639 | 0.841 | +0.203 |
+| 引用覆盖率 | 74.1% | **98.1%** | +24.0pp |
+| 引用准确率 | 48.1% | 76.9% | +28.8pp |
+| 无证据拒答率 | 0.0% | **75.0%**（dev 84.6%） | +75.0pp |
+| 误拒率（可回答） | 0.0% | 3.7% | +3.7pp |
+
+![RAG 核心指标对比](docs/reports/assets/rag-metrics-compare.png)
+
+LLM 端到端子集（30 题真实 Agent 跑）：系统级无证据拒答率 **100%**、工具选择 100%、失败率 0%。
+完整口径与复现命令：[docs/reports/rag-eval-report.md](docs/reports/rag-eval-report.md)
+
+### 智能根因诊断（35 条标准案例）
+
+| 验收标准 | 实测 |
+|---|---|
+| 案例 ≥30 条 | 35 条（dev 25 / holdout 10） |
+| Top-1 根因准确率 ≥80% | **30/30 = 100%** |
+| 报告含根因+置信度+≥2 证据+建议 | 完整性违规 **0** |
+| 证据不足标「不确定」 | 5/5 正确 |
+| 平均判定耗时 | 198ms/案例 |
+
+口径声明（合成案例集，非生产数据）与改进路径：[docs/reports/incident-rca-report.md](docs/reports/incident-rca-report.md)
+
+### 根因诊断长什么样（真实案例 c003 · 评测实跑）
+
+**输入**（多源信号，来自标准案例集）：
+
+```text
+[日志] 2026-09-18 10:02:11 [ERROR] No space left on device - /var/log/messages
+[日志] 2026-09-18 10:02:30 [WARN]  log rotate skipped: disk full
+[日志] 2026-09-18 10:02:45 [INFO]  系统进入只读模式
+[巡检] [告警] /var: 使用率 94% (超过阈值85%)
+```
+
+**输出**（诊断报告摘要）：
+
+```text
+根因：磁盘写满（disk_full）      Top-1 命中 ✓
+证据链：6 条 —— 3 条规则信号（多源互证）+ 3 条知识库引用
+判定耗时：171ms（全流程确定性，零 LLM）
+建议：处置步骤与引用来自知识库（日志轮转检查 / 大文件清理 / 扩容或迁移数据目录），随报告一并给出
+```
+
+> 在「日志分析」或「巡检」页面点击「**一键根因分析**」即可复现；接口见下文 API 快速索引。
+
+### 工程可信度
+
+| 项 | 实测 |
+|---|---|
+| 单元测试 | **927 passed**（全离线，不连外部服务） |
+| 覆盖率 | 全库 **81%**（如实统计，不含业务代码排除项） |
+| 静态检查 | Ruff 全库 + 严格范围（E/F/I/W）、Pyright 0 errors、compileall |
+| CI | GitHub Actions 双作业：quality（Lint/类型/测试/覆盖率）+ docker-core（镜像构建 + 健康冒烟），全绿 |
+| 测试独立性 | 测试禁止外部网络，只允许本机回环；模型不下载 |
 
 ## 快速开始
 
-**无需 API Key，开箱即用。** 默认使用本地离线模式（Ollama），所有数据不出本机。
+**无需 API Key，开箱即用。** 默认本地离线模式（Ollama），所有数据不出本机。
 
+### 方式一：绿色版（推荐，免装任何环境）
 
-### 桌面版（推荐，体验最佳）
-
-双击桌面上的 **「OA运维Agent」** 快捷方式（或运行 `scripts/启动桌面版.bat`），即可像原生软件一样打开应用窗口：
-
-- 无浏览器标签页、无控制台黑框（基于 PyWebView + Edge WebView2）
-- 启动画面自动等待服务就绪后进入主界面（首次加载嵌入模型约 20~40 秒）
-- 关闭窗口即退出服务，端口自动释放，无残留进程
-- 再次双击自动复用已在运行的服务，不会重复启动后端
-- 日志：`data/desktop.log`（桌面壳）、`data/backend.log`（后端）
-
-> 换机器/重新生成快捷方式：运行 `scripts/生成图标.py` 生成图标，然后右键 `scripts/启动桌面版.bat` → 发送到 → 桌面快捷方式。
-
-### 绿色版（免装 Python，可分发给同事）
-
-运行 `scripts/打包绿色版.bat`（或 `python -m PyInstaller oa_agent.spec --noconfirm --clean`）生成 `dist\OA运维Agent\` 绿色版：
+从 [Releases](https://github.com/BYYQ778/OA-ops-agent/releases) 下载 `OA运维Agent-v3.0.0-win64.zip` 解压即可（约 1.7GB，内含离线模型）：
 
 - `OA运维Agent.exe` 双击即开，**无需安装 Python / 依赖 / Ollama**
 - 内置离线嵌入模型与 OCR 模型（完全离线可用）
-- 业务代码外置在 exe 同目录 `app/`：以后更新代码只需跑 `scripts/更新绿色版代码.bat` 覆盖 `app/` 后重启，无需重新打包（`app/` 误删时自动回退内置副本）
-- 首次运行自动生成 `config.yaml` / `.env.example`：把 `.env.example` 复制为 `.env` 填入 `OA_LLM_API_KEY` 即可启用知识库/LLM（或改 `config.yaml` 用 Ollama）
+- 业务代码外置在 exe 同目录 `app/`：更新代码只需跑 `scripts/更新绿色版代码.bat`，无需重新打包
 - 数据（知识库/对话/巡检/日志）在 exe 同目录 `data/`，整个文件夹可整体拷贝分发
-- 桌面快捷方式已指向绿色版 exe
-### 方式一：Windows 一键启动（推荐）
 
-双击项目根目录 `scripts/启动.bat`，脚本会自动：
-1. 检查 Python 环境
-2. 检测/安装 Ollama
-3. 拉取本地大模型（qwen3:8b）
-4. 安装 Python 依赖
-5. 启动 Web 服务并打开浏览器
+### 方式二：Windows 一键启动（源码）
 
-### 方式二：命令行启动
+双击项目根目录 `scripts/启动.bat`（自动检查环境 → 检测/安装 Ollama → 拉取 qwen3:8b → 装依赖 → 启动浏览器）。
+
+或手动三步：
 
 ```bash
-# 1. 克隆仓库
 git clone https://github.com/BYYQ778/OA-ops-agent.git
 cd oa-ops-agent
-
-# 2. 安装依赖
 pip install -r requirements.txt
-
-# 3. 安装 Ollama 并拉取模型（本地离线模式需要）
-# 从 https://ollama.com 下载安装 Ollama，然后：
-ollama pull qwen3:8b
-
-# 4. 启动
-python main.py
+python main.py          # 启动后访问 http://127.0.0.1:7860
 ```
 
-启动后访问 **http://127.0.0.1:7860**。
+### 方式三：桌面版（源码，原生窗口）
 
-### 本地开发与验证
+运行 `scripts/启动桌面版.bat`（PyWebView + Edge WebView2 原生窗口，关闭即退出，无残留进程）。
 
-项目使用 `uv.lock` 固定开发和 CI 依赖。默认安装为完整 core 服务，但不会安装体积较大的 RAG、OCR 或桌面依赖：
-
-```bash
-# core + 开发工具（CI 默认）
-uv sync --locked --dev
-
-# 完整源码运行环境（RAG + OCR + 桌面）
-uv sync --locked --all-extras --dev
-
-# 质量检查
-uv run ruff check .
-uv run ruff check --select E,F,I,W ui/routers tests
-uv run pyright
-uv run pytest --cov --cov-report=term-missing
-uv run python -m compileall -q agents ui utils main.py desktop_app.py
-uv run pre-commit run --all-files
-```
-
-测试和轻量容器可设置 `OA_ENABLE_BACKGROUND_STARTUP=0`，防止应用启动时探测 Ollama 或预热嵌入模型。设置 `OA_DATA_DIR` 可将默认 SQLite 数据文件隔离到指定目录。测试禁止外部网络连接，不下载模型；API 测试允许事件循环所需的本机回环通信。
-
-工程基线进展（2026-09-17 本地实测）：pytest **594 passed**（完全离线，不连接外部服务）；覆盖率如实统计 agents/ui/utils——全库 **75.4%**（目标 ≥60%）、核心模块 **93–100%**（目标 ≥80%）本地达标。全库 Ruff（语法级）+ 新 Router/测试严格范围（E/F/I/W）通过；Pyright 0 errors（当前范围：新 Router 与测试）。**远端 CI、Docker 构建与绿色版尚未实际运行验收——测试通过不等于已发布 v3.0。** 详见 [阶段验收记录](docs/superpowers/plans/phase-1-acceptance.md)。
-
-### 方式三：Docker
+### 方式四：Docker
 
 ```bash
 docker-compose up -d
@@ -105,15 +162,7 @@ docker-compose up -d
 
 ### 想用云端大模型？
 
-默认使用本地 Ollama，无需任何 Key。如果你想用 DeepSeek 云端 API：
-
-1. 去 [platform.deepseek.com](https://platform.deepseek.com) 注册，获取你自己的 API Key
-2. 复制 `.env.example` 为 `.env`，填入 Key：
-   ```
-   OA_LLM_API_KEY=sk-你的key
-   ```
-3. 编辑 `config.yaml`，将 `llm.provider` 改为 `deepseek`
-4. 重新启动
+默认本地 Ollama。想用 DeepSeek：复制 `.env.example` 为 `.env` 填入 `OA_LLM_API_KEY=sk-...`，再把 `config.yaml` 的 `llm.provider` 改为 `deepseek` 即可。
 
 ### 演示模式（完全离线，不需要 Ollama）
 
@@ -123,11 +172,30 @@ python main.py --demo
 
 仅使用模拟数据 + 本地正则分析，不依赖任何外部服务。
 
+### 本地开发与验证
+
+项目使用 `pyproject.toml + uv.lock` 锁定依赖（CI 与本地一致）：
+
+```bash
+uv sync --locked --dev              # core + 开发工具（CI 默认）
+uv sync --locked --all-extras --dev # 完整源码环境（RAG + OCR + 桌面）
+
+uv run pytest --cov --cov-report=term-missing   # 927 passed（全离线）
+uv run ruff check . && uv run pyright
+uv run pre-commit run --all-files
+```
+
+测试和轻量容器可设置 `OA_ENABLE_BACKGROUND_STARTUP=0`（跳过启动探测/预热）；`OA_DATA_DIR` 可隔离数据目录。
+
+## API 快速索引
+
+- **v1 诊断接口**：`POST /api/v1/incidents/analyze`（提交日志/巡检/告警 → 诊断报告）、`GET /api/v1/incidents/{id}`、`POST /api/v1/rag/query`（结构化检索）、`GET /api/v1/evals/latest`、`GET /metrics`（Prometheus）
+- **兼容接口**：知识库 `/api/kb/*`（16 个：导入/删除/问答/流式/对话历史/批量）、巡检 `/api/inspect/*`、日志 `/api/log/*`、监控 `/api/dashboard/*`、诊断工具（`/api/ssl` `/api/net` `/api/db` `/api/sec`）等，共 **63 个 API 端点**
+- 完整交互式文档：启动后访问 `http://127.0.0.1:7860/docs`（FastAPI Swagger UI）；逐项说明见 [docs/API.md](docs/API.md)
+
 ## 配置
 
 ### 巡检模式
-
-编辑 `config.yaml`：
 
 ```yaml
 inspection:
@@ -136,156 +204,133 @@ inspection:
 
 | 模式 | 说明 |
 |------|------|
-| `local` | 本机 Windows 检测（netstat/tasklist/wmic） |
+| `local` | 本机检测（Windows：端口 / 服务 / 磁盘 / 内存） |
 | `ssh` | 远程 Linux 服务器（paramiko） |
 | `simulated` | 随机模拟数据，无需外部依赖 |
 | `auto` | SSH 优先 → 本机 → 模拟，逐级降级 |
 
-### 知识库
+### 知识库与 RAG 2.0
 
 ```yaml
 knowledge_base:
-  chunk_size: 500
-  chunk_overlap: 50
-
-  # RAG 2.0 混合检索（BM25 + Dense + RRF，可选重排序，证据不足明确拒答）
+  # RAG 2.0 混合检索（BM25 + Dense + RRF，证据不足明确拒答）
   retrieval:
     mode: lite                 # lite（默认，随绿色版分发）| quality（BGE-M3 + Reranker，模型单独下载）
     hybrid_enabled: true
     final_top_k: 5
-    max_per_document: 2        # 每篇文档最多贡献的块数
-    rerank: false              # quality 预设可开 true（需单独下载重排序模型）
     thresholds:
-      # 第 3 周评测校准（dev 网格 + holdout 冻结）——分层证据门
-      min_dense_similarity: 0.89    # 单通道强证据：余弦相似度 ≥0.89
-      min_bm25_score: 10.25         # 单通道强证据：BM25 ≥10.25
-      joint_dense_similarity: 0.60  # 双通道互证：dense ≥0.60 且 bm25 ≥7.75 也视为证据充分
+      # 由 128 条评测集校准、holdout 冻结（第 3 周）——分层证据门
+      min_dense_similarity: 0.89    # 单通道强证据
+      min_bm25_score: 10.25
+      joint_dense_similarity: 0.60  # 双通道互证
       joint_bm25_score: 7.75
-
-  # 切块策略（标题/段落/页级语义切块；fixed 为旧固定字符切块）
   chunking:
-    strategy: semantic
-
-  # MinerU 多模态解析（可选，需 pip install magic-pdf）
-  mineru:
-    enabled: false
-
-  # 知识图谱
-  kg:
-    enabled: true
-    entity_types: [TECHNOLOGY, ORGANIZATION, PERSON, LOCATION, CONCEPT]
-
-  # Agentic RAG（LangGraph ReAct 多步推理）
+    strategy: semantic          # 标题/段落/页级语义切块（fixed 为旧固定字符切块）
   agentic_rag:
-    enabled: true
-    max_reasoning_steps: 5
-    batch_max_questions: 20
+    enabled: true               # LangGraph ReAct 多步推理
 ```
 
 ### LLM 后端
 
 ```yaml
 llm:
-  provider: ollama           # ollama | deepseek | qwen | openai
+  provider: ollama           # ollama（默认，离线）| deepseek | qwen | openai
   ollama:
-    model: qwen3:8b          # 本地模型
+    model: qwen3:8b
 ```
 
-### 环境变量
+### 环境变量（.env）
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `OA_LLM_API_KEY` | DeepSeek API Key | — |
-| `OA_AUTH_PASSWORD` | Web 登录密码（第 5 周起生效；非回环部署必须设置非默认值，否则拒绝启动） | （空） |
-| `OA_LOG_FORMAT` | 日志格式：`text` / `json`（结构化 JSON Lines） | `text` |
-| `OA_TRACING` | 启用 OpenTelemetry 追踪（需 `pip install opentelemetry-sdk`） | 关闭 |
+| `OA_LLM_API_KEY` | DeepSeek / 千问 / OpenAI API Key | — |
+| `OA_AUTH_PASSWORD` | Web 登录密码（**非回环部署必须设置非默认值，否则拒绝启动**） | （空，本机回环免登录） |
+| `OA_LOG_FORMAT` | 日志格式：`text` / `json`（JSON Lines，含 request-id） | `text` |
+| `OA_TRACING` | 启用 OpenTelemetry 追踪（需 `pip install opentelemetry-sdk`，未装自动降级） | 关闭 |
 | `OA_SSH_PASSWORD` | SSH 巡检密码 | — |
-| `OA_EMAIL_USER` | 告警邮箱 | — |
-| `OA_EMAIL_PASSWORD` | SMTP 授权码 | — |
+| `OA_EMAIL_USER` / `OA_EMAIL_PASSWORD` | 告警邮箱 / SMTP 授权码 | — |
 
-## 目录结构
+> 密钥只放在 `.env`（已 gitignore）；`config.yaml` 只允许 `${VAR:}` 占位引用，仓库内不含任何明文密钥。
+
+## 目录结构（关键部分）
 
 ```
 oa-ops-agent/
-├── main.py                    # 入口
-├── config.yaml                # 配置
-├── .env.example               # 环境变量模板
-├── requirements.txt           # 依赖
-├── Dockerfile                 # Docker 部署
-├── scripts/                   # 启动 & 部署脚本
-│   ├── 启动.bat               # Windows 一键启动
-│   └── 打包离线部署包.bat     # 离线打包
-├── agents/                    # Agent 模块（11个）
-│   ├── inspection_agent.py    # 巡检（模拟 + 统一入口）
-│   ├── inspection_real.py     # 真实巡检（SSH + Local）
-│   ├── log_analysis_agent.py  # 日志分析（正则规则库）
-│   ├── knowledge_agent.py     # 知识库 RAG + Agentic RAG + KG
-│   ├── entity_extractor.py    # LLM 实体提取（KG 构建）
-│   ├── kg_builder.py          # 知识图谱构建编排
-│   ├── ai_reporter.py         # AI 报告生成
-│   ├── ssl_monitor.py         # SSL 证书监控
-│   ├── network_diag.py        # 网络诊断
-│   ├── db_inspector.py        # 数据库巡检
-│   └── security_audit.py      # 安全基线检查
-├── utils/                     # 基础设施（11个）
-│   ├── config.py              # 配置管理
-│   ├── database.py            # SQLite 持久化
-│   ├── dashboard.py           # 实时仪表盘数据管理
-│   ├── logger.py              # 日志
-│   ├── scheduler.py           # 定时调度
-│   ├── doc_parser.py          # 文档解析（多格式 + OCR）
-│   ├── doc_parser_v2.py       # 多模态解析编排（MinerU + 回退）
-│   ├── mineru_adapter.py      # MinerU 适配器（可选）
-│   ├── kg_store.py            # 知识图谱存储（NetworkX + JSONL）
-│   ├── ocr.py                 # 图片文字识别
-│   └── alert.py               # 告警通知
-└── ui/
-    ├── server.py              # FastAPI 服务端（55个API端点，含 Chat + KG + 批量问答）
-    ├── templates/index.html   # 纯HTML前端（8页面侧边栏）
-    └── static/
-        ├── style.css          # 样式
-        └── commands.js        # 运维命令数据库（138条）
+├── main.py                    # 入口（--demo / --cli / --port）
+├── desktop_app.py             # 桌面壳（PyWebView + 后端子进程）
+├── oa_agent.spec              # PyInstaller 打包配置（绿色版）
+├── config.yaml                # 主配置
+├── agents/                    # 领域 Agent（15 个模块）
+│   ├── incident_agent.py      #   根因诊断管线（只读）
+│   ├── incident_rules.py      #   23 类信号规则（日志/巡检/告警）
+│   ├── incident_kb.py         #   知识库适配器（引用进证据链）
+│   ├── knowledge_agent.py     #   RAG 2.0 问答 + Agentic RAG
+│   ├── inspection_real.py     #   真实巡检（Local/SSH）
+│   ├── log_analysis_agent.py  #   日志分析（纯正则规则库）
+│   └── ...                    #   SSL/网络/数据库/安全基线/AI 报告
+├── utils/                     # 基础设施（23 个模块）
+│   ├── bm25.py / retrieval.py #   BM25 / RRF 混合检索 / 分层证据门
+│   ├── chunking.py            #   语义切块
+│   ├── structured.py          #   Pydantic 结构化路由
+│   ├── incident_models.py     #   事件/证据/诊断报告数据模型
+│   ├── metrics.py             #   Prometheus 指标原语
+│   └── ...                    #   配置/数据库/调度/解析/OCR/知识图谱
+├── ui/
+│   ├── server.py              # FastAPI 主服务
+│   ├── routers/               # 按域拆分（kb / inspections / incidents ...）
+│   ├── templates/index.html   # 纯 HTML/CSS/JS 前端（无框架）
+│   └── static/                # 样式 / 命令库 / 本地化图表库
+├── evals/                     # 评测体系（语料 24 篇 + 128 条标注集 + 35 案例 + 运行器）
+├── tests/                     # pytest 套件（43 个文件 / 927 用例）
+└── docs/                      # 文档（架构/变更/API/安全/评测报告，见下）
 ```
 
 ## 技术栈
 
 | 组件 | 用途 |
 |------|------|
-| FastAPI | Web 服务端 |
-| Jinja2 | 模板渲染 |
-| LangChain | Agent 编排、RAG |
-| LangGraph | Agentic RAG ReAct 多步推理 |
-| Chroma | 向量存储 |
-| NetworkX | 知识图谱存储与查询 |
-| sentence-transformers | 文档嵌入 |
-| SQLite | 数据持久化 |
-| CnOCR | 图片文字识别 |
-| Ollama | 本地 LLM 推理 |
-| APScheduler | 定时任务 |
+| FastAPI + Uvicorn | Web 服务端（63 个 API 端点，SSE 流式） |
+| LangChain / LangGraph | Agent 编排、Agentic RAG 多步推理 |
+| Chroma + BM25(jieba) | 向量 + 关键词混合检索（RRF 融合） |
+| sentence-transformers | 文档嵌入（paraphrase-multilingual-MiniLM-L12-v2） |
+| NetworkX | 知识图谱（实体关系可视化） |
+| SQLite | 数据持久化（会话/巡检/诊断/审计） |
+| Ollama / DeepSeek | LLM 双轨（本地离线优先 / 云端可选） |
+| PyWebView + PyInstaller | 桌面版与绿色版分发 |
+| OpenTelemetry / Prometheus | 可观测性（可选依赖，自动降级） |
 
 ## 常见问题
 
 **Q: 需要付费吗？需要 API Key 吗？**
 A: 都不需要。默认使用本地 Ollama 大模型，完全免费，数据不出本机。
 
-**Q: 启动后页面空白或加载慢？**
-A: 首次运行需下载嵌入模型（约 118MB），等待几分钟即可。后续启动秒开。
-
-**Q: 巡检显示"模拟数据"？**
-A: 在 `config.yaml` 中将 `inspection.mode` 改为 `local` 即可使用本机真实检测。
-
-**Q: 可以部署到 Linux 服务器吗？**
-A: 可以。安装 Python 3.11+ 和 Ollama，将 `inspection.mode` 改为 `ssh` 并配置目标主机即可。
+**Q: 根因诊断需要大模型吗？会不会乱猜？**
+A: 不依赖 LLM。候选根因来自**规则信号 + 知识库引用**的确定性管线，报告强制携带证据链（≥2 条），证据不足时明确标注「不确定」；且只读——不会自动执行任何修复命令。
 
 **Q: 登录认证怎么工作？部署到局域网/公网要注意什么？**
-A: 第 5 周起认证实际生效：**本机回环访问（桌面版/本机浏览器）免登录直通；非回环客户端必须登录**
-（用 `.env` 的 `OA_AUTH_PASSWORD`，或 `config.yaml` 的 `auth.users` 配置多用户 + `role: admin/viewer`，
-密码哈希用 `python scripts/hash_password.py` 生成）。启动带安全门禁：绑定 `0.0.0.0` 等非回环地址时，
-未设置非默认密码会**直接拒绝启动**。HTTPS 部署时把 `auth.cookie_secure` 设为 `true`；
-细节与实测见 `docs/reports/week5-security-observability-report.md`。
+A: 本机回环访问（桌面版/本机浏览器）免登录直通；非回环客户端必须登录（`.env` 的 `OA_AUTH_PASSWORD`，或 `config.yaml` 的 `auth.users` 配置多用户 + `admin/viewer` 角色，密码哈希用 `python scripts/hash_password.py` 生成）。绑定 `0.0.0.0` 等非回环地址时未设置非默认密码会**拒绝启动**（启动安全门禁）。HTTPS 部署把 `auth.cookie_secure` 设为 `true`。细节见 [docs/SECURITY.md](docs/SECURITY.md)。
 
-**Q: 启动画面要等一会儿才进入主界面？**
-A: 桌面版会等待本地嵌入模型加载完成（首次约 20~40 秒，之后 3~5 秒）。等待超过 8 秒时可点「跳过等待，直接进入」，知识库功能在后台就绪后自动可用。
+**Q: 启动后页面空白或加载慢？**
+A: 首次运行需加载/下载嵌入模型（约 118MB），等待片刻即可；桌面版启动画面会在服务就绪后自动进入（超 8 秒可点「跳过等待」）。
+
+**Q: 巡检显示"模拟数据"？**
+A: 在 `config.yaml` 将 `inspection.mode` 改为 `local`（本机）或 `ssh`（远程）。
+
+**Q: 可以部署到 Linux 服务器吗？**
+A: 可以。安装 Python 3.11+，按需安装 Ollama；巡检用 `ssh` 模式指向目标主机。Docker 方式已提供。
+
+## 文档索引
+
+| 文档 | 内容 |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 架构与数据流（三形态 / 双进程 / RAG 链 / RCA 管线 / 观测与安全） |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录（v2.5 → v3.0.0） |
+| [docs/API.md](docs/API.md) | API 端点说明与示例 |
+| [docs/SECURITY.md](docs/SECURITY.md) | 安全设计（认证/RBAC/密钥隔离/防注入/部署基线） |
+| [docs/reports/rag-eval-report.md](docs/reports/rag-eval-report.md) | RAG 评测报告（新旧对比 + 阈值校准） |
+| [docs/reports/incident-rca-report.md](docs/reports/incident-rca-report.md) | 根因诊断评测报告（35 案例） |
+| [docs/reports/week5-security-observability-report.md](docs/reports/week5-security-observability-report.md) | 可观测性与安全实测报告 |
+| [docs/Ollama离线部署指南.md](docs/Ollama离线部署指南.md) | 内网/离线环境部署 |
 
 ## License
 
