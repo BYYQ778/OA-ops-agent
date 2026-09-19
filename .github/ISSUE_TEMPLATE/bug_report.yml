@@ -9,8 +9,8 @@ body:
     id: version
     attributes:
       label: 版本
-      description: 如 v3.0.0
-      placeholder: v3.0.0
+      description: 如 v3.0.1
+      placeholder: v3.0.1
     validations:
       required: true
   - type: dropdown

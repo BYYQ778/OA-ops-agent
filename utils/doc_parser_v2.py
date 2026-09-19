@@ -44,7 +44,7 @@ class ParsedDocument:
 def _is_scanned_pdf(file_path: str) -> bool:
     """判断 PDF 是否为扫描件（文本量极少）。"""
     try:
-        from PyPDF2 import PdfReader
+        from pypdf import PdfReader
         reader = PdfReader(file_path)
         total_chars = 0
         pages_checked = 0

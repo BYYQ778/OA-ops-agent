@@ -1,4 +1,4 @@
-﻿# OA 智能运维 Agent · v3.0.0
+﻿# OA 智能运维 Agent · v3.0.1
 
 > **本地优先的企业 OA 智能运维与根因诊断平台** —— 巡检、日志分析、RAG 知识库问答、智能根因诊断，一站式离线运行。Windows 绿色版免装 Python，数据不出本机。
 >
@@ -132,7 +132,7 @@ LLM 端到端子集（30 题真实 Agent 跑）：系统级无证据拒答率 **
 
 ### 方式一：绿色版（推荐，免装任何环境）
 
-从 [Releases](https://github.com/BYYQ778/OA-ops-agent/releases) 下载 `OA运维Agent-v3.0.0-win64.zip` 解压即可（约 1.7GB，内含离线模型）：
+从 [Releases](https://github.com/BYYQ778/OA-ops-agent/releases) 下载 `OA运维Agent-v3.0.1-win64.zip` 解压即可（约 1.7GB，内含离线模型）：
 
 - `OA运维Agent.exe` 双击即开，**无需安装 Python / 依赖 / Ollama**
 - 内置离线嵌入模型与 OCR 模型（完全离线可用）
@@ -326,7 +326,7 @@ A: 可以。安装 Python 3.11+，按需安装 Ollama；巡检用 `ssh` 模式�
 | 文档 | 内容 |
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 架构与数据流（三形态 / 双进程 / RAG 链 / RCA 管线 / 观测与安全） |
-| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录（v2.5 → v3.0.0） |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录（v2.5 → v3.0.1） |
 | [docs/API.md](docs/API.md) | API 端点说明与示例 |
 | [docs/SECURITY.md](docs/SECURITY.md) | 安全设计（认证/RBAC/密钥隔离/防注入/部署基线） |
 | [docs/reports/rag-eval-report.md](docs/reports/rag-eval-report.md) | RAG 评测报告（新旧对比 + 阈值校准） |

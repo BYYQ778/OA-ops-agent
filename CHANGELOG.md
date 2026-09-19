@@ -2,6 +2,21 @@
 
 本项目按「阶段分支 + PR + CI 门槛」的节奏迭代。**v3.0.0 是六周工程**（工程可信度 → RAG 2.0 → 评测体系 → 根因诊断 → 可观测与安全 → 发布收口）的收口版本，也是本仓库的**首个正式 Release**（此前迭代历史保留在 git tag）。
 
+## [3.0.1] — 2026-09-19 · 安全补丁
+
+### 安全修复（对 v3.0.0 的完整安全复审闭环）
+
+- **数据库巡检命令注入（高危）**：MySQL / Redis / SQL Server / Oracle 四个执行器由字符串拼接 + `shell=True` 改为 argv 数组 + `shell=False`；本机巡检器（netstat / tasklist / wmic）同步参数化
+- **会话权限**：知识库会话的删除 / 重命名从 viewer 白名单移出（归 admin，与安全文档对齐）；新增反向权限测试
+- **HTTP 健康检查**：新增 SSRF 防护（云元数据 / 链路本地地址硬阻断、重定向逐跳校验、最多 3 跳）；TLS 证书校验默认开启（`network_diag.tls_verify`，自签内网站点可显式关闭）
+- **SSH 主机密钥**：默认 `RejectPolicy` 并加载 known_hosts；仅当显式设置 `inspection.ssh_trust_unknown_hosts: true` 才自动信任未知主机（非安全模式）
+- **依赖**：`PyPDF2`（已停止维护）迁移至 `pypdf`；requirements.txt 明确为兼容安装路径（权威锁定 = pyproject + uv.lock）
+
+### 其它
+
+- 版本号统一 3.0.1（代码 / Dockerfile / 启动脚本 / 文档）
+- 新增防回潮测试：执行器源码断言不含 `shell=True`
+
 ## [3.0.0] — 2026-09-19 · OA 智能根因诊断平台
 
 ### 新增

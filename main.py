@@ -1,5 +1,5 @@
 """
-OA运维多智能Agent巡检问答系统 - 主入口 v3.0.0
+OA运维多智能Agent巡检问答系统 - 主入口 v3.0.1
 ============================================
 启动方式:
     python main.py              # 启动Web界面（完整功能）
@@ -42,7 +42,7 @@ atexit.register(_cleanup)
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
-        description="OA运维多智能Agent巡检问答系统 v3.0.0",
+        description="OA运维多智能Agent巡检问答系统 v3.0.1",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -171,7 +171,7 @@ def main():
 
     print(f"""
 ╔══════════════════════════════════════════════════╗
-║     OA运维多智能Agent巡检问答系统 v3.0.0           ║
+║     OA运维多智能Agent巡检问答系统 v3.0.1           ║
 ║  基于 FastAPI + LangChain + LangGraph + KG + Chroma ║
 ╚══════════════════════════════════════════════════╝
 """)

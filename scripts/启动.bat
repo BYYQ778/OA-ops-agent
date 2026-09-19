@@ -2,11 +2,11 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0.."
 chcp 65001 >nul
-title OA运维智能Agent巡检系统 v2.4.1
+title OA运维智能Agent巡检系统 v3.0.1
 
 echo.
 echo ╔══════════════════════════════════════════════╗
-echo ║  OA运维多智能Agent巡检问答系统 v2.4.1       ║
+echo ║  OA运维多智能Agent巡检问答系统 v3.0.1       ║
 echo ╚══════════════════════════════════════════════╝
 echo.
 

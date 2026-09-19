@@ -25,7 +25,7 @@ def parse_pdf(file_path: str) -> str:
         提取到的文本字符串
     """
     try:
-        from PyPDF2 import PdfReader
+        from pypdf import PdfReader
         reader = PdfReader(file_path)
         text_parts = []
         for page in reader.pages:
@@ -34,7 +34,7 @@ def parse_pdf(file_path: str) -> str:
                 text_parts.append(page_text)
         return "\n".join(text_parts)
     except ImportError:
-        raise ImportError("请安装 PyPDF2 库: pip install PyPDF2")
+        raise ImportError("请安装 pypdf 库: pip install pypdf")
     except Exception as e:
         raise RuntimeError(f"PDF解析失败 [{file_path}]: {e}")
 
@@ -50,7 +50,7 @@ def parse_pdf_pages(file_path: str) -> list[tuple[int, str]]:
         [(页码(从1起), 页文本)]；空白页跳过（页码保留原始编号，不重排）
     """
     try:
-        from PyPDF2 import PdfReader
+        from pypdf import PdfReader
         reader = PdfReader(file_path)
         pages: list[tuple[int, str]] = []
         for i, page in enumerate(reader.pages, 1):
@@ -60,7 +60,7 @@ def parse_pdf_pages(file_path: str) -> list[tuple[int, str]]:
                 pages.append((i, page_text))
         return pages
     except ImportError:
-        raise ImportError("请安装 PyPDF2 库: pip install PyPDF2")
+        raise ImportError("请安装 pypdf 库: pip install pypdf")
     except Exception as e:
         raise RuntimeError(f"PDF解析失败 [{file_path}]: {e}")
 

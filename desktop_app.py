@@ -302,7 +302,7 @@ def splash_html():
 <body>
   <div class="logo">&#128737;</div>
   <div class="title">OA 智能运维 Agent</div>
-  <div class="sub">本地服务启动中 · v3.0.0 桌面版</div>
+  <div class="sub">本地服务启动中 · v3.0.1 桌面版</div>
   <div class="spinner"></div>
   <div id="status">正在启动服务...</div>
   <div id="detail">首次启动需加载本地嵌入模型，约 20~40 秒，请稍候</div>

@@ -13,7 +13,7 @@ COPY --from=uv /uv /usr/local/bin/uv
 
 LABEL maintainer="DB" \
       description="OA运维多智能Agent巡检问答系统" \
-      version="2.5.0"
+      version="3.0.1"
 
 # 设置工作目录
 WORKDIR /app

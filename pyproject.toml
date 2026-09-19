@@ -1,6 +1,6 @@
 [project]
 name = "oa-ops-agent"
-version = "3.0.0"
+version = "3.0.1"
 description = "OA system inspection, diagnostics, and knowledge-base assistant"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -19,7 +19,7 @@ dependencies = [
   "numpy>=1.26.0",
   "openai>=2.0.0,<3",
   "paramiko>=3.0",
-  "pypdf2>=3.0.0",
+  "pypdf>=5.0.0",
   "python-docx>=1.0.0",
   "python-multipart>=0.0.12",
   "python-pptx>=0.6.0",
