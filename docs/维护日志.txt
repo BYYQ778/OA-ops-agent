@@ -1372,3 +1372,53 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
   ⑤ jieba 未入锁（冻结版已含）；⑥ 社交预览图需 GitHub 设置页手动上传
 
 回退: 已发布版本；回退 = 恢复 dist/_oa_backup 旧数据 + checkout tag v2.5.0（本地）
+
+
+═══════════════════════════════════════════
+【2026-09-19 — v3.0.1 安全修复（Codex 复审闭环，主工作树 master）】
+═══════════════════════════════════════════
+
+一、背景与范围
+  Codex 对 v3.0.0 完整复审指出 6 项问题，Hermes 逐条对照代码核验全部属实（另发现
+  LocalInspector shell=True 与 SECURITY.md 声明不符）。用户批准推荐方案：tls_verify
+  默认开启、会话 delete/rename 归 admin、LocalInspector 一并修、PyPDF2→pypdf、
+  完成后同步绿色版并准备 v3.0.1 发布。修复前快照 tag：pre-v3.0.1-security-fix（c0ead77）。
+  范围纪律：只改点名文件/测试/文档，不重生成历史材料。
+
+二、修复内容（问题→根因→修复）
+  1. 【高危】数据库巡检命令注入：db_inspector 四个执行器（MySQL/Redis/sqlcmd/sqlplus）
+     均为字符串拼接 + shell=True，/api/db/* 表单字段（viewer 白名单）可直达 →
+     改 argv 数组 + shell=False（不再过 shell）；本机巡检器 LocalInspector 的
+     netstat/tasklist/wmic 同步参数化（原实现违反「本地执行参数化」声明）。
+  2. 【中高危】viewer 可删除/重命名会话：ui/middleware.py 白名单含
+     /api/kb/conversation/delete|rename（与 SECURITY.md「写=admin」矛盾）→ 移出白名单
+     归 admin；create 保留 viewer（问答流程所需）。
+  3. 【中危】HTTP 健康检查 SSRF/关 TLS 校验：任意 URL + check_hostname=False/CERT_NONE
+     + 默认跟随重定向 → 新增 _url_host/_forbidden_target_reason（云元数据 169.254.169.254
+     等、链路本地 fe80::/10 硬阻断；内网地址按工具定位放行）、_SafeRedirectHandler
+     逐跳校验（≤3 跳）、network_diag.tls_verify 默认开启（自签站点显式关闭并在报告
+     中告警；证书失败给修复指引）。
+  4. 【中危】SSH 默认 AutoAddPolicy：改默认 RejectPolicy + load_system_host_keys（可配
+     known_hosts_path）；inspection.ssh_trust_unknown_hosts: true 才 AutoAddPolicy
+     （警告日志）；未知主机报错给出「核对指纹/加 known_hosts/显式开关」指引。
+  5. 【低危】发布版本号遗留：Dockerfile version=2.5.0、启动.bat v2.4.1 → 全仓统一 3.0.1
+     （pyproject/uv.lock/main.py/server.py/routers/desktop_app/README/CHANGELOG/
+     issue 模板/交接文档头部）。
+  6. 【低危】依赖可复现：requirements.txt 注明「兼容安装路径」（权威=uv.lock）；
+     PyPDF2（已停止维护）→ pypdf 6.19.0（pyproject/uv.lock/doc_parser×2/_pdf_factory）。
+
+三、测试与验证（全部实测）
+  a. 新增/更新用例 18 条：执行器 argv 断言 + 元字符注入回归（分号/&/空格保持单一
+     argv）+ 防回潮断言（源码不含 shell=True）；viewer 403 / admin 放行反向权限；
+     SSRF（元数据直连/链路本地/域名解析到元数据/畸形 URL）+ 重定向逐跳 + TLS 开关与
+     证书失败提示；SSH RejectPolicy/AutoAddPolicy/known_hosts 加载。
+  b. 945 passed（927 基线 + 18 新增）；Ruff 全量+严格、Pyright 0 errors、compileall、
+     git diff --check 全绿。
+  c. uv.lock：镜像重锁后镜像地址污染全库 → 脚本校正 registry/文件 URL 回官方
+     （路径与哈希逐字一致），uv lock --check（默认索引）exit 0。坑：uv 镜像锁会把所有
+     URL 重写为镜像地址，提交前必须校正，否则 CI（默认索引）判定 lock 过期。
+
+四、绿色版与发布
+  （随后补记：绿色版重建 / 冒烟 / zip / 推送 / Release。）
+
+回退: tag pre-v3.0.1-security-fix（本地）；绿色版 = dist/_oa_backup + 旧 app/

@@ -1,10 +1,10 @@
-OA运维多智能Agent巡检问答系统 - 交接文档 v2.5.0
+OA运维多智能Agent巡检问答系统 - 交接文档 v3.0.1
 =================================================
-创建: 2026-05-07（v1.0）→ 最后更新: 2026-08-04（v2.5.0 对话历史持久化 + SSE流式输出 + 知识问答UI重构）
-版本: v2.5.0
+创建: 2026-05-07（v1.0）→ 最后更新: 2026-09-19（v3.0.1 安全补丁：执行器参数化 / 会话权限 / SSRF·TLS / SSH 主机密钥 / PyPDF2→pypdf）
+版本: v3.0.1
 状态: GitHub开源已发布、可演示、可部署、本机离线运行
 仓库: https://github.com/BYYQ778/OA-ops-agent
-最后更新: 2026-08-16 — UI 现代化（导航/诊断工具箱 SVG 图标 + 数据库网格 + 开发热刷新）
+最后更新: 2026-09-19 — v3.0.1 安全补丁（执行器参数化 / 会话权限 / SSRF·TLS / SSH 主机密钥 / PyPDF2→pypdf）
 
 ═══════════════════════════════════════════════════════════
 一、项目概述
@@ -865,3 +865,23 @@ Phase 6: 全链路 E2E 验证
   迁移（通告 + 弃用警告）；③ OTLP 真链路未实测；④ 桌面壳窗口标题仍为旧名；⑤ jieba 未入锁
   （冻结版已含词典，源码版缺省降级 bigram）。
 - 社交预览图需在 GitHub 仓库设置页手动上传（API 不支持）：docs/assets/social-preview.png。
+
+
+═══════════════════════════════════════════
+【2026-09-19 — v3.0.1 安全补丁（主工作树 master）】
+═══════════════════════════════════════════
+- 背景: Codex 对 v3.0.0 安全复审（6 项）→ Hermes 逐条核验并修复；修复前快照 tag
+  pre-v3.0.1-security-fix（c0ead77）。
+- 修复: ① 数据库执行器全部参数化（shell=False，含本机巡检器 netstat/tasklist/wmic）；
+  ② 会话删除/重命名归 admin（viewer 403 反向测试 + admin 放行）；③ HTTP 检查 SSRF
+  硬阻断（云元数据/链路本地）+ 重定向逐跳校验 + TLS 默认校验（network_diag.tls_verify）；
+  ④ SSH 默认 RejectPolicy + known_hosts（inspection.ssh_trust_unknown_hosts 显式开启才
+  自动信任）；⑤ 版本号统一 3.0.1（含 Dockerfile/启动脚本历史遗留）；⑥ PyPDF2→pypdf
+  6.19.0，requirements.txt 注明「兼容安装路径」。
+- 新增配置: network_diag.tls_verify: true；inspection.ssh_trust_unknown_hosts: false；
+  inspection.known_hosts_path: ""。
+- 验证: 全量 pytest / Ruff / Pyright / compileall / git diff --check / uv lock --check 全绿。
+- 行为变化（注意）: 自签名 HTTPS 内网站点健康检查将报「证书校验失败」（如需旧行为，
+  config 设 network_diag.tls_verify: false）；SSH 巡检目标未登记 known_hosts 时首次连接
+  会被拒（先核对指纹加入 known_hosts，或显式开启信任开关）。
+- 发布: 见本文件后续条目（推送/CI/Release 完成后补记）。

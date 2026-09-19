@@ -25,7 +25,7 @@
 |---|---|
 | 豁免（无需登录） | `/api/health`、`/api/dev/version`、`/api/auth/*`、`/login`、`/static/*`、`/docs` 等 |
 | viewer 可用（只读 + 查询类 POST） | `/api/log/*`、`/api/net/*`、`/api/ssl/*`、`/api/sec/*`、`/api/db/*`、`/api/kg/*` 查询、知识库问答系列、`/api/v1/rag/query`、`/api/v1/incidents/analyze` |
-| admin（写操作） | 巡检运行/调度（`/api/inspect/*`）、`/api/config/save`、知识库导入/删除/清空、会话管理等 |
+| admin（写操作） | 巡检运行/调度（`/api/inspect/*`）、`/api/config/save`、知识库导入/删除/清空、会话删除/重命名等 |
 
 ## 四、回环旁路（桌面兼容）
 
@@ -51,8 +51,9 @@
 | 面 | 措施 |
 |---|---|
 | 提示词注入 | `utils/prompt_safety`（第 1 周加入）+ 工具白名单 / 参数校验 / 输出验证；恶意文档无法触发工具执行 |
-| 命令注入 | 本地执行参数化（`shell=False`）；SSH/巡检命令白名单 |
+| 命令注入 | 本地执行参数化（`shell=False`，数据库/网络/巡检执行器全覆盖）；SSH/巡检命令白名单 |
 | 路径穿越 | 上传 / 文档访问路径规范化校验，限制在 data 目录内 |
+| 网络探测 SSRF 边界 | 按工具定位允许内网/回环探测；云元数据（169.254.169.254 等）与链路本地地址硬阻断；HTTP 检查重定向逐跳校验（≤3 跳）、TLS 证书默认校验（`network_diag.tls_verify`，自签场景可显式关闭并告警） |
 | 危险动作 | 根因诊断**只读**：只给分析和建议，不执行任何修复命令（模型层强制） |
 | 日志伪造命令 | 日志内容只作为文本分析对象，永远不会被当作命令执行 |
 
@@ -74,6 +75,8 @@
 2. `/docs` 系列默认公开（见上节）；
 3. HTTPS 需自行配置反代（项目只提供 `cookie_secure` 开关）；
 4. 认证体系为轻量自研实现（Session+RBAC），面向内网工具场景；面向大规模多租户场景应改用成熟网关/IdP。
+5. 数据库 CLI 客户端（mysql/sqlcmd/sqlplus/redis-cli）密码会出现在本机进程命令行（进程列表可见）；彻底规避需更换原生驱动（v3.1+ 候选）。
+6. HTTP 健康检查为「先解析后请求」，存在 DNS 重绑定类 TOCTOU 的理论窗口；内网工具场景接受该风险，公网部署建议经反向代理隔离。
 
 ## 附：验证证据摘要（2026-09-18 实测）
 
@@ -85,3 +88,13 @@
 | OTel 真 SDK | span `[http.request, rag.query]` 导出 + 12 条日志携带 trace_id |
 | 密钥隔离 | 脱敏 filter 生效；`.env.example` 无明文默认密码 |
 | 桌面兼容 | 默认模式与 `--backend` 回环匿名全通（免登录） |
+
+## 附：v3.0.1 安全修复验证（2026-09-19）
+
+针对 v3.0.0 的第三方安全复审（6 项）逐条修复并补测试：数据库执行器与本机巡检全部参数化（`shell=False` + 注入回归）；会话删除/重命名归 admin（viewer 403 反向测试）；HTTP 检查 SSRF 硬阻断 + 重定向逐跳校验 + TLS 默认校验；SSH 默认 `RejectPolicy` + known_hosts；版本与依赖统一（`pypdf`）。
+
+| 验证 | 结果 |
+|---|---|
+| 全量 pytest（离线） | **945 passed**（含 18 条安全新增用例） |
+| Ruff（全量 + 严格范围）/ Pyright / compileall / git diff --check | 全绿（Pyright 0 errors） |
+| uv lock 一致性 | `uv lock --check`（默认索引）exit 0 |
