@@ -11,6 +11,8 @@
 
 ![演示：导入运维文档 → 带引用问答 → 一键根因诊断](docs/assets/demo.gif)
 
+*上图为动态演示 GIF；完整 74 秒演示视频（含巡检与指标页）见 [docs/assets/demo.mp4](docs/assets/demo.mp4)*
+
 ---
 
 ## 30 秒了解
