@@ -16,6 +16,7 @@
 
 - 版本号统一 3.0.1（代码 / Dockerfile / 启动脚本 / 文档）
 - 新增防回潮测试：执行器源码断言不含 `shell=True`
+- pytest **945 passed**（927 基线 + 18 条安全新增）；Ruff / Pyright / compileall / uv lock 全绿
 
 ## [3.0.0] — 2026-09-19 · OA 智能根因诊断平台
 

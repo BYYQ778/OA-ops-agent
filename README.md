@@ -120,7 +120,7 @@ LLM 端到端子集（30 题真实 Agent 跑）：系统级无证据拒答率 **
 
 | 项 | 实测 |
 |---|---|
-| 单元测试 | **927 passed**（全离线，不连外部服务） |
+| 单元测试 | **945 passed**（全离线，不连外部服务） |
 | 覆盖率 | 全库 **81%**（如实统计，不含业务代码排除项） |
 | 静态检查 | Ruff 全库 + 严格范围（E/F/I/W）、Pyright 0 errors、compileall |
 | CI | GitHub Actions 双作业：quality（Lint/类型/测试/覆盖率）+ docker-core（镜像构建 + 健康冒烟），全绿 |
@@ -182,7 +182,7 @@ python main.py --demo
 uv sync --locked --dev              # core + 开发工具（CI 默认）
 uv sync --locked --all-extras --dev # 完整源码环境（RAG + OCR + 桌面）
 
-uv run pytest --cov --cov-report=term-missing   # 927 passed（全离线）
+uv run pytest --cov --cov-report=term-missing   # 945 passed（全离线）
 uv run ruff check . && uv run pyright
 uv run pre-commit run --all-files
 ```
@@ -283,7 +283,7 @@ oa-ops-agent/
 │   ├── templates/index.html   # 纯 HTML/CSS/JS 前端（无框架）
 │   └── static/                # 样式 / 命令库 / 本地化图表库
 ├── evals/                     # 评测体系（语料 24 篇 + 128 条标注集 + 35 案例 + 运行器）
-├── tests/                     # pytest 套件（43 个文件 / 927 用例）
+├── tests/                     # pytest 套件（43 个文件 / 945 用例）
 └── docs/                      # 文档（架构/变更/API/安全/评测报告，见下）
 ```
 

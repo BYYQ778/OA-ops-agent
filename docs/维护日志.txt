@@ -1418,7 +1418,15 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
      （路径与哈希逐字一致），uv lock --check（默认索引）exit 0。坑：uv 镜像锁会把所有
      URL 重写为镜像地址，提交前必须校正，否则 CI（默认索引）判定 lock 过期。
 
-四、绿色版与发布
-  （随后补记：绿色版重建 / 冒烟 / zip / 推送 / Release。）
+四、绿色版与发布（2026-09-19 当晚完成）
+  a. 绿色版重建（PyInstaller，PACK_EXIT 0）：app/ 已同步新代码（shell=False×5 / pypdf / 3.0.1）；
+     纯 Python 包 pypdf 进 PYZ（warn-oa_agent.txt 旁证）；zip 1.06GB / 8234 文件
+     （排除顶层用户数据，自检 0 条）；冻结冒烟全过：版本 3.0.1 / SSRF 实弹拦截 / PDF 导入
+     （pypdf 实测）/ RAG / RCA / 指标 / 首页；用户数据完好（冒烟测试 PDF 已清理）。
+  b. 推送与 CI：master 7c76dc7 → run 35451183472 双绿；tag v3.0.1 → run 35451411089 双绿。
+  c. Release: https://github.com/BYYQ778/OA-ops-agent/releases/tag/v3.0.1
+     （zip + SHA256SUMS；sha256 897afab7…e303）。已知外观现象（与 v3.0.0 相同）：GitHub
+     资产名把「运维」显示为「.」（OA.Agent-…），SHA256SUMS 内仍为完整中文名——v3.0.0 亦然，
+     不做特殊处理。踩坑：tag 先行推送时创建 Release 不能带 target_commitish（422；去掉即可）。
 
 回退: tag pre-v3.0.1-security-fix（本地）；绿色版 = dist/_oa_backup + 旧 app/

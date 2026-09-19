@@ -884,4 +884,7 @@ Phase 6: 全链路 E2E 验证
 - 行为变化（注意）: 自签名 HTTPS 内网站点健康检查将报「证书校验失败」（如需旧行为，
   config 设 network_diag.tls_verify: false）；SSH 巡检目标未登记 known_hosts 时首次连接
   会被拒（先核对指纹加入 known_hosts，或显式开启信任开关）。
-- 发布: 见本文件后续条目（推送/CI/Release 完成后补记）。
+- 发布: master 推送（CI run 35451183472 双绿）+ tag v3.0.1（CI run 35451411089 双绿）+
+  Release https://github.com/BYYQ778/OA-ops-agent/releases/tag/v3.0.1（zip 1.06GB + SHA256SUMS
+  sha256 897afab7a417c626d207babaf4d36cdca853e87059e19d97a199131ca619e303）；冻结冒烟全过；
+  绿色版 zip 资产名与 v3.0.0 相同现象（「运维」显示为「.」），SHA256SUMS 内为完整中文名。
