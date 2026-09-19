@@ -9,8 +9,8 @@
 - [ ] 1. 工程基线：可复现依赖、pytest、Ruff、Pyright、pre-commit、CI、渐进路由拆分。首批覆盖日志规则、图谱、巡检解析、SQLite、真实 API。核心覆盖率目标 80%，全项目目标 60%；必须说明统计范围，不用排除业务代码冒充达标。**（2026-09-17：本地门槛达成 + 远端 CI 首跑全绿；桌面 GUI/绿色版重验未完成，故不勾选）**
 - [ ] 2. RAG：BM25 + Dense + RRF、可选重排序、结构化路由、证据引用、低置信度拒答。旧向量库需保留，换 Embedding 时新建版本化索引并评测后切换。**（2026-09-17 feat/hybrid-rag 主体完成：712 passed + 运行验证全链路通过；Embedding 版本化切换与阈值校准待第 3 周评测）**
 - [ ] 3. 评测：至少 100 条标注问答，冻结留出集；同一数据/硬件比较旧版与新版 Recall@5、MRR、NDCG、引用、拒答、延迟。目标是验收条件，不是预先宣称的成果。
-- [ ] 4. 根因诊断：统一事件和证据，至少 30 个标准案例，输出候选原因、证据和建议；证据不足时标明不确定，不强凑两条证据。只读诊断，禁止自动执行修复。**（2026-09-18 feat/incident-rca 本地完成：35 案例、Top-1 30/30、857 passed；推送与远端 CI 待做，故不勾选）**
-- [ ] 5. 可观测性/安全：本地结构化日志、OpenTelemetry、Prometheus、可选 Langfuse、Session/RBAC、密钥隔离。桌面启动方式兼容；未完成鉴权前不得公开部署。
+- [x] 4. 根因诊断：统一事件和证据，至少 30 个标准案例，输出候选原因、证据和建议；证据不足时标明不确定，不强凑两条证据。只读诊断，禁止自动执行修复。**（2026-09-18 feat/incident-rca 完成：35 案例、Top-1 30/30、857 passed；已推送，远端 CI 双绿 run 35309448459）**
+- [x] 5. 可观测性/安全：本地结构化日志、OpenTelemetry、Prometheus、可选 Langfuse、Session/RBAC、密钥隔离。桌面启动方式兼容；未完成鉴权前不得公开部署。**（2026-09-18 feat/observability-security 完成：结构化日志/指标/OTel/Session-RBAC/密钥隔离/启动门禁；严格模式 E2E 15/15；已推送，远端 CI 双绿 run 35318040465：927 passed / TOTAL 81% + docker-core；PR #5 已开）**
 - [ ] 6. 交付：经过验证的 Windows 绿色版、README/架构/安全/API/评测文档、演示素材、简历。无运行或测量证据的指标不能写成已达成。
 
 ## 执行约束
@@ -78,3 +78,14 @@
   双绿 run 35309448459：quality 857 passed / **TOTAL 80%** + docker-core 健康冒烟通过）；
   待办: 可选 jieba 转正、路由器重复检索优化、Ollama 对比跑。
 - 下一步: 第 5 周可观测性与安全（/metrics 扩展 OTel/Prometheus、结构化日志、鉴权）。
+- 2026-09-18（第 5 周）: feat/observability-security（worktree 5）可观测性与安全主体完成 ——
+  结构化日志（JSON/request-id/脱敏）、Prometheus 指标扩展（手写原语零新硬依赖）、OTel 追踪
+  （可选 SDK 自动降级）、Session/RBAC（回环旁路保桌面兼容）、启动安全门禁（非回环+默认密码
+  拒绝启动，落实「未完成鉴权前不得公开部署」）、.env.example/README 认证清理（关 P0-5/P2-13）。
+- 验证: 927 passed（857 基线 + 70 新增）+ ruff/pyright 全绿；严格模式 E2E 15/15
+  （RBAC/指标/审计）；门禁实测拒绝启动；JSON 日志与 OTel 真 SDK 实测（span + trace_id）；
+  桌面 --backend 回环兼容实测。报告 docs/reports/week5-security-observability-report.md。
+- 推送与远端 CI：**已完成**（2026-09-18，ssh-origin 直通；push run 35318040465 双绿：
+  quality 927 passed / TOTAL 81%（80%→81%）+ docker-core 冒烟）；六周计划 **PR 链 #1~#5
+  已开通**（堆叠式，各 PR 触发 run 全绿；建议按 #1→#5 顺序合并）。
+- 下一步: 第 6 周交付（release/v3.0.0：绿色版重建 + README/演示/简历材料）。

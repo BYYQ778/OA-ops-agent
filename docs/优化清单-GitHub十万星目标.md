@@ -19,7 +19,7 @@
 | P0-2 | GitHub 仓库元数据 | description=None, homepage=None, topics=[] | 填 description（中英）、topics（rag, llm, self-hosted, ops, fastapi, langchain, ollama, ai-agent）、Social Preview 图 |
 | P0-3 | 开启 Discussions + issue/PR 模板 | has_discussions=False | Settings 开启；`.github/ISSUE_TEMPLATE/bug_report.yml`、`feature_request.yml`、`PULL_REQUEST_TEMPLATE.md` |
 | P0-4 | 发布第一个 Release | releases=[] | v2.5.1 tag + Release，附绿色版 zip（1.7GB<2GB 上限，可传）与源码包 |
-| P0-5 | 修复认证配置"撒谎" | config.yaml `auth.enabled: true` 但 server.py 无任何认证中间件；.env.example 明文 admin123 | 二选一：实现登录认证（推荐，P2-17）或先改 `enabled: false` 并在 README 说明；.env.example 默认密码改为占位符 |
+| P0-5 | 修复认证配置"撒谎" | ~~config.yaml `auth.enabled: true` 但 server.py 无任何认证中间件；.env.example 明文 admin123~~ | ✅ **已修复（2026-09-18 第 5 周）**：session 认证 + RBAC + 启动安全门禁落地（配置不再撒谎）；.env.example 占位符化；README 认证章节重写；详见 docs/reports/week5-security-observability-report.md |
 | P0-6 | 公开仓库里的内部文档治理 | docs/维护日志.txt、交接文档.txt、会话记忆_*.md 已公开 | 内部记录移出仓库（.hermes/ 或私有），沉淀为公开 CHANGELOG.md + ARCHITECTURE.md（P2-20） |
 
 ## P1 · 转化率核心（2~4 周，决定 star 增速的上限）
@@ -43,7 +43,7 @@
 | P2-10 | 类型注解渐进补 | knowledge_agent.py 39 个 def、server.py 68 个 def，带返回值注解 = 0 | ruff 规则渐开，新代码强制，核心文件优先 |
 | P2-11 | i18n | 前端/提示词/报告全硬编码中文 | UI 语言切换（至少英文）；提示词模板外置到独立文件 |
 | P2-12 | Docker 修复 | LABEL version=2.2 过时；清华源硬编码（国际用户直接失败）；compose `version:` 字段已废弃 | 双轨源（默认 PyPI，注释内给国内镜像）；进 CI 验证；healthcheck 对齐 /api/health |
-| P2-13 | 登录认证落地 | 见 P0-5 | 实现 session 认证中间件 + 前端登录页 + 默认强密码策略；文档同步 |
+| P2-13 | 登录认证落地 | 见 P0-5 | ✅ **已落地（2026-09-18 第 5 周）**：session 认证中间件（cookie + 服务端哈希存储）+ 前端登录页/会话控件 + PBKDF2 哈希与启动门禁强密码策略 + 文档同步（见 P0-5） |
 | P2-14 | 插件/规则扩展机制 | 巡检项、日志规则为硬编码 | 自定义巡检规则 DSL/JSON 配置化 —— 社区贡献的天然入口 |
 | P2-15 | ARCHITECTURE.md（英文） | 缺 | 系统架构图 + 模块职责 + 数据流 + 扩展指南 |
 | P2-16 | 绿色版分发优化 | 1.7GB 单文件体验差 | 7z 压缩分卷（预估可压到 1GB 内）；提供"精简版"（去 OCR 模型） |

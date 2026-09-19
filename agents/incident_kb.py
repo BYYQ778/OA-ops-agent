@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Mapping
 
 from agents.incident_agent import KB_TOP_K, KbHit
+from utils.tracing import span as tracing_span
 
 #: 历史故障读取条数上限
 HISTORY_LIMIT = 20
@@ -32,7 +33,8 @@ class RetrievalKbAdapter:
 
     def search(self, query: str, k: int = KB_TOP_K) -> List[KbHit]:
         limit = max(1, min(int(k), self._top_k))
-        result = self._retriever.retrieve(query, top_k=limit)
+        with tracing_span("incident.kb_search", {"kb.top_k": limit}):
+            result = self._retriever.retrieve(query, top_k=limit)
         if getattr(result, "refused", False):
             return []
         hits: List[KbHit] = []

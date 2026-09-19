@@ -52,6 +52,7 @@ jobs:
         run: |
           docker run --detach --name oa-ops-core \
             --env OA_ENABLE_BACKGROUND_STARTUP=0 \
+            --env OA_AUTH_PASSWORD=ci-smoke-strong-password \
             --publish 7860:7860 oa-ops-agent:core
           for attempt in {1..30}; do
             if docker exec oa-ops-core python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/api/health', timeout=2)"; then

@@ -29,8 +29,13 @@ from utils.config import config as app_config
 from utils.database import db
 from utils.scheduler import InspectionScheduler
 from utils.dashboard import dashboard_manager
+from utils.metrics import init_default_metrics
+from utils.security import SecurityGateError, enforce_startup_security
+from utils.tracing import configure_tracing
+from ui.routers.auth import create_auth_router
 from ui.routers.incidents import create_incidents_router
 from ui.routers.system import create_system_router
+from ui.middleware import AuthGateMiddleware, MetricsMiddleware, RequestContextMiddleware
 
 logger = get_logger(__name__)
 
@@ -126,18 +131,27 @@ legacy_router = APIRouter()
 def create_app(
     enable_background_services: bool | None = None,
     kb_agent_factory: Optional[Callable[[], Any]] | None = None,
+    auth_router_factory: Optional[Callable[[], APIRouter]] | None = None,
 ) -> FastAPI:
     """Create an application while allowing tests/demo mode to disable model startup.
 
     kb_agent_factory: 供 /api/v1 根因诊断取知识库检索器；None 时默认使用全局 get_kb_agent。
+    auth_router_factory: 供测试注入认证依赖（假用户/限速器）；None 时按默认配置构建。
     """
     if enable_background_services is None:
         enable_background_services = os.environ.get("OA_ENABLE_BACKGROUND_STARTUP", "1") != "0"
     application = FastAPI(title="OA 运维助手", version="2.5.0", lifespan=_lifespan)
     application.state.enable_background_services = enable_background_services
+    # 注意：starlette 的 add_middleware 后加的更外层；顺序 = 请求上下文 → 指标 → 认证门 → 路由
+    application.add_middleware(AuthGateMiddleware)
+    application.add_middleware(MetricsMiddleware)
+    application.add_middleware(RequestContextMiddleware)
+    init_default_metrics("2.5.0")
+    configure_tracing()
 
     application.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
     application.include_router(create_system_router(Path(BASE_DIR), lambda: _kb_state))
+    application.include_router(auth_router_factory() if auth_router_factory is not None else create_auth_router())
     application.include_router(create_incidents_router(kb_agent_factory or (lambda: get_kb_agent())))
     application.include_router(legacy_router)
     return application
@@ -163,6 +177,15 @@ async def index(request: Request):
         scheduler_status=sched_status,
         is_running=scheduler.is_running,
     )
+    return HTMLResponse(html)
+
+
+@legacy_router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """登录页（第 5 周；认证门对远端未登录页面的跳转目标）。"""
+    import time
+    template = templates.get_template("login.html")
+    html = template.render(version="2.5.0", cache_buster=str(int(time.time())))
     return HTMLResponse(html)
 
 
@@ -959,6 +982,12 @@ async def api_commands():
 app = create_app()
 
 def run_server(host: str = "127.0.0.1", port: int = 7860, enable_background_services: bool | None = None):
+    try:
+        enforce_startup_security(app_config, host)
+    except SecurityGateError as exc:
+        print(f"[安全门禁] 拒绝启动：{exc}")
+        print("修复方式：在 .env 设置 OA_AUTH_PASSWORD（非默认强密码），或改绑 127.0.0.1（仅本机访问）。")
+        raise SystemExit(1) from None
     uvicorn.run(create_app(enable_background_services), host=host, port=port, log_level="info")
 
 
