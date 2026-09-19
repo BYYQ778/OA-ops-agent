@@ -230,6 +230,37 @@ def test_connect_failure_is_reported_as_false(monkeypatch):
     assert inspector._connected is False
 
 
+def test_connect_defaults_to_reject_policy_and_loads_system_host_keys(monkeypatch):
+    client = Mock()
+    monkeypatch.setattr(paramiko, "SSHClient", Mock(return_value=client))
+    inspector = RealInspector({"name": "oa10", "host": "192.0.2.30", "password": "x"})
+    assert inspector.connect() is True
+    client.load_system_host_keys.assert_called_once()
+    policy = client.set_missing_host_key_policy.call_args.args[0]
+    assert isinstance(policy, paramiko.RejectPolicy)
+
+
+def test_connect_trust_flag_enables_auto_add_policy(monkeypatch):
+    client = Mock()
+    monkeypatch.setattr(paramiko, "SSHClient", Mock(return_value=client))
+    _patch_config(monkeypatch, {"inspection.ssh_trust_unknown_hosts": True})
+    inspector = RealInspector({"name": "oa11", "host": "192.0.2.31", "password": "x"})
+    assert inspector.connect() is True
+    policy = client.set_missing_host_key_policy.call_args.args[0]
+    assert isinstance(policy, paramiko.AutoAddPolicy)
+
+
+def test_connect_loads_custom_known_hosts_when_configured(monkeypatch, tmp_path):
+    client = Mock()
+    monkeypatch.setattr(paramiko, "SSHClient", Mock(return_value=client))
+    known_hosts = tmp_path / "known_hosts"
+    known_hosts.write_text("192.0.2.32 ssh-ed25519 AAAA", encoding="utf-8")
+    _patch_config(monkeypatch, {"inspection.known_hosts_path": str(known_hosts)})
+    inspector = RealInspector({"name": "oa12", "host": "192.0.2.32", "password": "x"})
+    assert inspector.connect() is True
+    client.load_host_keys.assert_called_once_with(str(known_hosts))
+
+
 def test_connect_without_paramiko_installed_returns_false(monkeypatch):
     monkeypatch.setitem(sys.modules, "paramiko", None)
     inspector = RealInspector({"name": "oa07", "host": "192.0.2.17", "password": "x"})
@@ -474,9 +505,10 @@ def _make_local_inspector(hostname: str = "oa-win-test") -> LocalInspector:
 
 
 def _patch_run_cmd(monkeypatch, inspector, mapping: dict) -> None:
-    def fake_run_cmd(command: str, timeout: int = 10) -> str:
+    def fake_run_cmd(command: list, timeout: int = 10) -> str:
+        text = " ".join(command)
         for marker, output in mapping.items():
-            if marker in command:
+            if marker in text:
                 return output
         return ""
 
@@ -491,23 +523,30 @@ def test_local_inspector_hostname_comes_from_socket(monkeypatch):
 def test_local_run_cmd_returns_stdout_and_falls_back_to_stderr(monkeypatch):
     inspector = _make_local_inspector()
     monkeypatch.setattr(subprocess, "run", Mock(return_value=Mock(stdout="  C:\\  \n", stderr="")))
-    assert inspector._run_cmd("dir") == "C:\\"
+    assert inspector._run_cmd(["dir"]) == "C:\\"
     kwargs = subprocess.run.call_args.kwargs
-    assert kwargs["shell"] is True
+    assert subprocess.run.call_args.args[0] == ["dir"]
+    assert kwargs["shell"] is False
     assert kwargs["encoding"] == "gbk"
     assert kwargs["timeout"] == 10
 
     monkeypatch.setattr(subprocess, "run", Mock(return_value=Mock(stdout="", stderr="错误: 命令未找到")))
-    assert inspector._run_cmd("foobar") == "错误: 命令未找到"
+    assert inspector._run_cmd(["foobar"]) == "错误: 命令未找到"
 
 
 def test_local_run_cmd_handles_timeout_and_crash(monkeypatch):
     inspector = _make_local_inspector()
     monkeypatch.setattr(subprocess, "run", Mock(side_effect=subprocess.TimeoutExpired(cmd="netstat", timeout=10)))
-    assert inspector._run_cmd("netstat -ano") == ""
+    assert inspector._run_cmd(["netstat", "-ano"]) == ""
 
     monkeypatch.setattr(subprocess, "run", Mock(side_effect=OSError("WinError 5 拒绝访问")))
-    assert inspector._run_cmd("netstat -ano") == "命令执行失败: WinError 5 拒绝访问"
+    assert inspector._run_cmd(["netstat", "-ano"]) == "命令执行失败: WinError 5 拒绝访问"
+
+
+def test_inspection_real_source_never_uses_shell() -> None:
+    """防回潮：本机检测命令不得再走 shell=True。"""
+    import inspect as _inspect
+    assert "shell=True" not in _inspect.getsource(inspection_real)
 
 
 def test_local_check_ports_marks_listening_and_missing(monkeypatch):

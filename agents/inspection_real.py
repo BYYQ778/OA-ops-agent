@@ -138,7 +138,21 @@ class RealInspector:
         try:
             import paramiko
             self._client = paramiko.SSHClient()
-            self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self._client.load_system_host_keys()
+            known_hosts_path = config.get("inspection.known_hosts_path", "")
+            if known_hosts_path and os.path.exists(known_hosts_path):
+                try:
+                    self._client.load_host_keys(known_hosts_path)
+                except OSError as e:
+                    logger.warning(f"[{self.name}] 无法读取 known_hosts: {e}")
+            if config.get("inspection.ssh_trust_unknown_hosts", False):
+                logger.warning(
+                    f"[{self.name}] inspection.ssh_trust_unknown_hosts=true："
+                    "将自动信任未知主机密钥（非安全模式，仅限可信内网）"
+                )
+                self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            else:
+                self._client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
             connect_kwargs = {
                 "hostname": self.host,
@@ -167,7 +181,14 @@ class RealInspector:
             logger.error("paramiko 未安装，无法使用 SSH 巡检")
             return False
         except Exception as e:
-            logger.warning(f"[{self.name}] SSH 连接失败: {e}")
+            message = str(e)
+            if "not found in known_hosts" in message or "Host key" in message:
+                logger.warning(
+                    f"[{self.name}] SSH 主机密钥校验失败：请核对服务器指纹并加入 known_hosts；"
+                    "确需跳过时可在 config.yaml 设置 inspection.ssh_trust_unknown_hosts: true（仅限可信内网）"
+                )
+            else:
+                logger.warning(f"[{self.name}] SSH 连接失败: {e}")
             return False
 
     def disconnect(self):
@@ -574,12 +595,12 @@ class LocalInspector:
         import socket
         self.hostname = socket.gethostname()
 
-    def _run_cmd(self, command: str, timeout: int = 10) -> str:
-        """执行 Windows 命令并返回输出"""
+    def _run_cmd(self, command: List[str], timeout: int = 10) -> str:
+        """执行 Windows 命令并返回输出（argv 数组 + shell=False，防命令注入）"""
         import subprocess
         try:
             result = subprocess.run(
-                command, shell=True, capture_output=True, text=True,
+                command, shell=False, capture_output=True, text=True,
                 timeout=timeout, encoding="gbk", errors="ignore"
             )
             return result.stdout.strip() or result.stderr.strip()
@@ -590,7 +611,8 @@ class LocalInspector:
 
     def check_ports(self) -> str:
         """本机端口检测 (netstat)"""
-        out = self._run_cmd("netstat -ano | findstr LISTENING")
+        netstat_out = self._run_cmd(["netstat", "-ano"])
+        out = "\n".join(line for line in netstat_out.splitlines() if "LISTENING" in line)
         lines = [f"[{self.hostname}] 端口检测:"]
 
         ports_map = {80: "HTTP", 443: "HTTPS", 8080: "OA应用", 3306: "MySQL", 6379: "Redis"}
@@ -604,8 +626,8 @@ class LocalInspector:
 
     def check_nginx(self) -> str:
         """本机 Nginx 检测 (sc query + tasklist)"""
-        sc_out = self._run_cmd('sc query nginx')
-        task_out = self._run_cmd('tasklist /FI "IMAGENAME eq nginx.exe" 2>nul')
+        sc_out = self._run_cmd(["sc", "query", "nginx"])
+        task_out = self._run_cmd(["tasklist", "/FI", "IMAGENAME eq nginx.exe"])
 
         lines = [f"[{self.hostname}] Nginx服务检测:"]
         if "RUNNING" in sc_out or "nginx.exe" in task_out:
@@ -624,7 +646,7 @@ class LocalInspector:
 
     def check_oa_service(self) -> str:
         """本机 OA 服务检测 (tasklist java)"""
-        out = self._run_cmd('tasklist /FI "IMAGENAME eq java.exe" 2>nul')
+        out = self._run_cmd(["tasklist", "/FI", "IMAGENAME eq java.exe"])
         lines = [f"[{self.hostname}] OA应用服务检测:"]
 
         if "java.exe" in out:
@@ -649,7 +671,7 @@ class LocalInspector:
         """本机磁盘检测 (wmic)"""
         threshold = config.get("inspection.disk_threshold", 85)
         out = self._run_cmd(
-            'wmic logicaldisk where "DriveType=3" get Caption,Size,FreeSpace /format:csv 2>nul'
+            ["wmic", "logicaldisk", "where", "DriveType=3", "get", "Caption,Size,FreeSpace", "/format:csv"]
         )
         lines = [f"[{self.hostname}] 磁盘使用检测:"]
 
@@ -680,7 +702,7 @@ class LocalInspector:
         """本机内存检测 (wmic)"""
         threshold = config.get("inspection.memory_threshold", 90)
         out = self._run_cmd(
-            'wmic OS get TotalVisibleMemorySize,FreePhysicalMemory /format:csv 2>nul'
+            ["wmic", "OS", "get", "TotalVisibleMemorySize,FreePhysicalMemory", "/format:csv"]
         )
         lines = [f"[{self.hostname}] 内存使用检测:"]
 
