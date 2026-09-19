@@ -104,8 +104,16 @@ Compose 需要 2.24.0 或更高版本（可选 env_file）。默认仅映射 `12
   （nginx PID 列错位等）—— 维护日志「发现」e/f，建议随第 4 周诊断能力一并修
 - 信息: starlette 1.6.0 TestClient 整体缓冲流式响应（无限 SSE 不可走 HTTP 测试）
 
+### 远端 CI 验证（2026-09-17 完成，原「仍未验证」项之一转已验证）
+
+- **run 35193433016 全绿**（chore/quality-baseline 推送后首跑）：
+  quality job 全步骤通过（Ruff ×2 / Pyright / 594 passed 24.41s /
+  覆盖率上传 / compileall）；docker-core job 通过（core 镜像构建 +
+  容器 /api/health 冒烟）。
+- 远端覆盖率与本地一致：TOTAL 4994 语句 75%（分支 1704，63 partial）。
+- 推送通路备注：github.com:443 直连被重置，经部署密钥 + SSH over 443
+  （remote `ssh-origin`）推送；详见 交接文档 2026-09-17 条目。
+
 ### 仍未验证（保持未完成状态）
 
-- 远端 CI（quality.yml）从未运行 —— 需推送分支后验证
-- 覆盖率数据仅为本机实测，CI 环境结果需以远端为准
 - 桌面 GUI 完整交互与绿色版 —— 待合并 master 后按第 6 周流程重验
