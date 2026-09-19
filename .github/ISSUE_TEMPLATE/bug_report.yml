@@ -1,0 +1,46 @@
+name: 🐛 Bug 反馈
+description: 报告一个可复现的问题
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 感谢反馈！请尽量提供完整信息（版本 / 环境 / 复现步骤 / 日志），便于快速定位。
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 如 v3.0.0
+      placeholder: v3.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: runmode
+    attributes:
+      label: 运行方式
+      options:
+        - Windows 绿色版（exe）
+        - 源码运行（python main.py）
+        - 桌面版（PyWebView）
+        - Docker
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: 1. …  2. …  3. …
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 期望行为 / 实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志（可选）
+      description: 如 `data/backend.log` 中的报错片段
+    validations:
+      required: false

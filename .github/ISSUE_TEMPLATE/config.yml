@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📖 使用文档（README）
+    url: https://github.com/BYYQ778/OA-ops-agent#readme
+    about: 先看快速开始 / 常见问题 / 文档索引
+  - name: 🧠 根因诊断怎么用
+    url: https://github.com/BYYQ778/OA-ops-agent/blob/master/docs/API.md
+    about: /api/v1 接口与一键根因分析说明

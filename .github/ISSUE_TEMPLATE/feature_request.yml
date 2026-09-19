@@ -1,0 +1,23 @@
+name: 💡 功能建议
+description: 提出一个改进或新功能
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决什么问题
+      description: 描述你的使用场景与痛点
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: 期望的方案
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 备选方案 / 参考（可选）
+    validations:
+      required: false
