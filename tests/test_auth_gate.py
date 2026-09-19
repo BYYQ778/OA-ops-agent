@@ -105,6 +105,31 @@ def test_remote_viewer_can_use_query_whitelist() -> None:
     assert response.status_code == 200  # kb 未注入 → available False，但非 401/403
 
 
+def test_remote_viewer_forbidden_on_conversation_management() -> None:
+    client = _remote(_fake_app())
+    _login(client, "viewer", _VIEWER_PW)
+
+    delete = client.post("/api/kb/conversation/delete", data={"conversation_id": "c1"})
+    rename = client.post("/api/kb/conversation/rename", data={"conversation_id": "c1", "title": "x"})
+
+    assert delete.status_code == 403
+    assert rename.status_code == 403
+    assert "权限不足" in delete.json()["detail"]
+
+
+def test_remote_admin_allowed_on_conversation_management() -> None:
+    client = _remote(_fake_app())
+    _login(client, "admin", _ADMIN_PW)
+
+    delete = client.post("/api/kb/conversation/delete", data={"conversation_id": "missing"})
+    rename = client.post("/api/kb/conversation/rename", data={"conversation_id": "missing", "title": "x"})
+
+    assert delete.status_code == 200  # 门已放行；会话不存在 → ok=False
+    assert delete.json()["ok"] is False
+    assert rename.status_code == 200
+    assert rename.json()["ok"] is False
+
+
 def test_public_paths_reachable_anonymously() -> None:
     client = _remote(_fake_app())
     assert client.get("/api/health").status_code == 200

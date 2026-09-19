@@ -152,9 +152,8 @@ _VIEWER_POSTS = frozenset(
         "/api/kb/chat",
         "/api/kb/chat/stream",
         "/api/kb/batch-ask",
-        "/api/kb/conversation",
-        "/api/kb/conversation/delete",
-        "/api/kb/conversation/rename",
+        "/api/kb/conversation",   # 新建对话（问答流程所需）
+        # 会话删除/重命名属写操作（改动持久化数据）→ 归 admin，见 docs/SECURITY.md §三
         "/api/net/dns",
         "/api/net/http",
         "/api/net/ping",
