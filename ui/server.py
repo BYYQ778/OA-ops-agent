@@ -486,6 +486,20 @@ _kb_generation = 0            # 热切换代数：用于丢弃按旧配置构建
 _kb_init_generation = None    # 正在初始化的代数；None = 空闲
 _kb_state = {"state": "loading", "error": None}   # loading | ready | unavailable
 
+# 知识库变更操作互斥（导入/删除/清空串行化，防止并发破坏向量索引与图谱）
+_KB_MUTATION_LOCK = _threading.Lock()
+
+# SSE 流式生成器结束哨兵（避免 StopIteration 穿越线程边界引发 RuntimeError）
+_STREAM_END = object()
+
+
+def _next_or_end(iterator):
+    """在线程池中安全取下一个 token；迭代结束时返回 _STREAM_END 哨兵。"""
+    try:
+        return next(iterator)
+    except StopIteration:
+        return _STREAM_END
+
 
 def _build_kb_agent():
     """按 provider 路由构建 KnowledgeBaseAgent；未配置时返回 (None, 原因)。"""
@@ -575,7 +589,8 @@ def _kb_not_ready():
     return "loading", "知识库引擎正在初始化（首次加载嵌入模型约 20~40 秒），请稍候…"
 
 @legacy_router.post("/api/kb/ask")
-async def api_kb_ask(question: str = Form(...)):
+def api_kb_ask(question: str = Form(...)):
+    """单轮问答。同步 def：FastAPI 自动在线程池执行（RAG 2.0 P1 修复：不再阻塞事件循环）。"""
     kb = get_kb_agent()
     if kb is None:
         state, msg = _kb_not_ready()
@@ -583,7 +598,8 @@ async def api_kb_ask(question: str = Form(...)):
     return {"result": kb.query(question)}
 
 @legacy_router.post("/api/kb/import")
-async def api_kb_import(file: UploadFile = File(...)):
+def api_kb_import(file: UploadFile = File(...)):
+    """文档导入（同步 def → 线程池；变更操作互斥锁串行化）。"""
     kb = get_kb_agent()
     if kb is None:
         state, msg = _kb_not_ready()
@@ -593,19 +609,25 @@ async def api_kb_import(file: UploadFile = File(...)):
     safe_name = os.path.basename(file.filename or "upload.bin")
     file_path = os.path.join("data/uploads", safe_name)
     with open(file_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
-    # 导入知识库
-    result = kb.import_document(file_path)
-    # 清理临时文件
+        while True:
+            chunk = file.file.read(1024 * 1024)
+            if not chunk:
+                break
+            f.write(chunk)
+    # 导入知识库（互斥：导入/删除/清空串行，防止并发破坏索引）
     try:
-        os.remove(file_path)
-    except Exception:
-        pass
+        with _KB_MUTATION_LOCK:
+            result = kb.import_document(file_path)
+    finally:
+        # 清理临时文件
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
     return {"result": result}
 
 @legacy_router.get("/api/kb/list")
-async def api_kb_list():
+def api_kb_list():
     kb = get_kb_agent()
     if kb is None:
         state, msg = _kb_not_ready()
@@ -613,7 +635,7 @@ async def api_kb_list():
     return {"result": kb.list_documents()}
 
 @legacy_router.get("/api/kb/stats")
-async def api_kb_stats():
+def api_kb_stats():
     kb = get_kb_agent()
     if kb is None:
         state, msg = _kb_not_ready()
@@ -621,8 +643,8 @@ async def api_kb_stats():
     return {"result": kb.get_stats()}
 
 @legacy_router.get("/api/kb/document/{doc_name}")
-async def api_kb_document(doc_name: str):
-    """获取指定文档的完整内容。"""
+def api_kb_document(doc_name: str):
+    """获取指定文档的完整内容（同步 def → 线程池）。"""
     kb = get_kb_agent()
     if kb is None:
         state, msg = _kb_not_ready()
@@ -632,26 +654,30 @@ async def api_kb_document(doc_name: str):
     return {"result": kb.get_document_text(unquote(doc_name))}
 
 @legacy_router.post("/api/kb/delete")
-async def api_kb_delete(doc_name: str = Form(...)):
+def api_kb_delete(doc_name: str = Form(...)):
+    """删除文档（同步 def → 线程池；变更操作互斥锁串行化）。"""
     kb = get_kb_agent()
     if kb is None:
         state, msg = _kb_not_ready()
         return {"state": state, "result": msg}
-    return {"result": kb.delete_document(doc_name)}
+    with _KB_MUTATION_LOCK:
+        return {"result": kb.delete_document(doc_name)}
 
 @legacy_router.post("/api/kb/clear")
-async def api_kb_clear():
+def api_kb_clear():
+    """清空知识库（同步 def → 线程池；变更操作互斥锁串行化）。"""
     kb = get_kb_agent()
     if kb is None:
         state, msg = _kb_not_ready()
         return {"state": state, "result": msg}
-    return {"result": kb.clear_knowledge_base()}
+    with _KB_MUTATION_LOCK:
+        return {"result": kb.clear_knowledge_base()}
 
 
 # ============ 对话 Chat API (v2.4) ============
 
 @legacy_router.post("/api/kb/chat")
-async def api_kb_chat(
+def api_kb_chat(
     message: str = Form(...),
     conversation_id: str = Form("default"),
 ):
@@ -685,8 +711,14 @@ async def api_kb_chat_stream(
             yield f"data: {_json.dumps({'error': msg, 'state': state}, ensure_ascii=False)}\n\n"
             return
         try:
-            gen = kb.chat(message, conversation_id=conversation_id, stream=True)
-            for chunk in gen:
+            # 同步生成器在线程池中逐 token 拉取：检索/生成期间不阻塞事件循环
+            from anyio import to_thread
+
+            gen = iter(kb.chat(message, conversation_id=conversation_id, stream=True))
+            while True:
+                chunk = await to_thread.run_sync(_next_or_end, gen)
+                if chunk is _STREAM_END:
+                    break
                 yield f"data: {_json.dumps({'delta': chunk}, ensure_ascii=False)}\n\n"
             yield f"data: {_json.dumps({'done': True, 'conversation_id': conversation_id}, ensure_ascii=False)}\n\n"
         except Exception as e:
@@ -745,9 +777,9 @@ async def api_kb_conversation_rename(
 # ============ 批量问答 API (v2.4) ============
 
 @legacy_router.post("/api/kb/batch-ask")
-async def api_kb_batch_ask(questions: str = Form("")):
+def api_kb_batch_ask(questions: str = Form("")):
     """
-    批量处理多个问题（最多 20 题并行）。
+    批量处理多个问题（最多 20 题并行，内部线程池）。同步 def → 外层线程池。
 
     Args:
         questions: 换行分隔的问题列表

@@ -751,8 +751,8 @@ Phase 6: 全链路 E2E 验证
   裸 pytest/CI 导入路径修复（pythonpath=["."]）、hermes verify 本地通过(ok:true)、
   env_new 源码 + 桌面 --backend 真实运行回归
 - 第 1 周提交（worktree 分支 chore/quality-baseline）: 860af8b（基线）→
-  55657a1 → 72ee8f2 → 120c587 → d83f09f → d99536c → d0aa18c（首推于此；
-  此后追加 docs 提交见 git log）
+  55657a1 → 72ee8f2 → 120c587 → d83f09f → d99536c → d0aa18c（首推于此）→
+  f87ac88 → d49a0fc（第 1 周收尾 docs 提交；f87ac88 为第 2 周分支起点）
 - 推送与 CI（2026-09-17）: 分支已推送 GitHub，**远端 CI 首跑全绿**
   （run 35193433016：quality 全步骤 + docker-core 构建与容器冒烟；
   594 passed / 远端 TOTAL 75%，与本地一致）。本地 master 领先
@@ -775,3 +775,30 @@ Phase 6: 全链路 E2E 验证
   references/v3-workbench.md）
 - 桌面/绿色回归: env_new（3.11.9，全依赖）完好，可直接跑 worktree 源码；
   绿色版 dist 产物在主目录，未被本次改动触及
+
+═══════════════════════════════════════════
+【2026-09-17 — v3 第 2 周：RAG 2.0（feat/hybrid-rag 分支）】
+- 工作区: E:\YunweiAgent\oa-ops-agent-hybrid-rag（分支 feat/hybrid-rag，基于
+  chore/quality-baseline 尖端 f87ac88；独立 uv .venv，Python 3.12.13）
+- 交付: 混合检索链（BM25+Dense+RRF→可选 Reranker→阈值拒答）、语义切块（标题/
+  段落/页级 + chunk_uid）、引用 v2（《文档》· 第X页 · §章节 · chunk_uid）、
+  Pydantic 结构化路由（替代 NEXT_ACTION 正则）、KB 端点线程池化+互斥锁
+  （P1 修复：导入期间整站阻塞已解）、lite/quality 检索配置
+- 测试: 712 passed（594 基线 + 118 新增）；ruff（含严格范围）全绿；pyright
+  0 errors；compileall OK；运行验证（env_new）全链路通过（命中引用/契约拒答/
+  删除同步/前端冒烟；导入期间 /api/health 最大延迟 19-25ms）
+- 实现注记: dense 相似度换算 cos = 1 - d²/2（Chroma L2 + 归一化向量）；
+  dense/bm25 两通道统一 canonical chunk id（chunk_uid 优先，旧数据回退
+  source#chunk_index）；BM25 缓存随 corpus_version 失效（导入/删除/清空触发）；
+  jieba 为可选升级（PyPI 仅 sdist，未入锁，默认内置 bigram 分词）
+- 阈值: min_dense_similarity=0.35 / min_bm25_score=0.30 为保守初值，
+  第 3 周评测集校准后固化（config.yaml knowledge_base.retrieval）
+- 环境/工具坑（重要）: PyPI 直连 ~11KB/s；清华镜像 3.4MB/s 可用且 uv 需
+  UV_SYSTEM_CERTS=true（aTrust 证书拦截）；uv --locked 与镜像源 registry 冲突
+  → 用 --frozen；git-bash curl 为原生版（/dev/null、/e/ 路径 exit 23）；
+  bash 中文传参给 curl 会编码损坏（验证脚本一律用 Python 客户端）；杀后台
+  服务须按端口找 PID + taskkill /T 杀进程树（只杀 bash 包装层杀不干净）
+- 已推送（2026-09-17，ssh-origin 通道）；远端 CI 全绿（run 35211380542：
+  quality 712 passed / 覆盖率 78% + docker-core 双作业）
+- 衔接第 3 周: ≥100 条评测集与阈值校准；jieba 引入评估；quality（BGE-M3 +
+  Reranker）实测；新旧对比报告与图表（Recall@5/MRR/引用/拒答/延迟）

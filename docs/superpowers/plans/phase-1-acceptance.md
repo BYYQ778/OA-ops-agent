@@ -34,7 +34,7 @@ Compose 需要 2.24.0 或更高版本（可选 env_file）。默认仅映射 `12
 - 全量统计 `agents/ui/utils`，分支覆盖开启：总覆盖率 29%；SQLite 64%、图谱存储 54%、日志分析 61%、SSH/本机巡检模块 51%、文档解析 79%、调度器 96%。核心范围和整体均不满足本周门槛，不作为简历的达标结果。
 - `ruff check .`（全库语法级规则）、`ruff check --select E,F,I,W ui/routers tests`、`pyright`（新 Router 和测试范围）通过，Pyright 0 errors / 0 warnings。
 - `python -W error::SyntaxWarning -m compileall -q agents ui utils main.py desktop_app.py`、`git diff --check` 通过。
-- CI 配置包含 core Docker 构建和容器 `/api/health` 冒烟、覆盖率上传；未推送，远端 CI **未执行**。pre-commit 配置验证通过，读取 YAML 后按真实 hook 参数运行两组 Ruff 均通过；hook 完整安装执行仍待验证。
+- CI 配置包含 core Docker 构建和容器 `/api/health` 冒烟、覆盖率上传；未推送，远端 CI **未执行**（随后 2026-09-17 推送，远端 CI 全绿 run 35193433016）。pre-commit 配置验证通过，读取 YAML 后按真实 hook 参数运行两组 Ruff 均通过；hook 完整安装执行仍待验证。
 
 ## 本批次行为改进与风险
 

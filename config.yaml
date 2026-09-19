@@ -107,6 +107,26 @@ knowledge_base:
   chroma_dir: data/chroma_db
   top_k: 5                     # 检索返回的最相关文档数
 
+  # RAG 2.0 混合检索（BM25 + Dense + RRF → 可选重排序 → 阈值拒答）
+  retrieval:
+    mode: lite                 # lite（默认，随绿色版分发）| quality（BGE-M3 + Reranker，模型单独下载）
+    hybrid_enabled: true       # BM25 + Dense + RRF 混合检索
+    dense_top_k: 10
+    bm25_top_k: 10
+    rrf_k: 60
+    final_top_k: 5
+    max_per_document: 2        # 每篇文档最多贡献的块数（防单文档霸屏）
+    rerank: false              # quality 预设可开 true（需单独下载重排序模型）
+    rerank_model: BAAI/bge-reranker-v2-m3
+    thresholds:
+      min_dense_similarity: 0.35   # 余弦相似度下限（第 3 周评测集校准）
+      min_bm25_score: 0.30         # BM25 原始分下限（同上）
+      refuse_message: "抱歉，知识库中未找到相关信息，请补充相关文档后重试。"
+
+  # 切块策略（RAG 2.0：标题/段落/页级语义切块）
+  chunking:
+    strategy: semantic         # semantic（默认）| fixed（旧固定字符切块）
+
   # 多模态解析 — MinerU 集成（可选，需 pip install magic-pdf 并下载 ~3GB 模型）
   mineru:
     enabled: false

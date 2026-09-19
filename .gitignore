@@ -53,6 +53,7 @@ server_out.log
 OA运维Agent项目全流程文档*.docx
 data/inspection_logs/
 data/knowledge_graph/
+data/uploads/
 
 # 桌面版运行时数据
 data/desktop.log

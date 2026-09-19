@@ -20,7 +20,7 @@ RAG流程：
 import os
 import hashlib
 from datetime import datetime
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
@@ -28,8 +28,18 @@ from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
+from pydantic import BaseModel, ValidationError
 
-from utils.doc_parser import parse_document, split_text
+from utils.doc_parser import parse_document, parse_pdf_pages, split_text
+from utils.chunking import Chunk, split_semantic, split_semantic_pages
+from utils.retrieval import (
+    DEFAULT_REFUSE_MESSAGE,
+    HybridRetriever,
+    RetrievalConfig,
+    RetrievalResult,
+    format_citations,
+)
+from utils.structured import parse_structured
 from utils.config import get_app_root
 from utils.logger import get_logger
 from utils.prompt_safety import UNTRUSTED_DATA_GUARD, wrap_untrusted
@@ -69,6 +79,15 @@ RAG_SYSTEM_PROMPT = """你是一名OA运维知识库助手，你的职责是基�
 - 然后列出依据（引用的文档片段）
 - 如果涉及操作，给出具体步骤和命令
 """ + UNTRUSTED_DATA_GUARD
+
+
+class RouterDecision(BaseModel):
+    """Agentic 路由决策（Pydantic 结构化输出，替代 NEXT_ACTION 字符串解析）。"""
+
+    action: Literal["search_kb", "search_kg", "explore_graph", "answer"]
+    query: str = ""
+    reasoning: str = ""
+
 
 # ========== 文档分块配置 ==========
 CHUNK_SIZE = 500        # 每块最多500字
@@ -144,6 +163,17 @@ class KnowledgeBaseAgent:
             persist_directory=CHROMA_DB_DIR,
         )
         logger.info(f"Chroma向量库已连接，存储路径: {CHROMA_DB_DIR}")
+
+        # ---- 混合检索（RAG 2.0：BM25 + Dense + RRF）----
+        self._corpus_version = 0
+        self._structured_ok = None  # 路由结构化输出可用性（首次失败后禁用）
+        self.retrieval_config = self._load_retrieval_config()
+        self.retriever = HybridRetriever(
+            dense_search=self._dense_search,
+            corpus_fn=self._corpus_snapshot,
+            reranker=self._build_reranker(),
+            config=self.retrieval_config,
+        )
 
         # ---- 初始化LLM（用于RAG生成回答）----
         self.llm = ChatOpenAI(
@@ -253,12 +283,13 @@ class KnowledgeBaseAgent:
 - 引用具体的文档来源
 - 按步骤列出操作建议
 
-## 输出格式
-每次你的回复必须以以下格式开头：
-NEXT_ACTION: search_kb | search_kg | explore_graph | answer
+## 输出格式（JSON 结构化输出）
+每次必须仅输出一个 JSON 对象，不要 markdown 围栏、不要任何多余文字：
+{"action": "search_kb | search_kg | explore_graph | answer", "query": "传给工具的查询词", "reasoning": "一句话决策理由"}
 
-如果是 answer，之后的内容就是给用户的最终回答。
-如果是其他 action，之后的内容是传给该工具的查询关键词（纯文本，不含引号）。""" + UNTRUSTED_DATA_GUARD
+- action=answer 时 query 留空（最终回答由后续节点生成）
+- 只能基于检索到的内容作答，禁止使用外部知识
+- 如检索结果不足以回答，选择 answer 并在最终回答中明确说明信息不足""" + UNTRUSTED_DATA_GUARD
 
     def _setup_agentic_rag(self):
         """构建 LangGraph ReAct Agent（支持 Ollama 和 DeepSeek）。"""
@@ -318,42 +349,18 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 基于当前信息，决定下一步。如果已有足够信息回答用户，选择 answer。"""
 
             try:
-                resp = kb.llm.invoke([
-                    {"role": "system", "content": kb.AGENTIC_RAG_PROMPT},
-                    {"role": "user", "content": router_msg},
-                ])
-                content = resp.content if hasattr(resp, "content") else str(resp)
-
-                # 解析 NEXT_ACTION
-                import re as _re
-                action_match = _re.search(r"NEXT_ACTION:\s*(\w+)", content, _re.IGNORECASE)
-                if action_match:
-                    action = action_match.group(1).strip().lower()
-                    if action not in ("search_kb", "search_kg", "explore_graph", "answer"):
-                        action = "search_kb"
-                else:
-                    # 如果 LLM 没有遵循格式，检查是否看起来像一个答案
-                    if len(content) > 100 and "NEXT_ACTION" not in content.upper():
-                        action = "answer"
-                    else:
-                        action = "search_kb"
-
-                if action in ("search_kg", "explore_graph") and not has_kg:
-                    action = "search_kb"
-
+                action, tool_input = kb._router_decide(router_msg, has_kg)
             except Exception as e:
-                logger.warning(f"Router LLM 调用失败: {e}")
-                action = "search_kb"
+                logger.warning(f"Router 决策失败: {e}")
+                action, tool_input = "search_kb", ""
 
-            # 提取工具参数（NEXT_ACTION 行之后的内容）
-            tool_input = content
-            if action_match:
-                tool_input = content[action_match.end():].strip()
-                if not tool_input:
-                    tool_input = state["question"]
+            if not tool_input:
+                tool_input = state["question"]
 
             return {
-                "messages": state.get("messages", []) + [{"role": "assistant", "content": content}],
+                "messages": state.get("messages", []) + [
+                    {"role": "assistant", "content": f"[router] action={action}"}
+                ],
                 "next_action": action,
                 "reasoning_steps": step,
                 "_tool_input": tool_input,
@@ -410,13 +417,16 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 ## 用户问题
 {state['question']}
 
-请给出完整、准确的回答。引用来源。如果信息不足，请明确说明。"""
+## 回答要求
+1. 严格基于上方检索资料回答，禁止使用资料以外的知识；
+2. 引用资料时必须使用《文档名》格式（如"根据《xxx手册.md》"），可同时标注 [参考资料N]；
+3. 若检索资料与问题无关或不足以回答，必须仅回复："抱歉，知识库中未找到相关信息，请补充相关文档后重试。"，不得给出资料以外的具体建议。"""
 
             answer = ""
             try:
                 # 流式生成：writer 把 token 推给 stream_mode="custom" 的消费者
                 for chunk in kb.llm.stream([
-                    {"role": "system", "content": "你是一个 OA 运维知识库助手。严格基于提供的检索信息回答，禁止编造。"},
+                    {"role": "system", "content": "你是一个 OA 运维知识库助手。严格基于提供的检索信息回答，禁止编造；引用使用《文档名》格式，资料不足时按回答要求明确拒答。"},
                     {"role": "user", "content": answer_prompt},
                 ]):
                     token = ""
@@ -474,6 +484,47 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
         self.agentic_graph = builder.compile()
         logger.info(f"Agentic RAG (LangGraph ReAct) 已就绪" + (" (含 KG)" if has_kg else " (仅向量检索)"))
 
+    def _router_invoke(self, messages: list):
+        """路由 LLM 调用：结构化输出优先，失败回退文本 JSON 解析。
+
+        Returns: (RouterDecision | None, raw_text)
+        """
+        if self._structured_ok is not False:
+            try:
+                out = self.llm.with_structured_output(RouterDecision).invoke(messages)
+                self._structured_ok = True
+                if isinstance(out, RouterDecision):
+                    return out, ""
+                if isinstance(out, dict):
+                    try:
+                        return RouterDecision.model_validate(out), ""
+                    except ValidationError:
+                        pass
+            except Exception as e:
+                self._structured_ok = False
+                logger.info(f"路由结构化输出不可用，改用文本 JSON 解析: {e}")
+        try:
+            resp = self.llm.invoke(messages)
+        except Exception as e:
+            logger.warning(f"Router LLM 调用失败: {e}")
+            return None, ""
+        content = resp.content if hasattr(resp, "content") else str(resp)
+        return parse_structured(content, RouterDecision), content
+
+    def _router_decide(self, router_msg: str, has_kg: bool):
+        """路由决策 → (action, tool_input)。解析失败安全默认 search_kb。"""
+        messages = [
+            {"role": "system", "content": self.AGENTIC_RAG_PROMPT},
+            {"role": "user", "content": router_msg},
+        ]
+        decision, _content = self._router_invoke(messages)
+        if decision is None:
+            return "search_kb", ""
+        action = decision.action
+        if action in ("search_kg", "explore_graph") and not has_kg:
+            action = "search_kb"
+        return action, (decision.query or "").strip()
+
     def _get_agentic_config(self, key: str, default):
         """读取 agentic_rag 配置项。"""
         try:
@@ -482,19 +533,118 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
         except Exception:
             return default
 
+    # ========== 混合检索（RAG 2.0：BM25 + Dense + RRF） ==========
+
+    def _load_retrieval_config(self) -> RetrievalConfig:
+        """从 config.yaml 读取检索配置（knowledge_base.retrieval，缺省用默认值）。"""
+        try:
+            from utils.config import config as app_config
+            data = app_config.get("knowledge_base.retrieval", {}) or {}
+        except Exception:
+            data = {}
+        return RetrievalConfig.from_mapping(data)
+
+    def _build_reranker(self):
+        """按配置构建可选重排序组件（quality 模式；不可用时自动直通，不影响检索）。"""
+        try:
+            from utils.rerank import build_reranker
+            return build_reranker(
+                enabled=bool(self.retrieval_config.rerank),
+                model_name=self.retrieval_config.rerank_model,
+            )
+        except Exception as e:
+            logger.warning(f"重排序组件构建失败（忽略，检索直通）: {e}")
+            return None
+
+    def _chunking_strategy(self) -> str:
+        """分块策略：semantic（RAG 2.0 默认，标题/段落/页）/ fixed（旧固定切块）。"""
+        try:
+            from utils.config import config as app_config
+            return str(app_config.get("knowledge_base.chunking.strategy", "semantic")).lower()
+        except Exception:
+            return "semantic"
+
+    def _retrieve(self, query: str, top_k: Optional[int] = None) -> Optional[RetrievalResult]:
+        """执行混合检索；检索器异常时返回 None（调用方降级旧路径）。"""
+        if self.retriever is None:
+            return None
+        try:
+            return self.retriever.retrieve(query, top_k=top_k)
+        except Exception as e:
+            logger.warning(f"混合检索失败，降级旧检索: {e}")
+            return None
+
+    def _dense_search(self, query: str, k: int):
+        """dense 通道适配器：Chroma 结果 → (id, text, metadata, 余弦相似度)。"""
+        pairs = self.vector_store.similarity_search_with_score(query, k=k)
+        hits = []
+        for i, (doc, distance) in enumerate(pairs):
+            meta = dict(doc.metadata or {})
+            hits.append((
+                self._canonical_chunk_id(meta, fallback_index=i),
+                doc.page_content,
+                meta,
+                self._distance_to_similarity(distance),
+            ))
+        return hits
+
+    def _corpus_snapshot(self):
+        """BM25 语料快照：(version, [(id, text, metadata)])；version 变化触发索引重建。"""
+        data = self.vector_store.get()
+        ids = data.get("ids") or []
+        docs = data.get("documents") or []
+        metas = data.get("metadatas") or []
+        entries = []
+        for i, _chroma_id in enumerate(ids):
+            text = docs[i] if i < len(docs) else ""
+            meta = dict(metas[i] or {}) if i < len(metas) else {}
+            entries.append((self._canonical_chunk_id(meta, fallback_index=i), text or "", meta))
+        return self._corpus_version, entries
+
+    @staticmethod
+    def _canonical_chunk_id(meta: dict, fallback_index: int = 0) -> str:
+        """两通道（dense/bm25）统一的块 ID：chunk_uid 优先，旧数据回退 source#chunk_index。"""
+        uid = meta.get("chunk_uid")
+        if uid:
+            return str(uid)
+        source = meta.get("source")
+        if source and meta.get("chunk_index") is not None:
+            return f"{source}#{meta.get('chunk_index')}"
+        return f"chunk:{fallback_index}"
+
+    @staticmethod
+    def _distance_to_similarity(distance) -> float:
+        """Chroma 默认 L2 距离（归一化向量）→ 余弦相似度：cos = 1 - d²/2。"""
+        try:
+            d = float(distance)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(-1.0, min(1.0, 1.0 - (d * d) / 2.0))
+
+    def _bump_corpus(self) -> None:
+        """知识库发生变更后调用：使 BM25 缓存失效，下次检索自动重建。"""
+        self._corpus_version = getattr(self, "_corpus_version", 0) + 1
+        if getattr(self, "retriever", None) is not None:
+            self.retriever.invalidate()
+
     # ========== 核心功能 ==========
 
     def _retrieve_context(self, query: str, top_k: int = 5) -> str:
         """
-        从向量库检索与查询最相关的文档块。
-
-        Args:
-            query: 查询文本
-            top_k: 返回最相关的前K个结果
+        检索与查询最相关的文档块（RAG 2.0 混合检索；失败自动降级旧向量检索）。
 
         Returns:
-            拼接后的文档上下文，包含来源信息
+            带精确引用（文档/页码/章节/Chunk ID）的拼接上下文；证据不足时返回拒答文案
         """
+        result = self._retrieve(query, top_k=top_k)
+        if result is not None:
+            if result.refused:
+                return result.refuse_message or DEFAULT_REFUSE_MESSAGE
+            if result.hits:
+                return format_citations(result.hits)
+            return "知识库为空，未检索到任何相关内容。"
+
+        # ---- 降级：旧 dense-only 路径 ----
         try:
             docs = self.vector_store.similarity_search(query, k=top_k)
 
@@ -544,29 +694,41 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
             if not raw_text.strip():
                 return f"[错误] 文档 '{file_name}' 解析后内容为空，请检查文件是否有效。"
 
-            # 第2步：文本分块
-            chunks = split_text(raw_text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
-            logger.info(f"  文档分块完成: {len(chunks)} 块")
+            # 第2步：分块（RAG 2.0 默认语义切块：标题/段落/页；fixed 保留旧算法）
+            strategy = self._chunking_strategy()
+            if strategy == "fixed":
+                chunks = [
+                    Chunk(text=t, index=i + 1, uid=f"{file_hash}:{i + 1}")
+                    for i, t in enumerate(
+                        split_text(raw_text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
+                    )
+                ]
+            else:
+                chunks = self._semantic_chunks(file_path, raw_text, file_hash)
+            logger.info(f"  文档分块完成: {len(chunks)} 块（策略: {strategy}）")
 
-            # 第3步：构建LangChain Document对象列表
+            # 第3步：构建LangChain Document对象列表（含页/章节/uid 元数据）
             documents = []
-            for i, chunk in enumerate(chunks):
-                doc = Document(
-                    page_content=chunk,
-                    metadata={
-                        "source": file_name,
-                        "file_path": file_path,
-                        "chunk_index": i + 1,
-                        "total_chunks": len(chunks),
-                        "file_hash": file_hash,
-                        "import_time": datetime.now().isoformat(),
-                        "chunk_size": len(chunk),
-                    }
-                )
-                documents.append(doc)
+            for c in chunks:
+                metadata = {
+                    "source": file_name,
+                    "file_path": file_path,
+                    "chunk_index": c.index,
+                    "total_chunks": len(chunks),
+                    "file_hash": file_hash,
+                    "import_time": datetime.now().isoformat(),
+                    "chunk_size": len(c.text),
+                    "chunk_uid": c.uid,
+                }
+                if c.section:
+                    metadata["section"] = c.section
+                if c.page is not None:
+                    metadata["page"] = int(c.page)
+                documents.append(Document(page_content=c.text, metadata=metadata))
 
             # 第4步：向量化并存入Chroma
             self.vector_store.add_documents(documents)
+            self._bump_corpus()  # 语料变化 → BM25 缓存失效
             logger.info(f"  向量化并存入Chroma完成")
 
             # 第5步：构建知识图谱（非阻塞，失败不影响向量库）
@@ -583,7 +745,7 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
                 f"文档导入成功！\n"
                 f"  文件名: {file_name}\n"
                 f"  文档长度: {len(raw_text)} 字符\n"
-                f"  分块数量: {len(chunks)} 块 (向量库)\n"
+                f"  分块数量: {len(chunks)} 块 ({strategy} 策略, 向量库)\n"
                 + (f"  实体提取: {kg_entity_count} 个实体 (知识图谱)\n" if kg_entity_count else "")
                 + f"  分块大小: {CHUNK_SIZE} 字/块 (重叠 {CHUNK_OVERLAP} 字)\n"
                 f"  存储位置: {CHROMA_DB_DIR}"
@@ -593,6 +755,23 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
         except Exception as e:
             logger.error(f"文档导入失败: {e}")
             return f"[错误] 文档导入失败: {str(e)}"
+
+    def _semantic_chunks(self, file_path: str, raw_text: str, file_hash: str) -> List[Chunk]:
+        """语义切块：PDF 优先页级（引用页码精确），其余走标题/段落切块。"""
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".pdf":
+            try:
+                pages = parse_pdf_pages(file_path)
+            except Exception as e:
+                logger.warning(f"  页级解析失败，退回整文切块: {e}")
+                pages = []
+            if pages:
+                return split_semantic_pages(
+                    pages, doc_id=file_hash, max_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP
+                )
+        return split_semantic(
+            raw_text, doc_id=file_hash, max_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP
+        )
 
     # ========== 对话 Chatbot ==========
 
@@ -747,6 +926,9 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 
     def _query_agentic(self, question: str, chat_history: str = "") -> str:
         """LangGraph ReAct Agent 多步推理问答。"""
+        pre = self._retrieve(question)
+        if pre is not None and pre.refused:
+            return pre.refuse_message or DEFAULT_REFUSE_MESSAGE
         try:
             # 将对话历史注入到初始消息
             initial_messages = []
@@ -794,6 +976,9 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 
     def _query_legacy(self, question: str, chat_history: str = "") -> str:
         """简单 RAG 问答（v2.x 兼容）。"""
+        pre = self._retrieve(question)
+        if pre is not None and pre.refused:
+            return pre.refuse_message or DEFAULT_REFUSE_MESSAGE
         prompt = question
         if chat_history:
             prompt = f"{wrap_untrusted(chat_history, '对话历史')}\n\n## 当前问题\n{question}"
@@ -846,6 +1031,10 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 
     def _stream_agentic(self, question: str, chat_history: str = ""):
         """生成器：流式产出 Agentic RAG 最终回答的 token（stream_mode='custom'）。"""
+        pre = self._retrieve(question)
+        if pre is not None and pre.refused:
+            yield pre.refuse_message or DEFAULT_REFUSE_MESSAGE
+            return
         try:
             initial_messages = []
             if chat_history:
@@ -952,6 +1141,7 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
 
             # 删除找到的分块
             self.vector_store.delete(ids=ids_to_delete)
+            self._bump_corpus()  # 语料变化 → BM25 缓存失效
             logger.info(f"已删除文档 '{doc_name}' 的 {len(ids_to_delete)} 个分块")
 
             # 同步清理知识图谱
@@ -1069,6 +1259,7 @@ NEXT_ACTION: search_kb | search_kg | explore_graph | answer
             if all_data["ids"]:
                 count = len(all_data["ids"])
                 self.vector_store.delete(ids=all_data["ids"])
+                self._bump_corpus()  # 语料变化 → BM25 缓存失效
                 logger.info(f"知识库已清空，共删除 {count} 条记录")
 
                 # 同步清空知识图谱
