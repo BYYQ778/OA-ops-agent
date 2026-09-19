@@ -31,12 +31,12 @@ README / 架构 / 变更 / API / 安全文档齐备；演示 GIF 与 3~5 分钟�
 ## 执行步骤
 
 - [x] B0 工作树与基线：本文件 + 927 passed 复现（hermes verify 记录）
-- [ ] B1 README 重写（数字全部实测值）
-- [ ] B2 ARCHITECTURE.md（mermaid 架构图：三形态 / 双进程 / RAG 链 / RCA 管线 / 观测安全）
-- [ ] B3 CHANGELOG.md（Keep a Changelog；v2.5.0 → v3.0.0）
-- [ ] B4 docs/API.md（从 app.openapi() 核对）+ docs/SECURITY.md
-- [ ] B5 演示素材（演示数据准备 → GIF → 演示视频 → 社交预览图）
-- [ ] B6 求职材料 → Obsidian
+- [x] B1 README 重写（数字全部实测值）
+- [x] B2 ARCHITECTURE.md（mermaid 架构图：三形态 / 双进程 / RAG 链 / RCA 管线 / 观测安全）
+- [x] B3 CHANGELOG.md（Keep a Changelog；v2.5.0 → v3.0.0）
+- [x] B4 docs/API.md（从 app.openapi() 核对）+ docs/SECURITY.md
+- [x] B5 演示素材（演示数据准备 → GIF → 演示视频 → 社交预览图）
+- [x] B6 求职材料 → Obsidian（v3.0 简历与面试材料 + 老题库版本标注）
 - [ ] C1 推送 release 分支 → PR → CI → 合并 master
 - [ ] C2 绿色版重建（备份 data/config → PyInstaller → 恢复 → 实测）
 - [ ] C3 三形态回归 + 发布前检查清单
