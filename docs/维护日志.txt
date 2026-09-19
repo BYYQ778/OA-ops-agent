@@ -1052,6 +1052,14 @@ Phase 6: 全链路 E2E ✅ (2026-07-10 下午)
      · check_oa_service 内存列位置假设脆弱，列序变化即取错列
      · auto 模式 SSH+local 全失败时不降级模拟数据（行为待产品确认）
 
+⑤ 推送与远端 CI（2026-09-17 下午）
+  · 分支 chore/quality-baseline 已推送 GitHub；推送通路 = 部署密钥
+    (~/.ssh/oa_deploy，仓库 Deploy Key 仅本仓库写) + SSH over 443
+    （github.com:443 直连被重置；remote ssh-origin）
+  · 远端 CI 首跑全绿（run 35193433016）: quality 全步骤（Ruff×2/Pyright/
+    594 passed 24.41s/覆盖率上传/compileall）+ docker-core（镜像构建 +
+    容器 /api/health 冒烟）；远端 TOTAL 75% 与本地一致
+
 回退说明:
   · 全部改动在独立 worktree（E:\YunweiAgent\oa-ops-agent-quality-baseline，
     分支 chore/quality-baseline），主目录（master）零改动；
